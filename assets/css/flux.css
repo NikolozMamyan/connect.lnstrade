@@ -1,0 +1,78 @@
+/* ============================================================
+   LSTRADE - Flux badges sidebar + pages flux
+   public/css/flux.css
+   ============================================================ */
+
+/* Badges direction sidebar */
+.nav-flux-badge {
+    margin-left: auto;
+    font-size: 9px;
+    font-weight: 700;
+    padding: 2px 6px;
+    border-radius: var(--border-radius-full);
+    letter-spacing: 0.3px;
+    white-space: nowrap;
+    font-family: var(--font-mono);
+}
+.nav-flux-badge--hs-sage { background: rgba(255,122,0,0.18); color: #FF7A00; border: 1px solid rgba(255,122,0,0.3); }
+.nav-flux-badge--sage-hs { background: rgba(59,130,246,0.15); color: #60A5FA; border: 1px solid rgba(59,130,246,0.25); }
+.nav-flux-badge--bidir   { background: rgba(0,194,168,0.15); color: var(--color-brand-accent); border: 1px solid rgba(0,194,168,0.25); }
+
+/* Header flux */
+.flux-header { display: flex; align-items: center; gap: var(--space-3); margin-bottom: var(--space-6); flex-wrap: wrap; }
+
+.flux-direction-badge {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 5px 12px; border-radius: var(--border-radius-full);
+    font-size: 12px; font-weight: 600; font-family: var(--font-mono);
+}
+.flux-direction-badge--hs-sage { background: rgba(255,122,0,0.1); color: #C95A00; border: 1px solid rgba(255,122,0,0.25); }
+.flux-direction-badge--sage-hs { background: var(--color-info-bg); color: #1D4ED8; border: 1px solid #BFDBFE; }
+.flux-direction-badge--bidir   { background: var(--color-brand-accent-light); color: var(--color-brand-primary); border: 1px solid rgba(0,194,168,0.3); }
+
+/* Onglets flux */
+.flux-tabs { display: flex; gap: 0; border-bottom: 2px solid var(--border-color); margin-bottom: var(--space-6); overflow-x: auto; }
+.flux-tab {
+    display: flex; align-items: center; gap: 7px;
+    padding: 10px 20px; font-size: 13.5px; font-weight: 500;
+    color: var(--text-muted); text-decoration: none;
+    border-bottom: 2px solid transparent; margin-bottom: -2px;
+    white-space: nowrap; transition: color var(--transition-base), border-color var(--transition-base);
+}
+.flux-tab:hover { color: var(--text-primary); }
+.flux-tab.active { color: var(--color-brand-accent); border-bottom-color: var(--color-brand-accent); font-weight: 600; }
+.flux-tab-count {
+    background: var(--bg-base); color: var(--text-muted);
+    font-size: 11px; font-weight: 600; padding: 1px 6px;
+    border-radius: var(--border-radius-full); border: 1px solid var(--border-color);
+}
+.flux-tab.active .flux-tab-count { background: var(--color-brand-accent-light); color: var(--color-brand-primary); border-color: rgba(0,194,168,0.3); }
+
+/* Mapping table */
+.mapping-source { display: flex; flex-direction: column; gap: 2px; }
+.mapping-object { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-muted); }
+.mapping-field  { font-size: 13px; font-weight: 500; color: var(--text-primary); }
+.mapping-api    { font-size: 11px; font-family: var(--font-mono); color: var(--text-muted); background: var(--bg-base); padding: 1px 5px; border-radius: 3px; display: inline-block; margin-top: 2px; }
+.mapping-arrow  { text-align: center; font-family: var(--font-mono); font-size: 16px; color: var(--text-muted); width: 60px; }
+.mapping-arrow.hs-sage { color: #FF7A00; }
+.mapping-arrow.sage-hs { color: var(--color-info); }
+.mapping-arrow.bidir   { color: var(--color-brand-accent); }
+.mapping-condition { font-size: 11px; color: var(--text-muted); font-style: italic; }
+.mapping-required  { color: var(--color-error); font-weight: 700; font-size: 12px; }
+.mapping-section-divider { padding: 10px 16px; background: var(--bg-base); border-bottom: 1px solid var(--border-color); font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.7px; color: var(--text-muted); }
+.mapping-unmapped { opacity: 0.45; }
+.mapping-todo { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; color: var(--color-warning); font-weight: 500; }
+
+/* Statut synchro */
+.sync-status { display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; font-weight: 500; padding: 3px 8px; border-radius: var(--border-radius-full); }
+.sync-status--ok      { background: var(--color-success-bg); color: #15803D; }
+.sync-status--error   { background: var(--color-error-bg);   color: var(--color-error); }
+.sync-status--pending { background: var(--color-warning-bg); color: #9A3412; }
+.sync-status--inactive{ background: var(--bg-base);          color: var(--text-muted); }
+
+/* Banners info */
+.flux-info-banner { display: flex; gap: var(--space-3); padding: var(--space-4) var(--space-5); border-radius: var(--border-radius-md); font-size: 13px; line-height: 1.5; margin-bottom: var(--space-6); }
+.flux-info-banner--info    { background: var(--color-info-bg); border: 1px solid #BFDBFE; color: #1E40AF; }
+.flux-info-banner--warning { background: var(--color-warning-bg); border: 1px solid #FED7AA; color: #9A3412; }
+.flux-info-banner--note    { background: var(--bg-base); border: 1px solid var(--border-color); color: var(--text-secondary); }
+.flux-info-banner svg { flex-shrink: 0; margin-top: 1px; }

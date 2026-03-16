@@ -1,0 +1,17 @@
+{% extends 'layout/app.html.twig' %}
+{% block page_title %}Commandes — En-tête{% endblock %}
+{% block page_subtitle %}Conditions livraison, règlement, client{% endblock %}
+{% block content %}
+    {% include 'partials/flux_tabs.html.twig' with { flux: 'commandes' } %}
+    <div class="card">
+        <div class="card-header">
+            <span class="card-title">Commandes — En-tête</span>
+            <span class="flux-direction-badge flux-direction-badge--sage-hs">Sage → HubSpot</span>
+        </div>
+        <div class="card-body" style="text-align:center;padding:var(--space-12) var(--space-8);">
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--border-color-dark)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="margin:0 auto var(--space-4);"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>
+            <p style="font-size:15px;font-weight:600;color:var(--text-secondary);margin-bottom:var(--space-2);">Mapping à implémenter</p>
+            <p style="font-size:13px;color:var(--text-muted);">Le tableau de mapping détaillé sera affiché ici.</p>
+        </div>
+    </div>
+{% endblock %}

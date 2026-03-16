@@ -1,0 +1,37 @@
+{% extends 'layout/app.html.twig' %}
+{% block page_title %}Flux Commandes / Deals{% endblock %}
+{% block page_subtitle %}Synchronisation Sage Bon de commande → HubSpot Deals & Orders{% endblock %}
+{% block content %}
+    {% include 'partials/flux_tabs.html.twig' with { flux: 'commandes' } %}
+    <div class="flux-header">
+        <span class="flux-direction-badge flux-direction-badge--sage-hs">Sage Bon de commande → HubSpot Deals/Orders</span>
+    </div>
+    <div class="flux-info-banner flux-info-banner--info">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+        <div>Les commandes remontent de Sage vers HubSpot via les Deals ou Orders. Les lignes de commande (SKU, quantité, prix) sont synchronisées. Le statut de paiement est indiqué via le lettrage comptable.</div>
+    </div>
+    <div class="stats-grid" style="grid-template-columns:repeat(3,1fr);margin-bottom:var(--space-6);">
+        <div class="stat-card"><div class="stat-header"><span class="stat-label">Commandes sync.</span><div class="stat-icon accent"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#00C2A8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg></div></div><div class="stat-value">—</div><div class="stat-delta" style="color:var(--text-muted)">À implémenter</div></div>
+        <div class="stat-card"><div class="stat-header"><span class="stat-label">Montant total</span><div class="stat-icon blue"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#3B82F6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></div></div><div class="stat-value">—</div><div class="stat-delta" style="color:var(--text-muted)">À implémenter</div></div>
+        <div class="stat-card"><div class="stat-header"><span class="stat-label">Erreurs</span><div class="stat-icon red"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#E8394D" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg></div></div><div class="stat-value">—</div><div class="stat-delta" style="color:var(--text-muted)">À implémenter</div></div>
+    </div>
+    <div class="card">
+        <div class="card-header"><span class="card-title">Champs synchronisés</span></div>
+        <div style="padding:0 4px;">
+            <table class="table">
+                <thead><tr><th>Source (Sage)</th><th>Destination (HubSpot)</th><th>Champ API</th></tr></thead>
+                <tbody>
+                    <tr><td>Ligne de commande › Référence article</td><td>Deal Line Items / Orders</td><td><code class="mapping-api">hs_sku</code></td></tr>
+                    <tr><td>Ligne de commande › Quantité</td><td>Deal Line Items / Orders</td><td><code class="mapping-api">quantity</code></td></tr>
+                    <tr><td>Ligne de commande › P.U. H.T.</td><td>Deal Line Items / Orders</td><td><code class="mapping-api">price</code></td></tr>
+                    <tr><td>Ligne de commande › Remise</td><td>Deal Line Items / Orders</td><td><code class="mapping-api">discount</code></td></tr>
+                    <tr><td>Bon de commande › Condition de livraison</td><td>Deal / Orders</td><td><code class="mapping-api">incoterm</code></td></tr>
+                    <tr><td>Bon de commande › Mode de règlement</td><td>Deal / Orders</td><td><code class="mapping-api">payment_term</code></td></tr>
+                    <tr><td>Lettrage comptable</td><td>Deal / Orders</td><td><code class="mapping-api">payed</code></td></tr>
+                    <tr><td>Récapitulation Net à payer</td><td>Deal / Orders</td><td><code class="mapping-api">amount</code></td></tr>
+                    <tr><td>Client › Champs libres HUBSPOT_ID</td><td>Deal / Orders</td><td><code class="mapping-api">hs_object_id</code></td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+{% endblock %}

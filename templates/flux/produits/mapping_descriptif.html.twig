@@ -1,0 +1,21 @@
+{% extends 'layout/app.html.twig' %}
+{% block page_title %}Produits — Descriptif & Catalogue{% endblock %}
+{% block page_subtitle %}Sage Article › Descriptif → HubSpot Products{% endblock %}
+{% block content %}
+    {% include 'partials/flux_tabs.html.twig' with { flux: 'produits' } %}
+    <div class="flux-info-banner flux-info-banner--note">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+        <div>Flux unilatéral Sage → HubSpot. Condition "Toujours" = synchronisation systématique sans condition de vide.</div>
+    </div>
+    <div class="card">
+        <div class="card-header">
+            <span class="card-title">Produits — Descriptif & Catalogue</span>
+            <span class="flux-direction-badge flux-direction-badge--sage-hs">Sage → HubSpot</span>
+        </div>
+        <div class="card-body" style="text-align:center;padding:var(--space-12) var(--space-8);">
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--border-color-dark)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="margin:0 auto var(--space-4);"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
+            <p style="font-size:15px;font-weight:600;color:var(--text-secondary);margin-bottom:var(--space-2);">Mapping à implémenter</p>
+            <p style="font-size:13px;color:var(--text-muted);">Le tableau de mapping détaillé sera affiché ici.</p>
+        </div>
+    </div>
+{% endblock %}

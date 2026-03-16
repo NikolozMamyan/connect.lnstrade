@@ -1,0 +1,68 @@
+{# ════════════════════════════════════════
+   UI COMPONENT · Card
+   ════════════════════════════════════════
+
+   Paramètres :
+     title         (string)  — titre affiché dans le card-header
+     header_action (string)  — HTML/twig brut pour l'action droite du header
+                               (ex: un bouton "Voir tout")
+     body_padding  (bool)    — applique card-body padding  défaut : true
+     no_header     (bool)    — masque le header            défaut : false
+     class         (string)  — classes CSS supplémentaires
+
+   Le contenu est passé via le block 'card_body' :
+
+   Exemples d'appel :
+   ─────────────────────────────────────────
+   Carte simple avec titre :
+   {% embed 'ui/card.html.twig' with { title: 'Clients récents' } %}
+       {% block card_body %}
+           <p>Contenu ici</p>
+       {% endblock %}
+   {% endembed %}
+
+   Carte avec action dans le header :
+   {% embed 'ui/card.html.twig' with {
+       title: 'Commandes',
+       header_action: include('ui/button.html.twig', {
+           label: 'Voir tout', variant: 'secondary', size: 'sm',
+           href: path('commande_index')
+       })
+   } %}
+       {% block card_body %}...{% endblock %}
+   {% endembed %}
+
+   Carte sans header (widget graphique, etc.) :
+   {% embed 'ui/card.html.twig' with { no_header: true } %}
+       {% block card_body %}...{% endblock %}
+   {% endembed %}
+   ════════════════════════════════════════ #}
+
+{% set _body_padding = body_padding ?? true %}
+{% set _no_header    = no_header    ?? false %}
+
+<div class="card{{ class is defined ? ' ' ~ class : '' }}">
+
+    {# ── Header ── #}
+    {% if not _no_header %}
+        <div class="card-header">
+            {% if title is defined %}
+                <span class="card-title">{{ title }}</span>
+            {% else %}
+                <span></span>
+            {% endif %}
+
+            {% if header_action is defined %}
+                <div class="card-header-action">
+                    {{ header_action|raw }}
+                </div>
+            {% endif %}
+        </div>
+    {% endif %}
+
+    {# ── Body ── #}
+    <div class="{{ _body_padding ? 'card-body' : 'card-body-flush' }}">
+        {% block card_body %}{% endblock %}
+    </div>
+
+</div>

@@ -1,0 +1,90 @@
+{# ════════════════════════════════════════
+   PARTIAL · Flux Tabs
+   Usage : {% include 'partials/flux_tabs.html.twig' with { flux: 'contacts' } %}
+   flux : 'contacts' | 'clients' | 'produits' | 'commandes'
+   ════════════════════════════════════════ #}
+
+{% set current_route = app.request.attributes.get('_route') %}
+
+{% if flux == 'contacts' %}
+    <nav class="flux-tabs">
+        <a href="{{ path('flux_contacts_index') }}"
+           class="flux-tab {{ current_route == 'flux_contacts_index' ? 'active' : '' }}">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+            Vue d'ensemble
+        </a>
+        <a href="{{ path('flux_contacts_mapping') }}"
+           class="flux-tab {{ current_route == 'flux_contacts_mapping' ? 'active' : '' }}">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+            Mapping des champs
+        </a>
+        <a href="{{ path('flux_contacts_logs') }}"
+           class="flux-tab {{ current_route == 'flux_contacts_logs' ? 'active' : '' }}">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+            Logs
+        </a>
+    </nav>
+
+{% elseif flux == 'clients' %}
+    <nav class="flux-tabs">
+        <a href="{{ path('flux_clients_index') }}" class="flux-tab {{ current_route == 'flux_clients_index' ? 'active' : '' }}">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+            Vue d'ensemble
+        </a>
+        <a href="{{ path('flux_clients_mapping_identification') }}" class="flux-tab {{ current_route == 'flux_clients_mapping_identification' ? 'active' : '' }}">
+            Identification
+        </a>
+        <a href="{{ path('flux_clients_mapping_adresses') }}" class="flux-tab {{ current_route == 'flux_clients_mapping_adresses' ? 'active' : '' }}">
+            Adresses
+        </a>
+        <a href="{{ path('flux_clients_mapping_tarifs') }}" class="flux-tab {{ current_route == 'flux_clients_mapping_tarifs' ? 'active' : '' }}">
+            Tarifs
+        </a>
+        <a href="{{ path('flux_clients_mapping_solvabilite') }}" class="flux-tab {{ current_route == 'flux_clients_mapping_solvabilite' ? 'active' : '' }}">
+            Solvabilité
+        </a>
+        <a href="{{ path('flux_clients_logs') }}" class="flux-tab {{ current_route == 'flux_clients_logs' ? 'active' : '' }}">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+            Logs
+        </a>
+    </nav>
+
+{% elseif flux == 'produits' %}
+    <nav class="flux-tabs">
+        <a href="{{ path('flux_produits_index') }}" class="flux-tab {{ current_route == 'flux_produits_index' ? 'active' : '' }}">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+            Vue d'ensemble
+        </a>
+        <a href="{{ path('flux_produits_mapping_identification') }}" class="flux-tab {{ current_route == 'flux_produits_mapping_identification' ? 'active' : '' }}">
+            Identification
+        </a>
+        <a href="{{ path('flux_produits_mapping_descriptif') }}" class="flux-tab {{ current_route == 'flux_produits_mapping_descriptif' ? 'active' : '' }}">
+            Descriptif & Catalogue
+        </a>
+        <a href="{{ path('flux_produits_mapping_logistique') }}" class="flux-tab {{ current_route == 'flux_produits_mapping_logistique' ? 'active' : '' }}">
+            Logistique & Stock
+        </a>
+        <a href="{{ path('flux_produits_logs') }}" class="flux-tab {{ current_route == 'flux_produits_logs' ? 'active' : '' }}">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+            Logs
+        </a>
+    </nav>
+
+{% elseif flux == 'commandes' %}
+    <nav class="flux-tabs">
+        <a href="{{ path('flux_commandes_index') }}" class="flux-tab {{ current_route == 'flux_commandes_index' ? 'active' : '' }}">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+            Vue d'ensemble
+        </a>
+        <a href="{{ path('flux_commandes_mapping_entete') }}" class="flux-tab {{ current_route == 'flux_commandes_mapping_entete' ? 'active' : '' }}">
+            En-tête commande
+        </a>
+        <a href="{{ path('flux_commandes_mapping_lignes') }}" class="flux-tab {{ current_route == 'flux_commandes_mapping_lignes' ? 'active' : '' }}">
+            Lignes de commande
+        </a>
+        <a href="{{ path('flux_commandes_logs') }}" class="flux-tab {{ current_route == 'flux_commandes_logs' ? 'active' : '' }}">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+            Logs
+        </a>
+    </nav>
+{% endif %}

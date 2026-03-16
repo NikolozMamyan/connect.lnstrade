@@ -1,0 +1,54 @@
+{# ════════════════════════════════════════
+   UI COMPONENT · Stat Card
+   ════════════════════════════════════════
+
+   Paramètres :
+     label      (string) — libellé de la métrique          [requis]
+     value      (string) — valeur principale affichée      [requis]
+     icon       (string) — SVG inline de l'icône           [requis]
+     icon_color (string) — 'accent' | 'blue' | 'orange' | 'red'
+                           défaut : 'accent'
+     delta      (string) — texte de variation ex: "+12 ce mois"
+     delta_dir  (string) — 'up' | 'down'  défaut : 'up'
+     href       (string) — rend la card cliquable (lien)
+     class      (string) — classes CSS supplémentaires
+
+   Exemples d'appel :
+   ─────────────────────────────────────────
+   {{ include('ui/stat_card.html.twig', {
+       label:      'Clients actifs',
+       value:      clients_count,
+       icon:       '<svg ...>...</svg>',
+       icon_color: 'accent',
+       delta:      '+12 ce mois',
+       delta_dir:  'up',
+       href:       path('client_index')
+   }) }}
+   ════════════════════════════════════════ #}
+
+{% set _icon_color = icon_color ?? 'accent' %}
+{% set _delta_dir  = delta_dir  ?? 'up' %}
+{% set _tag        = href is defined ? 'a' : 'div' %}
+{% set _classes    = 'stat-card' ~ (class is defined ? ' ' ~ class : '') %}
+
+<{{ _tag }}
+    class="{{ _classes }}"
+    {% if href is defined %}href="{{ href }}"{% endif %}>
+
+    <div class="stat-header">
+        <span class="stat-label">{{ label }}</span>
+        <div class="stat-icon {{ _icon_color }}">
+            {{ icon|raw }}
+        </div>
+    </div>
+
+    <div class="stat-value">{{ value }}</div>
+
+    {% if delta is defined %}
+        <div class="stat-delta {{ _delta_dir }}">
+            {% if _delta_dir == 'up' %}▲{% else %}▼{% endif %}
+            {{ delta }}
+        </div>
+    {% endif %}
+
+</{{ _tag }}>

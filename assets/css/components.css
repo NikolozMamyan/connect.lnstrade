@@ -1,0 +1,377 @@
+/* ============================================================
+   LSTRADE - Composants UI
+   public/css/components.css
+   Buttons, Cards, Stat Cards, Tables, Tags, Activity, Badges
+   ============================================================ */
+
+/* ================================================================
+   BUTTONS
+   ================================================================ */
+
+.btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    border-radius: var(--border-radius-md);
+    font-family: var(--font-sans);
+    font-weight: var(--font-semibold);
+    cursor: pointer;
+    border: none;
+    text-decoration: none;
+    transition: all var(--transition-base);
+    white-space: nowrap;
+    line-height: 1;
+}
+
+/* Tailles */
+.btn-sm  { padding: 6px 12px;  font-size: 12px; }
+.btn-md  { padding: 9px 18px;  font-size: 13.5px; }
+.btn-lg  { padding: 12px 24px; font-size: var(--text-base); }
+
+/* Variants */
+.btn-primary {
+    background: var(--color-brand-accent);
+    color: var(--color-brand-primary);
+}
+
+.btn-primary:hover {
+    background: var(--color-brand-accent-hover);
+    box-shadow: 0 4px 12px rgba(0, 194, 168, 0.35);
+    transform: translateY(-1px);
+    color: var(--color-brand-primary);
+}
+
+.btn-secondary {
+    background: var(--bg-surface);
+    color: var(--text-primary);
+    border: 1px solid var(--border-color);
+}
+
+.btn-secondary:hover {
+    background: var(--bg-base);
+    border-color: var(--color-brand-accent);
+    color: var(--text-primary);
+}
+
+.btn-danger {
+    background: var(--color-error-bg);
+    color: var(--color-error);
+    border: 1px solid var(--color-error);
+}
+
+.btn-danger:hover {
+    background: var(--color-error);
+    color: #fff;
+}
+
+.btn-ghost {
+    background: transparent;
+    color: var(--text-secondary);
+    border: 1px solid transparent;
+}
+
+.btn-ghost:hover {
+    background: var(--bg-base);
+    border-color: var(--border-color);
+    color: var(--text-primary);
+}
+
+/* Etat desactive */
+.btn-disabled,
+.btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    pointer-events: none;
+    transform: none !important;
+    box-shadow: none !important;
+}
+
+/* Icone dans le bouton */
+.btn-icon {
+    display: flex;
+    align-items: center;
+    flex-shrink: 0;
+}
+
+/* ================================================================
+   CARDS
+   ================================================================ */
+
+.card {
+    background: var(--bg-surface);
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius-lg);
+    box-shadow: var(--shadow-sm);
+    overflow: hidden;
+    animation: fadeIn 0.4s ease both;
+    transition: box-shadow var(--transition-base);
+}
+
+.card:hover {
+    box-shadow: var(--shadow-md);
+}
+
+.card-header {
+    padding: 18px 22px;
+    border-bottom: 1px solid var(--border-color);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-4);
+}
+
+.card-title {
+    font-size: var(--text-sm);
+    font-weight: var(--font-bold);
+    color: var(--text-primary);
+}
+
+.card-header-action {
+    flex-shrink: 0;
+}
+
+.card-body {
+    padding: 22px;
+}
+
+.card-body-flush {
+    padding: 0;
+}
+
+.card-footer {
+    padding: var(--space-4) 22px;
+    border-top: 1px solid var(--border-color);
+    background: var(--bg-base);
+}
+
+/* ================================================================
+   STAT CARDS
+   ================================================================ */
+
+.stat-card {
+    background: var(--bg-surface);
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius-lg);
+    padding: 20px 22px;
+    box-shadow: var(--shadow-sm);
+    transition: box-shadow var(--transition-base), transform var(--transition-base);
+    cursor: default;
+    animation: fadeIn 0.4s ease both;
+}
+
+a.stat-card {
+    cursor: pointer;
+    text-decoration: none;
+    display: block;
+}
+
+.stat-card:hover {
+    box-shadow: var(--shadow-md);
+    transform: translateY(-2px);
+}
+
+.stat-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 14px;
+}
+
+.stat-label {
+    font-size: 11px;
+    font-weight: var(--font-semibold);
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+}
+
+.stat-icon {
+    width: 34px;
+    height: 34px;
+    border-radius: var(--border-radius-md);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.stat-icon.accent { background: var(--color-brand-accent-light); }
+.stat-icon.blue   { background: var(--color-info-bg); }
+.stat-icon.orange { background: var(--color-warning-bg); }
+.stat-icon.red    { background: var(--color-error-bg); }
+.stat-icon.green  { background: var(--color-success-bg); }
+
+.stat-value {
+    font-size: 28px;
+    font-weight: var(--font-bold);
+    color: var(--text-primary);
+    letter-spacing: -0.5px;
+    line-height: 1;
+    margin-bottom: var(--space-2);
+}
+
+.stat-delta {
+    font-size: 12px;
+    font-weight: var(--font-medium);
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.stat-delta.up   { color: var(--color-success); }
+.stat-delta.down { color: var(--color-error); }
+
+/* ================================================================
+   TABLE
+   ================================================================ */
+
+.table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.table th {
+    font-size: 11px;
+    font-weight: var(--font-semibold);
+    text-transform: uppercase;
+    letter-spacing: 0.7px;
+    color: var(--text-muted);
+    padding: 0 16px 12px;
+    text-align: left;
+    border-bottom: 1px solid var(--border-color);
+    white-space: nowrap;
+}
+
+.table td {
+    padding: 13px 16px;
+    font-size: 13.5px;
+    color: var(--text-secondary);
+    border-bottom: 1px solid var(--border-color);
+    vertical-align: middle;
+}
+
+.table tbody tr:last-child td {
+    border-bottom: none;
+}
+
+.table tbody tr:hover td {
+    background: var(--bg-base);
+}
+
+.table .client-name {
+    font-weight: var(--font-semibold);
+    color: var(--text-primary);
+}
+
+.table .client-email {
+    font-size: 11.5px;
+    color: var(--text-muted);
+}
+
+.table .date-cell {
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+    font-size: 12.5px;
+}
+
+.table .amount-cell {
+    font-weight: var(--font-semibold);
+    color: var(--text-primary);
+}
+
+/* ================================================================
+   TAGS / BADGES
+   ================================================================ */
+
+.tag {
+    display: inline-flex;
+    align-items: center;
+    padding: 3px 9px;
+    border-radius: var(--border-radius-full);
+    font-size: 11px;
+    font-weight: var(--font-semibold);
+    white-space: nowrap;
+}
+
+.tag-success { background: var(--color-success-bg); color: #16A34A; }
+.tag-warning { background: var(--color-warning-bg); color: #C2410C; }
+.tag-error   { background: var(--color-error-bg);   color: var(--color-error); }
+.tag-info    { background: var(--color-info-bg);     color: #2563EB; }
+.tag-muted   { background: var(--bg-base);           color: var(--text-muted); }
+.tag-accent  { background: var(--color-brand-accent-light); color: var(--color-brand-primary); }
+
+/* ================================================================
+   ACTIVITY LIST
+   ================================================================ */
+
+.activity-list {
+    display: flex;
+    flex-direction: column;
+}
+
+.activity-item {
+    display: flex;
+    gap: 12px;
+    padding: 13px 0;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.activity-item:last-child {
+    border-bottom: none;
+}
+
+.activity-dot {
+    width: 8px;
+    height: 8px;
+    min-width: 8px;
+    border-radius: 50%;
+    margin-top: 5px;
+}
+
+.activity-dot.accent { background: var(--color-brand-accent); }
+.activity-dot.blue   { background: var(--color-info); }
+.activity-dot.orange { background: var(--color-warning); }
+.activity-dot.red    { background: var(--color-error); }
+.activity-dot.green  { background: var(--color-success); }
+
+.activity-text {
+    flex: 1;
+    font-size: 13px;
+    color: var(--text-secondary);
+    line-height: 1.4;
+}
+
+.activity-text strong {
+    color: var(--text-primary);
+    font-weight: var(--font-semibold);
+}
+
+.activity-time {
+    font-size: 11.5px;
+    color: var(--text-muted);
+    margin-top: 3px;
+    font-family: var(--font-mono);
+}
+
+/* ================================================================
+   STATUS INDICATORS
+   ================================================================ */
+
+.status-indicator {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    font-weight: var(--font-medium);
+}
+
+.status-dot {
+    width: 7px;
+    height: 7px;
+    min-width: 7px;
+    border-radius: 50%;
+}
+
+.status-dot.online  { background: var(--color-success); box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.15); }
+.status-dot.offline { background: var(--text-muted); }
+.status-dot.warn    { background: var(--color-warning); box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.15); }
+.status-dot.error   { background: var(--color-error); box-shadow: 0 0 0 3px rgba(232, 57, 77, 0.15); }

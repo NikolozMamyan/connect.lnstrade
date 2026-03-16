@@ -1,0 +1,42 @@
+{# ════════════════════════════════════════
+   PARTIAL · Breadcrumb
+   Usage depuis un template de page :
+
+   {% set breadcrumbs = [
+       { label: 'Clients',   route: 'client_index' },
+       { label: 'Acme Corp', route: null }
+   ] %}
+
+   Si breadcrumbs n'est pas défini, affiche juste le titre de la page.
+   ════════════════════════════════════════ #}
+
+<nav class="topbar-breadcrumb" aria-label="Fil d'Ariane">
+
+    {# Racine toujours présente #}
+    <a href="{{ path('app_dashboard') }}" class="breadcrumb-root">LSTRADE</a>
+
+    {% if breadcrumbs is defined and breadcrumbs|length > 0 %}
+
+        {% for crumb in breadcrumbs %}
+            <span class="breadcrumb-sep" aria-hidden="true">/</span>
+
+            {% if crumb.route and not loop.last %}
+                <a href="{{ path(crumb.route) }}" class="breadcrumb-link">
+                    {{ crumb.label }}
+                </a>
+            {% else %}
+                <span class="breadcrumb-current" aria-current="page">
+                    {{ crumb.label }}
+                </span>
+            {% endif %}
+        {% endfor %}
+
+    {% elseif page_title is defined %}
+
+        {# Fallback : on affiche juste le page_title du block #}
+        <span class="breadcrumb-sep" aria-hidden="true">/</span>
+        <span class="breadcrumb-current">{{ page_title }}</span>
+
+    {% endif %}
+
+</nav>

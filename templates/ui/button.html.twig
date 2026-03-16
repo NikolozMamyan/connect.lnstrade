@@ -1,0 +1,86 @@
+{# ════════════════════════════════════════
+   UI COMPONENT · Button
+   ════════════════════════════════════════
+
+   Paramètres :
+     label    (string)  — texte du bouton              [requis]
+     variant  (string)  — 'primary' | 'secondary' | 'danger' | 'ghost'
+                          défaut : 'primary'
+     size     (string)  — 'sm' | 'md' | 'lg'           défaut : 'md'
+     type     (string)  — 'button' | 'submit' | 'reset' défaut : 'button'
+     href     (string)  — si défini, rend un <a> au lieu de <button>
+     icon     (string)  — SVG inline optionnel (avant le label)
+     icon_right (bool)  — place l'icône après le label  défaut : false
+     disabled (bool)    — désactive le bouton           défaut : false
+     class    (string)  — classes CSS supplémentaires
+     attrs    (string)  — attributs HTML bruts (ex: 'data-modal="confirm"')
+
+   Exemples d'appel :
+   ─────────────────────────────────────────
+   Bouton primaire simple :
+   {{ include('ui/button.html.twig', { label: 'Nouveau client' }) }}
+
+   Bouton secondaire avec icône :
+   {{ include('ui/button.html.twig', {
+       label:   'Exporter',
+       variant: 'secondary',
+       icon:    '<svg ...>...</svg>'
+   }) }}
+
+   Bouton lien :
+   {{ include('ui/button.html.twig', {
+       label:   'Voir tout',
+       variant: 'ghost',
+       href:    path('client_index')
+   }) }}
+
+   Bouton submit danger :
+   {{ include('ui/button.html.twig', {
+       label:   'Supprimer',
+       variant: 'danger',
+       type:    'submit'
+   }) }}
+   ════════════════════════════════════════ #}
+
+{% set _variant  = variant  ?? 'primary' %}
+{% set _size     = size     ?? 'md' %}
+{% set _type     = type     ?? 'button' %}
+{% set _disabled = disabled ?? false %}
+{% set _icon_right = icon_right ?? false %}
+
+{% set _classes = 'btn btn-' ~ _variant ~ ' btn-' ~ _size %}
+{% if _disabled %} {% set _classes = _classes ~ ' btn-disabled' %} {% endif %}
+{% if class is defined %} {% set _classes = _classes ~ ' ' ~ class %} {% endif %}
+
+{% if href is defined %}
+
+    {# ── Rendu lien ── #}
+    <a href="{{ href }}"
+       class="{{ _classes }}"
+       {{ attrs ?? '' }}>
+        {% if icon is defined and not _icon_right %}
+            <span class="btn-icon" aria-hidden="true">{{ icon|raw }}</span>
+        {% endif %}
+        <span class="btn-label">{{ label }}</span>
+        {% if icon is defined and _icon_right %}
+            <span class="btn-icon" aria-hidden="true">{{ icon|raw }}</span>
+        {% endif %}
+    </a>
+
+{% else %}
+
+    {# ── Rendu bouton ── #}
+    <button type="{{ _type }}"
+            class="{{ _classes }}"
+            {% if _disabled %}disabled aria-disabled="true"{% endif %}
+            {{ attrs ?? '' }}>
+        {% if icon is defined and not _icon_right %}
+            <span class="btn-icon" aria-hidden="true">{{ icon|raw }}</span>
+        {% endif %}
+        <span class="btn-label">{{ label }}</span>
+        {% if icon is defined and _icon_right %}
+            <span class="btn-icon" aria-hidden="true">{{ icon|raw }}</span>
+        {% endif %}
+    </button>
+
+{% endif %}

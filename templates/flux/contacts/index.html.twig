@@ -1,0 +1,112 @@
+{% extends 'layout/app.html.twig' %}
+
+{% block page_title %}Flux Contacts{% endblock %}
+{% block page_subtitle %}Synchronisation HubSpot → Sage · Contacts clients{% endblock %}
+
+{% block page_actions %}
+    <button class="btn btn-secondary btn-sm">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3.5"/></svg>
+        Forcer la synchro
+    </button>
+{% endblock %}
+
+{% block content %}
+
+    {# Tabs #}
+    {% include 'partials/flux_tabs.html.twig' with { flux: 'contacts' } %}
+
+    {# Direction badge #}
+    <div class="flux-header">
+        <span class="flux-direction-badge flux-direction-badge--hs-sage">
+            HubSpot Contact → Sage Client &gt; Contact
+        </span>
+    </div>
+
+    {# Info banner #}
+    <div class="flux-info-banner flux-info-banner--info">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+        <div>
+            Les contacts créés ou modifiés dans HubSpot sont synchronisés vers Sage. En cas de dissociation d'un contact d'une entreprise dans HubSpot, le contact sera supprimé du client correspondant dans Sage.
+            Les contacts créés dans Sage ne remontent <strong>pas</strong> vers HubSpot.
+        </div>
+    </div>
+
+    {# Stat cards #}
+    <div class="stats-grid" style="grid-template-columns: repeat(3,1fr); margin-bottom: var(--space-6);">
+        <div class="stat-card">
+            <div class="stat-header">
+                <span class="stat-label">Contacts synchronisés</span>
+                <div class="stat-icon accent">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#00C2A8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
+                </div>
+            </div>
+            <div class="stat-value">—</div>
+            <div class="stat-delta up">À venir</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-header">
+                <span class="stat-label">Erreurs en attente</span>
+                <div class="stat-icon red">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#E8394D" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                </div>
+            </div>
+            <div class="stat-value">—</div>
+            <div class="stat-delta" style="color:var(--text-muted)">À implémenter</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-header">
+                <span class="stat-label">Dernière synchro</span>
+                <div class="stat-icon blue">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#3B82F6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                </div>
+            </div>
+            <div class="stat-value" style="font-size:18px;">—</div>
+            <div class="stat-delta" style="color:var(--text-muted)">À implémenter</div>
+        </div>
+    </div>
+
+    {# Règles métier #}
+    <div class="card">
+        <div class="card-header">
+            <span class="card-title">Règles de synchronisation</span>
+        </div>
+        <div class="card-body">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Déclencheur</th>
+                        <th>Action dans Sage</th>
+                        <th>Statut</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>Contact créé dans HubSpot</td>
+                        <td>Création du contact dans le client Sage correspondant</td>
+                        <td><span class="sync-status sync-status--pending">À implémenter</span></td>
+                    </tr>
+                    <tr>
+                        <td>Contact modifié dans HubSpot</td>
+                        <td>Mise à jour du contact Sage (si champ vide ou remplacement)</td>
+                        <td><span class="sync-status sync-status--pending">À implémenter</span></td>
+                    </tr>
+                    <tr>
+                        <td>Contact dissocié d'une entreprise</td>
+                        <td>Suppression du contact dans le client Sage</td>
+                        <td><span class="sync-status sync-status--pending">À implémenter</span></td>
+                    </tr>
+                    <tr>
+                        <td>Contact supprimé dans HubSpot</td>
+                        <td>Suppression du contact dans Sage</td>
+                        <td><span class="sync-status sync-status--pending">À implémenter</span></td>
+                    </tr>
+                    <tr class="mapping-unmapped">
+                        <td>Contact créé dans Sage</td>
+                        <td colspan="2" style="color:var(--text-muted); font-style:italic;">Non prévu — pas de remontée Sage → HubSpot pour les contacts</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+{% endblock %}

@@ -1,0 +1,234 @@
+/* ============================================================
+   LSTRADE · Sidebar
+   public/css/sidebar.css
+   ============================================================ */
+
+/* ─── Conteneur ─────────────────────────────────────────── */
+.sidebar {
+    width: var(--sidebar-width);
+    height: 100vh;
+    background: var(--bg-sidebar);
+    display: flex;
+    flex-direction: column;
+    flex-shrink: 0;
+    position: fixed;
+    left: 0;
+    top: 0;
+    z-index: var(--z-sticky);
+    overflow: hidden;
+    transition: width var(--transition-base), transform var(--transition-base);
+}
+
+/* ─── Logo / Brand ──────────────────────────────────────── */
+.sidebar-logo {
+    height: var(--topbar-height);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 0 20px;
+    border-bottom: 1px solid var(--border-color-on-dark);
+    flex-shrink: 0;
+}
+
+.logo-mark {
+    width: 34px;
+    height: 34px;
+    min-width: 34px;
+    background: var(--color-brand-accent);
+    border-radius: 9px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: var(--font-bold);
+    font-size: 15px;
+    color: var(--color-brand-primary);
+    letter-spacing: -0.5px;
+}
+
+.logo-text {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    overflow: hidden;
+}
+
+.logo-name {
+    font-size: var(--text-sm);
+    font-weight: var(--font-bold);
+    color: var(--text-on-dark);
+    letter-spacing: 0.5px;
+    white-space: nowrap;
+}
+
+.logo-sub {
+    font-size: 10px;
+    color: var(--text-on-dark-muted);
+    letter-spacing: 0.8px;
+    text-transform: uppercase;
+    font-weight: var(--font-medium);
+    white-space: nowrap;
+}
+
+/* ─── Navigation ────────────────────────────────────────── */
+.sidebar-nav {
+    flex: 1;
+    padding: var(--space-4) var(--space-3);
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.nav-section-label {
+    font-size: 10px;
+    font-weight: var(--font-semibold);
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: var(--text-on-dark-muted);
+    padding: var(--space-3) 10px var(--space-2);
+    margin-top: var(--space-2);
+    white-space: nowrap;
+    overflow: hidden;
+}
+
+/* ─── Item de navigation ────────────────────────────────── */
+.nav-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 9px 12px;
+    border-radius: var(--border-radius-md);
+    color: rgba(255, 255, 255, 0.65);
+    font-size: 13.5px;
+    font-weight: var(--font-medium);
+    cursor: pointer;
+    text-decoration: none;
+    transition:
+        background var(--transition-base),
+        color var(--transition-base);
+    position: relative;
+    white-space: nowrap;
+    overflow: hidden;
+}
+
+.nav-item:hover {
+    background: rgba(255, 255, 255, 0.07);
+    color: var(--text-on-dark);
+}
+
+.nav-item.active {
+    background: var(--bg-sidebar-item-active);
+    color: var(--text-on-dark);
+}
+
+/* Trait accent à gauche pour l'item actif */
+.nav-item.active::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 3px;
+    height: 18px;
+    background: var(--color-brand-accent);
+    border-radius: 0 3px 3px 0;
+}
+
+/* ─── Icône de navigation ───────────────────────────────── */
+.nav-icon {
+    width: 18px;
+    height: 18px;
+    min-width: 18px;
+    opacity: 0.8;
+    transition: opacity var(--transition-fast);
+}
+
+.nav-item:hover .nav-icon,
+.nav-item.active .nav-icon {
+    opacity: 1;
+}
+
+/* ─── Badge de navigation ───────────────────────────────── */
+.nav-badge {
+    margin-left: auto;
+    background: var(--color-error);
+    color: #fff;
+    font-size: 10px;
+    font-weight: var(--font-bold);
+    padding: 2px 6px;
+    border-radius: var(--border-radius-full);
+    line-height: 1.4;
+    min-width: 18px;
+    text-align: center;
+}
+
+.nav-badge.green {
+    background: var(--color-brand-accent);
+    color: var(--color-brand-primary);
+}
+
+/* ─── Footer / Utilisateur ──────────────────────────────── */
+.sidebar-footer {
+    padding: var(--space-3);
+    border-top: 1px solid var(--border-color-on-dark);
+    flex-shrink: 0;
+}
+
+.user-card {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    border-radius: var(--border-radius-md);
+    cursor: pointer;
+    transition: background var(--transition-base);
+}
+
+.user-card:hover {
+    background: rgba(255, 255, 255, 0.07);
+}
+
+.user-avatar {
+    width: 32px;
+    height: 32px;
+    min-width: 32px;
+    border-radius: var(--border-radius-full);
+    background: linear-gradient(135deg, var(--color-brand-accent) 0%, var(--color-info) 100%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    font-weight: var(--font-bold);
+    color: #fff;
+}
+
+.user-info {
+    flex: 1;
+    overflow: hidden;
+}
+
+.user-name {
+    font-size: 12.5px;
+    font-weight: var(--font-semibold);
+    color: var(--text-on-dark);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.user-role {
+    font-size: 11px;
+    color: var(--text-on-dark-muted);
+    white-space: nowrap;
+}
+
+/* ─── Responsive : sidebar masquée sur mobile ────────────── */
+@media (max-width: 768px) {
+    .sidebar {
+        transform: translateX(-100%);
+    }
+
+    .sidebar.is-open {
+        transform: translateX(0);
+    }
+}

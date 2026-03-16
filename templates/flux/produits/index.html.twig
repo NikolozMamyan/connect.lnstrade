@@ -1,0 +1,35 @@
+{% extends 'layout/app.html.twig' %}
+{% block page_title %}Flux Produits / Articles{% endblock %}
+{% block page_subtitle %}Synchronisation Sage Article → HubSpot Products{% endblock %}
+{% block content %}
+    {% include 'partials/flux_tabs.html.twig' with { flux: 'produits' } %}
+    <div class="flux-header">
+        <span class="flux-direction-badge flux-direction-badge--sage-hs">Sage Article → HubSpot Products</span>
+    </div>
+    <div class="flux-info-banner flux-info-banner--info">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+        <div>Les articles créés dans Sage sont synchronisés vers HubSpot Products. Le stock est remonté par dépôt (Strasbourg). Flux unilatéral Sage → HubSpot, condition "Toujours" (pas de condition de vide).</div>
+    </div>
+    <div class="stats-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:var(--space-6);">
+        <div class="stat-card"><div class="stat-header"><span class="stat-label">Articles Sage</span><div class="stat-icon accent"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#00C2A8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg></div></div><div class="stat-value">—</div><div class="stat-delta" style="color:var(--text-muted)">À implémenter</div></div>
+        <div class="stat-card"><div class="stat-header"><span class="stat-label">Products HubSpot</span><div class="stat-icon blue"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#3B82F6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg></div></div><div class="stat-value">—</div><div class="stat-delta" style="color:var(--text-muted)">À implémenter</div></div>
+        <div class="stat-card"><div class="stat-header"><span class="stat-label">Stock réel (Strbg)</span><div class="stat-icon orange"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#F97316" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></div></div><div class="stat-value">—</div><div class="stat-delta" style="color:var(--text-muted)">À implémenter</div></div>
+        <div class="stat-card"><div class="stat-header"><span class="stat-label">Erreurs</span><div class="stat-icon red"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#E8394D" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg></div></div><div class="stat-value">—</div><div class="stat-delta" style="color:var(--text-muted)">À implémenter</div></div>
+    </div>
+    <div class="card">
+        <div class="card-header"><span class="card-title">Sections mappées</span></div>
+        <div style="padding:0 4px;">
+            <table class="table">
+                <thead><tr><th>Section Sage</th><th>Champs mappés</th><th>Statut</th></tr></thead>
+                <tbody>
+                    <tr><td><strong>Article › Identification</strong></td><td>SKU, Désignation, Prix d'achat</td><td><span class="sync-status sync-status--pending">À implémenter</span></td></tr>
+                    <tr><td><strong>Article › Descriptif</strong></td><td>Type produit, Format, Famille, Licence, Code fiscal, Pays d'origine</td><td><span class="sync-status sync-status--pending">À implémenter</span></td></tr>
+                    <tr><td><strong>Article › Logistique</strong></td><td>Code barres EAN, Poids net/brut</td><td><span class="sync-status sync-status--pending">À implémenter</span></td></tr>
+                    <tr><td><strong>Article › Stock</strong></td><td>Stock réel Strasbourg, Stock disponible</td><td><span class="sync-status sync-status--pending">À implémenter</span></td></tr>
+                    <tr><td><strong>Article › Champs libres</strong></td><td>Dossier HS (Catalogue Produit)</td><td><span class="sync-status sync-status--pending">À implémenter</span></td></tr>
+                    <tr><td><strong>Article › Gestion de production</strong></td><td>Nature du produit</td><td><span class="sync-status sync-status--pending">À implémenter</span></td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+{% endblock %}

@@ -1,0 +1,41 @@
+{% extends 'base.html.twig' %}
+
+{% block body %}
+    {# ════════════════════════════════════════
+       LAYOUT PRINCIPAL EXTRANET LSTRADE
+       Utilisation : {% extends 'layout/app.html.twig' %}
+    ════════════════════════════════════════ #}
+
+    {# ── Sidebar ── #}
+    {% include 'partials/sidebar.html.twig' %}
+
+    {# ── Wrapper droite (topbar + contenu) ── #}
+    <div class="main-wrapper">
+
+        {# ── Topbar ── #}
+        {% include 'partials/topbar.html.twig' %}
+
+        {# ── Contenu de page ── #}
+        <main class="page-content">
+
+            {# En-tête de page (titre + actions) #}
+            {% block page_header %}
+                <div class="page-header">
+                    <div>
+                        <h1 class="page-title">{% block page_title %}{% endblock %}</h1>
+                        {% if block('page_subtitle') is defined %}
+                            <p class="page-subtitle">{% block page_subtitle %}{% endblock %}</p>
+                        {% endif %}
+                    </div>
+                    <div class="page-actions">
+                        {% block page_actions %}{% endblock %}
+                    </div>
+                </div>
+            {% endblock %}
+
+            {# Contenu principal #}
+            {% block content %}{% endblock %}
+
+        </main>
+    </div>
+{% endblock %}
