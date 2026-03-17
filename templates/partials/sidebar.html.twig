@@ -34,19 +34,19 @@
         <span class="nav-section-label">Flux HubSpot × Sage</span>
 
         {# Flux Contacts #}
-        <a href="{{ path('flux_contacts_index') }}"
-           class="nav-item {{ current_route starts with 'flux_contacts' ? 'active' : '' }}">
+        <a href="{{ path('flux_client_index') }}"
+           class="nav-item {{ current_route starts with 'flux_client' ? 'active' : '' }}">
             <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
                 <circle cx="9" cy="7" r="4"/>
                 <path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>
             </svg>
-            Contacts
+            Companies / Clients
             <span class="nav-flux-badge nav-flux-badge--hs-sage" title="HubSpot → Sage">HS⇒S</span>
         </a>
 
         {# Flux Clients / Sociétés #}
-        <a href="{{ path('flux_clients_index') }}"
+        {# <a href="{{ path('flux_client_index') }}"
            class="nav-item {{ current_route starts with 'flux_clients' ? 'active' : '' }}">
             <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <rect x="2" y="7" width="20" height="14" rx="2" ry="2"/>
@@ -54,7 +54,7 @@
             </svg>
             Clients / Sociétés
             <span class="nav-flux-badge nav-flux-badge--bidir" title="Bidirectionnel">⇄</span>
-        </a>
+        </a> #}
 
         {# Flux Produits / Articles #}
         <a href="{{ path('flux_produits_index') }}"

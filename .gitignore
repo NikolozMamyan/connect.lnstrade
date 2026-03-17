@@ -19,3 +19,4 @@
 /assets/vendor/
 ###< symfony/asset-mapper ###
 /src/Controller/Doc.php
+/src/Controller/Test/

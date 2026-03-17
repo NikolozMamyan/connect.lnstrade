@@ -1,0 +1,810 @@
+{% extends 'layout/app.html.twig' %}
+
+{% block page_title %}{% endblock %}
+{% block page_subtitle %}{% endblock %}
+
+{% block content %}
+<style>
+    /* ─── Notifications ─────────────────────────────── */
+    .sync-notification {
+        padding: var(--space-4) var(--space-6);
+        border-radius: var(--border-radius-md);
+        margin-bottom: var(--space-6);
+        display: flex;
+        align-items: center;
+        gap: var(--space-3);
+        font-size: var(--text-sm);
+        box-shadow: var(--shadow-sm);
+        animation: slideInDown 0.3s ease-out;
+    }
+
+    .sync-notification i {
+        font-size: var(--text-lg);
+        flex-shrink: 0;
+    }
+
+    .sync-notification--success {
+        background: var(--color-success-bg);
+        color: var(--color-success);
+        border-left: 4px solid var(--color-success);
+    }
+
+    .sync-notification--error {
+        background: var(--color-error-bg);
+        color: var(--color-error);
+        border-left: 4px solid var(--color-error);
+    }
+
+    /* ─── Page Header ───────────────────────────────── */
+    .sync-header {
+        margin-bottom: var(--space-8);
+    }
+
+    .sync-header__title {
+        font-size: var(--text-3xl);
+        font-weight: var(--font-bold);
+        color: var(--text-primary);
+        margin: 0 0 var(--space-3) 0;
+        display: flex;
+        align-items: center;
+        gap: var(--space-4);
+    }
+
+    .sync-header__title i {
+        color: var(--color-brand-accent);
+        font-size: var(--text-2xl);
+    }
+
+    .sync-header__actions {
+        margin-top: var(--space-6);
+    }
+
+    /* ─── Button ────────────────────────────────────── */
+    .btn-sync {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--space-2);
+        padding: var(--space-3) var(--space-6);
+        background: var(--color-brand-accent);
+        color: white;
+        border: none;
+        border-radius: var(--border-radius-md);
+        font-size: var(--text-base);
+        font-weight: var(--font-semibold);
+        cursor: pointer;
+        text-decoration: none;
+        transition: all var(--transition-base);
+        box-shadow: var(--shadow-sm);
+    }
+
+    .btn-sync:hover {
+        background: var(--color-brand-accent-hover);
+        box-shadow: var(--shadow-md);
+        transform: translateY(-1px);
+    }
+
+    .btn-sync i {
+        font-size: var(--text-lg);
+    }
+
+    /* ─── Search Bar ────────────────────────────────── */
+    .search-bar {
+        display: flex;
+        gap: var(--space-4);
+        margin-bottom: var(--space-6);
+        flex-wrap: wrap;
+    }
+
+    .search-input {
+        flex: 1;
+        min-width: 280px;
+        position: relative;
+    }
+
+    .search-input i {
+        position: absolute;
+        left: var(--space-4);
+        top: 50%;
+        transform: translateY(-50%);
+        color: var(--text-muted);
+        font-size: var(--text-base);
+    }
+
+    .search-input input {
+        width: 100%;
+        padding: var(--space-3) var(--space-4) var(--space-3) var(--space-10);
+        border: var(--border-width) solid var(--border-color);
+        border-radius: var(--border-radius-md);
+        font-size: var(--text-sm);
+        color: var(--text-primary);
+        background: var(--bg-surface);
+        transition: all var(--transition-fast);
+    }
+
+    .search-input input:focus {
+        outline: none;
+        border-color: var(--color-brand-accent);
+        box-shadow: 0 0 0 3px var(--color-brand-accent-light);
+    }
+
+    .search-input input::placeholder {
+        color: var(--text-muted);
+    }
+
+    .results-count {
+        display: flex;
+        align-items: center;
+        gap: var(--space-2);
+        padding: var(--space-3) var(--space-4);
+        background: var(--bg-base);
+        border-radius: var(--border-radius-md);
+        font-size: var(--text-sm);
+        color: var(--text-secondary);
+        white-space: nowrap;
+    }
+
+    .results-count__number {
+        font-weight: var(--font-semibold);
+        color: var(--color-brand-accent);
+    }
+
+    /* ─── Empty State ───────────────────────────────── */
+    .empty-state {
+        text-align: center;
+        padding: var(--space-12) var(--space-6);
+        background: var(--bg-surface);
+        border-radius: var(--border-radius-lg);
+        border: 2px dashed var(--border-color);
+    }
+
+    .empty-state__icon {
+        font-size: 64px;
+        color: var(--text-muted);
+        margin-bottom: var(--space-4);
+    }
+
+    .empty-state__text {
+        font-size: var(--text-lg);
+        color: var(--text-secondary);
+        margin: 0;
+    }
+
+    /* ─── Table Container ───────────────────────────── */
+    .table-container {
+        background: var(--bg-surface);
+        border-radius: var(--border-radius-lg);
+        border: var(--border-width) solid var(--border-color);
+        overflow: hidden;
+        box-shadow: var(--shadow-sm);
+    }
+
+    .table-wrapper {
+        overflow-x: auto;
+    }
+
+    /* ─── Table ─────────────────────────────────────── */
+    .companies-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: var(--text-sm);
+    }
+
+    .companies-table thead {
+        background: var(--bg-base);
+        border-bottom: var(--border-width) solid var(--border-color);
+    }
+
+    .companies-table th {
+        padding: var(--space-4) var(--space-4);
+        text-align: left;
+        font-weight: var(--font-semibold);
+        color: var(--text-secondary);
+        font-size: var(--text-xs);
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        white-space: nowrap;
+    }
+
+    .companies-table th:first-child {
+        padding-left: var(--space-6);
+    }
+
+    .companies-table th:last-child {
+        padding-right: var(--space-6);
+    }
+
+    .companies-table tbody tr {
+        border-bottom: var(--border-width) solid var(--border-color);
+        transition: background var(--transition-fast);
+    }
+
+    .companies-table tbody tr:last-child {
+        border-bottom: none;
+    }
+
+    .companies-table tbody tr:hover {
+        background: var(--bg-surface-hover);
+    }
+
+    .companies-table tbody tr.expandable {
+        cursor: pointer;
+    }
+
+    .companies-table td {
+        padding: var(--space-4) var(--space-4);
+        color: var(--text-primary);
+        vertical-align: middle;
+    }
+
+    .companies-table td:first-child {
+        padding-left: var(--space-6);
+    }
+
+    .companies-table td:last-child {
+        padding-right: var(--space-6);
+    }
+
+    /* ─── Company Name Cell ─────────────────────────── */
+    .company-name-cell {
+        display: flex;
+        align-items: center;
+        gap: var(--space-3);
+    }
+
+    .company-icon {
+        width: 40px;
+        height: 40px;
+        background: var(--color-brand-accent-light);
+        border-radius: var(--border-radius-md);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+    }
+
+    .company-icon i {
+        color: var(--color-brand-accent);
+        font-size: var(--text-base);
+    }
+
+    .company-name {
+        font-weight: var(--font-semibold);
+        color: var(--text-primary);
+        max-width: 250px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    /* ─── Contact Info Cell ─────────────────────────── */
+    .contact-info {
+        display: flex;
+        align-items: center;
+        gap: var(--space-2);
+    }
+
+    .contact-info i {
+        color: var(--text-muted);
+        font-size: var(--text-xs);
+    }
+
+    .contact-info__text {
+        max-width: 200px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .contact-info__text--empty {
+        color: var(--text-muted);
+        font-style: italic;
+    }
+
+    /* ─── Location Cell ─────────────────────────────── */
+    .location-cell {
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-1);
+    }
+
+    .location-city {
+        font-weight: var(--font-medium);
+    }
+
+    .location-country {
+        color: var(--text-muted);
+        font-size: var(--text-xs);
+    }
+
+    /* ─── Contacts Badge ────────────────────────────── */
+    .contacts-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--space-2);
+        padding: var(--space-1) var(--space-3);
+        background: var(--color-info-bg);
+        color: var(--color-info);
+        border-radius: var(--border-radius-full);
+        font-weight: var(--font-medium);
+        font-size: var(--text-xs);
+    }
+
+    .contacts-badge--empty {
+        background: var(--bg-base);
+        color: var(--text-muted);
+    }
+
+    /* ─── Expand Button ─────────────────────────────── */
+    .expand-btn {
+        background: none;
+        border: none;
+        padding: var(--space-2);
+        cursor: pointer;
+        color: var(--text-muted);
+        transition: all var(--transition-fast);
+        border-radius: var(--border-radius-sm);
+    }
+
+    .expand-btn:hover {
+        background: var(--bg-base);
+        color: var(--color-brand-accent);
+    }
+
+    .expand-btn i {
+        transition: transform var(--transition-fast);
+    }
+
+    .expand-btn.expanded i {
+        transform: rotate(180deg);
+    }
+
+    /* ─── Expanded Row ──────────────────────────────── */
+    .expanded-row {
+        display: none;
+        background: var(--bg-base);
+    }
+
+    .expanded-row.show {
+        display: table-row;
+    }
+
+    .expanded-content {
+        padding: var(--space-6);
+    }
+
+    .expanded-content__title {
+        font-size: var(--text-sm);
+        font-weight: var(--font-semibold);
+        color: var(--text-primary);
+        margin: 0 0 var(--space-4) 0;
+        display: flex;
+        align-items: center;
+        gap: var(--space-2);
+    }
+
+    .expanded-content__title i {
+        color: var(--color-brand-accent);
+    }
+
+    .contacts-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+        gap: var(--space-3);
+    }
+
+    .contact-card {
+        display: flex;
+        align-items: center;
+        gap: var(--space-3);
+        padding: var(--space-3);
+        background: var(--bg-surface);
+        border-radius: var(--border-radius-md);
+        border: var(--border-width) solid var(--border-color);
+        transition: all var(--transition-fast);
+    }
+
+    .contact-card:hover {
+        border-color: var(--color-brand-accent);
+        box-shadow: var(--shadow-sm);
+    }
+
+    .contact-avatar {
+        width: 36px;
+        height: 36px;
+        background: var(--color-brand-accent);
+        border-radius: var(--border-radius-full);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: var(--font-semibold);
+        color: white;
+        font-size: var(--text-xs);
+        flex-shrink: 0;
+    }
+
+    .contact-info-details {
+        flex: 1;
+        min-width: 0;
+    }
+
+    .contact-name {
+        font-weight: var(--font-medium);
+        color: var(--text-primary);
+        font-size: var(--text-sm);
+        margin: 0 0 2px 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .contact-email {
+        color: var(--text-muted);
+        font-size: var(--text-xs);
+        margin: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .contact-type {
+        background: var(--color-info-bg);
+        color: var(--color-info);
+        padding: var(--space-1) var(--space-2);
+        border-radius: var(--border-radius-sm);
+        font-size: 10px;
+        font-weight: var(--font-medium);
+        white-space: nowrap;
+    }
+
+    .no-contacts {
+        padding: var(--space-4);
+        text-align: center;
+        color: var(--text-muted);
+        font-size: var(--text-sm);
+        font-style: italic;
+    }
+
+    /* ─── Animations ────────────────────────────────── */
+    @keyframes slideInDown {
+        from {
+            opacity: 0;
+            transform: translateY(-10px);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+
+    /* ─── Responsive ────────────────────────────────── */
+    @media (max-width: 1024px) {
+        .companies-table th:nth-child(3),
+        .companies-table td:nth-child(3),
+        .companies-table th:nth-child(4),
+        .companies-table td:nth-child(4) {
+            display: none;
+        }
+
+        .contacts-grid {
+            grid-template-columns: 1fr;
+        }
+    }
+
+    @media (max-width: 768px) {
+        .search-bar {
+            flex-direction: column;
+        }
+
+        .search-input {
+            min-width: 100%;
+        }
+
+        .results-count {
+            width: 100%;
+            justify-content: center;
+        }
+
+        .sync-header__title {
+            font-size: var(--text-2xl);
+            flex-direction: column;
+            align-items: flex-start;
+        }
+
+        .table-container {
+            border-radius: var(--border-radius-md);
+        }
+
+        .companies-table {
+            font-size: var(--text-xs);
+        }
+
+        .companies-table th,
+        .companies-table td {
+            padding: var(--space-2) var(--space-2);
+        }
+
+        .companies-table th:first-child,
+        .companies-table td:first-child {
+            padding-left: var(--space-3);
+        }
+
+        .companies-table th:last-child,
+        .companies-table td:last-child {
+            padding-right: var(--space-3);
+        }
+
+        /* Masquer plus de colonnes sur mobile */
+        .companies-table th:nth-child(2),
+        .companies-table td:nth-child(2),
+        .companies-table th:nth-child(5),
+        .companies-table td:nth-child(5) {
+            display: none;
+        }
+
+        .company-icon {
+            width: 32px;
+            height: 32px;
+        }
+
+        .company-name {
+            font-size: var(--text-sm);
+            max-width: 150px;
+        }
+
+        .expanded-content {
+            padding: var(--space-4);
+        }
+
+        .contact-card {
+            flex-direction: column;
+            align-items: flex-start;
+        }
+
+        .contact-type {
+            align-self: flex-end;
+        }
+    }
+
+</style>
+
+<!-- Notifications -->
+{% for message in app.flashes('success') %}
+    <div class="sync-notification sync-notification--success">
+        <i class="fas fa-check-circle"></i>
+        <div>{{ message }}</div>
+    </div>
+{% endfor %}
+
+{% for message in app.flashes('error') %}
+    <div class="sync-notification sync-notification--error">
+        <i class="fas fa-exclamation-circle"></i>
+        <div>{{ message }}</div>
+    </div>
+{% endfor %}
+
+<!-- Page Header -->
+<div class="sync-header">
+    <h1 class="sync-header__title">
+        <i class="fab fa-hubspot"></i>
+        Synchronisation HubSpot
+    </h1>
+    
+    <div class="sync-header__actions">
+    <form method="post" action="{{ path('flux_client_sync') }}">
+    <button type="submit" class="btn-sync">Lancer la synchronisation</button>
+</form>
+
+    </div>
+</div>
+
+<!-- Search Bar -->
+{% if companies is not empty %}
+<div class="search-bar">
+    <div class="search-input">
+        <i class="fas fa-search"></i>
+        <input type="text" id="searchTable" placeholder="Rechercher une company, email, ville...">
+    </div>
+    <div class="results-count">
+        <i class="fas fa-building"></i>
+        <span id="resultCount" class="results-count__number">{{ companies|length }}</span>
+        <span>companies</span>
+    </div>
+</div>
+{% endif %}
+
+<!-- Companies Table -->
+{% if companies is empty %}
+    <div class="empty-state">
+        <div class="empty-state__icon">
+            <i class="fas fa-building"></i>
+        </div>
+        <p class="empty-state__text">Aucune company synchronisée</p>
+    </div>
+{% else %}
+    <div class="table-container">
+        <div class="table-wrapper">
+            <table class="companies-table">
+                <thead>
+                    <tr>
+                        <th>Entreprise</th>
+                        <th>Email</th>
+                        <th>Téléphone</th>
+                        <th>Website</th>
+                        <th>Localisation</th>
+                        <th>Contacts</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody id="companiesTableBody">
+                    {% for company in companies %}
+                        <tr class="expandable" data-company-id="{{ loop.index }}">
+                            <td>
+                                <div class="company-name-cell">
+                                    <div class="company-icon">
+                                        <i class="fas fa-building"></i>
+                                    </div>
+                                    <span class="company-name" title="{{ company.name }}">{{ company.name }}</span>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="contact-info">
+                                    {% if company.email %}
+                                        <i class="fas fa-envelope"></i>
+                                        <span class="contact-info__text" title="{{ company.email }}">{{ company.email }}</span>
+                                    {% else %}
+                                        <span class="contact-info__text contact-info__text--empty">Non renseigné</span>
+                                    {% endif %}
+                                </div>
+                            </td>
+                            <td>
+                                <div class="contact-info">
+                                    {% if company.phone %}
+                                        <i class="fas fa-phone"></i>
+                                        <span class="contact-info__text">{{ company.phone }}</span>
+                                    {% else %}
+                                        <span class="contact-info__text contact-info__text--empty">Non renseigné</span>
+                                    {% endif %}
+                                </div>
+                            </td>
+                            <td>
+                                <div class="contact-info">
+                                    {% if company.website %}
+                                        <i class="fas fa-globe"></i>
+                                        <span class="contact-info__text" title="{{ company.website }}">{{ company.website }}</span>
+                                    {% else %}
+                                        <span class="contact-info__text contact-info__text--empty">Non renseigné</span>
+                                    {% endif %}
+                                </div>
+                            </td>
+                            <td>
+                                <div class="location-cell">
+                                    {% if company.city or company.country %}
+                                        {% if company.city %}
+                                            <span class="location-city">{{ company.city }}</span>
+                                        {% endif %}
+                                        {% if company.country %}
+                                            <span class="location-country">{{ company.country }}</span>
+                                        {% endif %}
+                                    {% else %}
+                                        <span class="contact-info__text contact-info__text--empty">Non renseignée</span>
+                                    {% endif %}
+                                </div>
+                            </td>
+                            <td>
+                                {% if company.companyContacts|length > 0 %}
+                                    <span class="contacts-badge">
+                                        <i class="fas fa-users"></i>
+                                        {{ company.companyContacts|length }}
+                                    </span>
+                                {% else %}
+                                    <span class="contacts-badge contacts-badge--empty">
+                                        <i class="fas fa-user-slash"></i>
+                                        0
+                                    </span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <button class="expand-btn" data-company-id="{{ loop.index }}">
+                                    <i class="fas fa-chevron-down"></i>
+                                </button>
+                            </td>
+                        </tr>
+                        <!-- Expanded Row -->
+                        <tr class="expanded-row" id="expanded-{{ loop.index }}">
+                            <td colspan="7">
+                                <div class="expanded-content">
+                                    <h3 class="expanded-content__title">
+                                        <i class="fas fa-users"></i>
+                                        Contacts associés
+                                    </h3>
+                                    
+                                    {% if company.companyContacts is empty %}
+                                        <div class="no-contacts">
+                                            <i class="fas fa-info-circle"></i> Aucun contact associé à cette entreprise
+                                        </div>
+                                    {% else %}
+                                        <div class="contacts-grid">
+                                            {% for relation in company.companyContacts %}
+                                                <div class="contact-card">
+                                                    <div class="contact-avatar">
+                                                        {{ relation.contact.firstname|first|upper }}{{ relation.contact.lastname|first|upper }}
+                                                    </div>
+                                                    <div class="contact-info-details">
+                                                        <p class="contact-name">
+                                                            {{ relation.contact.firstname }} {{ relation.contact.lastname }}
+                                                        </p>
+                                                        {% if relation.contact.email %}
+                                                            <p class="contact-email" title="{{ relation.contact.email }}">
+                                                                {{ relation.contact.email }}
+                                                            </p>
+                                                        {% endif %}
+                                                    </div>
+                                                    {# <span class="contact-type">
+                                                        {{ relation.associationType }}
+                                                    </span> #}
+                                                </div>
+                                            {% endfor %}
+                                        </div>
+                                    {% endif %}
+                                </div>
+                            </td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        // Fonction de recherche dans le tableau
+        document.getElementById('searchTable')?.addEventListener('input', function(e) {
+            const searchTerm = e.target.value.toLowerCase();
+            const rows = document.querySelectorAll('#companiesTableBody tr:not(.expanded-row)');
+            let visibleCount = 0;
+            
+            rows.forEach(row => {
+                const text = row.textContent.toLowerCase();
+                const isVisible = text.includes(searchTerm);
+                row.style.display = isVisible ? '' : 'none';
+                
+                // Masquer aussi la ligne expandable associée
+                const companyId = row.dataset.companyId;
+                const expandedRow = document.getElementById(`expanded-${companyId}`);
+                if (expandedRow && !isVisible) {
+                    expandedRow.classList.remove('show');
+                    const btn = row.querySelector('.expand-btn');
+                    if (btn) btn.classList.remove('expanded');
+                }
+                
+                if (isVisible) visibleCount++;
+            });
+            
+            document.getElementById('resultCount').textContent = visibleCount;
+        });
+
+        // Fonction d'expansion des lignes
+        document.querySelectorAll('.expand-btn').forEach(btn => {
+            btn.addEventListener('click', function(e) {
+                e.stopPropagation();
+                const companyId = this.dataset.companyId;
+                const expandedRow = document.getElementById(`expanded-${companyId}`);
+                
+                if (expandedRow) {
+                    expandedRow.classList.toggle('show');
+                    this.classList.toggle('expanded');
+                }
+            });
+        });
+
+        // Clic sur toute la ligne pour expand
+        document.querySelectorAll('.expandable').forEach(row => {
+            row.addEventListener('click', function() {
+                const companyId = this.dataset.companyId;
+                const btn = this.querySelector('.expand-btn');
+                if (btn) btn.click();
+            });
+        });
+    </script>
+{% endif %}
+
+{% endblock %}
