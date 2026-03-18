@@ -2,7 +2,6 @@
 
 namespace App\Controller;
 
-use App\Service\Connector\ConnectorFluxManager;
 use App\Service\HubSpot\HubSpotClient;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\Response;
@@ -17,7 +16,7 @@ final class DashboardController extends AbstractController
     }
 
     #[Route('/dashboard', name: 'app_dashboard')]
-    public function index(ConnectorFluxManager $connectorFluxManager): Response
+    public function index(): Response
     {
 
         return $this->render('dashboard/index.html.twig', [

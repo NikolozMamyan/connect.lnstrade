@@ -5,7 +5,7 @@
 
 {% block content %}
 <style>
-    /* ─── Notifications ─────────────────────────────── */
+    /* ─── Notifications (utilise les classes de variables.css) ─────────────────────────────── */
     .sync-notification {
         padding: var(--space-4) var(--space-6);
         border-radius: var(--border-radius-md);
@@ -35,7 +35,7 @@
         border-left: 4px solid var(--color-error);
     }
 
-    /* ─── Page Header ───────────────────────────────── */
+    /* ─── Page Header (simplifié) ───────────────────────────────── */
     .sync-header {
         margin-bottom: var(--space-8);
     }
@@ -59,35 +59,7 @@
         margin-top: var(--space-6);
     }
 
-    /* ─── Button ────────────────────────────────────── */
-    .btn-sync {
-        display: inline-flex;
-        align-items: center;
-        gap: var(--space-2);
-        padding: var(--space-3) var(--space-6);
-        background: var(--color-brand-accent);
-        color: white;
-        border: none;
-        border-radius: var(--border-radius-md);
-        font-size: var(--text-base);
-        font-weight: var(--font-semibold);
-        cursor: pointer;
-        text-decoration: none;
-        transition: all var(--transition-base);
-        box-shadow: var(--shadow-sm);
-    }
-
-    .btn-sync:hover {
-        background: var(--color-brand-accent-hover);
-        box-shadow: var(--shadow-md);
-        transform: translateY(-1px);
-    }
-
-    .btn-sync i {
-        font-size: var(--text-lg);
-    }
-
-    /* ─── Search Bar ────────────────────────────────── */
+    /* ─── Search Bar (réutilise les styles existants) ────────────────────────────────── */
     .search-bar {
         display: flex;
         gap: var(--space-4);
@@ -148,8 +120,8 @@
         color: var(--color-brand-accent);
     }
 
-    /* ─── Empty State ───────────────────────────────── */
-    .empty-state {
+    /* ─── Empty State (réutilise utilities.css) ───────────────────────────────── */
+    .sync-empty-state {
         text-align: center;
         padding: var(--space-12) var(--space-6);
         background: var(--bg-surface);
@@ -157,19 +129,19 @@
         border: 2px dashed var(--border-color);
     }
 
-    .empty-state__icon {
+    .sync-empty-state__icon {
         font-size: 64px;
         color: var(--text-muted);
         margin-bottom: var(--space-4);
     }
 
-    .empty-state__text {
+    .sync-empty-state__text {
         font-size: var(--text-lg);
         color: var(--text-secondary);
         margin: 0;
     }
 
-    /* ─── Table Container ───────────────────────────── */
+    /* ─── Table Container (réutilise components.css + variables) ───────────────────────────────── */
     .table-container {
         background: var(--bg-surface);
         border-radius: var(--border-radius-lg);
@@ -182,7 +154,7 @@
         overflow-x: auto;
     }
 
-    /* ─── Table ─────────────────────────────────────── */
+    /* ─── Companies Table (adapté de table dans components.css) ─────────────────────────────────── */
     .companies-table {
         width: 100%;
         border-collapse: collapse;
@@ -316,7 +288,7 @@
         font-size: var(--text-xs);
     }
 
-    /* ─── Contacts Badge ────────────────────────────── */
+    /* ─── Contacts Badge (adapté de tag dans components.css) ────────────────────────────── */
     .contacts-badge {
         display: inline-flex;
         align-items: center;
@@ -334,7 +306,7 @@
         color: var(--text-muted);
     }
 
-    /* ─── Expand Button ─────────────────────────────── */
+    /* ─── Expand Button (adapté de btn-ghost) ─────────────────────────────── */
     .expand-btn {
         background: none;
         border: none;
@@ -392,6 +364,7 @@
         gap: var(--space-3);
     }
 
+    /* ─── Contact Card (adapté de card dans components.css) ──────────────────────────────── */
     .contact-card {
         display: flex;
         align-items: center;
@@ -590,10 +563,17 @@
     </h1>
     
     <div class="sync-header__actions">
-    <form method="post" action="{{ path('flux_client_sync') }}">
-    <button type="submit" class="btn-sync">Lancer la synchronisation</button>
-</form>
+<form method="post" action="{{ path('flux_client_sync') }}">
+    <input type="hidden" name="_token" value="{{ csrf_token('flux_client_sync') }}">
 
+    {{ include('ui/button.html.twig', {
+        label: 'Lancer la synchronisation',
+        variant: 'primary',
+        type: 'submit',
+        icon: '<i class="fas fa-sync-alt"></i>'
+    }) }}
+</form>
+        </form>
     </div>
 </div>
 
@@ -614,11 +594,11 @@
 
 <!-- Companies Table -->
 {% if companies is empty %}
-    <div class="empty-state">
-        <div class="empty-state__icon">
+    <div class="sync-empty-state">
+        <div class="sync-empty-state__icon">
             <i class="fas fa-building"></i>
         </div>
-        <p class="empty-state__text">Aucune company synchronisée</p>
+        <p class="sync-empty-state__text">Aucune company synchronisée</p>
     </div>
 {% else %}
     <div class="table-container">
