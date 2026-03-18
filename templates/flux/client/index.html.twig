@@ -563,16 +563,13 @@
     </h1>
     
     <div class="sync-header__actions">
-<form method="post" action="{{ path('flux_client_sync') }}">
-    <input type="hidden" name="_token" value="{{ csrf_token('flux_client_sync') }}">
-
-    {{ include('ui/button.html.twig', {
-        label: 'Lancer la synchronisation',
-        variant: 'primary',
-        type: 'submit',
-        icon: '<i class="fas fa-sync-alt"></i>'
-    }) }}
-</form>
+        <form method="post" action="{{ path('flux_client_sync') }}">
+            {{ include('ui/button.html.twig', {
+                label: 'Lancer la synchronisation',
+                variant: 'primary',
+                type: 'submit',
+                icon: '<i class="fas fa-sync-alt"></i>'
+            }) }}
         </form>
     </div>
 </div>
