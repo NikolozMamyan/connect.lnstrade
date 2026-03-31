@@ -84,7 +84,7 @@ class ErpCompanyExportService
 
     private function buildErpPayload(HubspotCompany $company): ?array
     {
-        $reference = $company->getIdErp();
+        $reference = $this->resolveReference($company);
 
         if ($reference === null || $reference === '') {
             return null;
@@ -244,4 +244,24 @@ class ErpCompanyExportService
 
         return $data;
     }
+
+    private function resolveReference(HubspotCompany $company): ?string
+{
+    $reference = $company->getIdErp();
+
+    if (!empty($reference)) {
+        return $reference;
+    }
+
+    $name = $company->getName();
+
+    if (empty($name)) {
+        return null;
+    }
+
+    // Nettoyage + récupération des 4 premières lettres
+    $prefix = strtoupper(substr(preg_replace('/[^a-zA-Z]/', '', $name), 0, 4));
+
+    return '9' . str_pad($prefix, 4, 'X'); // fallback si < 4 lettres
+}
 }

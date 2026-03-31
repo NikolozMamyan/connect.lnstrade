@@ -53,8 +53,35 @@ class HubspotCompanySyncService
         $savedContacts = 0;
         $savedRelations = 0;
 
-        $processedContactIds = [];
         $after = null;
+
+        /**
+         * Cache mémoire global à l'exécution.
+         * Permet d'éviter de recréer / refetch les mêmes entités plusieurs fois
+         * avant flush, et même sur plusieurs pages tant que le process tourne.
+         *
+         * @var array<string, HubspotContact>
+         */
+        $managedContacts = [];
+
+        /**
+         * @var array<string, bool>
+         */
+        $hydratedContactIds = [];
+
+        /**
+         * @var array<string, bool>
+         */
+        $managedCompanies = [];
+
+        /**
+         * Empêche de recréer la même relation plusieurs fois dans la même synchro.
+         *
+         * clé = companyId|contactId|associationType
+         *
+         * @var array<string, bool>
+         */
+        $managedRelations = [];
 
         do {
             $query = [
@@ -83,22 +110,9 @@ class HubspotCompanySyncService
                     continue;
                 }
 
-                $company = $this->hubspotCompanyRepository->findOneByHubspotId($companyId);
-                $isNewCompany = false;
-
-                if (!$company instanceof HubspotCompany) {
-                    $company = new HubspotCompany();
-                    $company->setHubspotId($companyId);
-                    $company->setIdErp($companyProperties['id_erp']);
-                    $isNewCompany = true;
-                }
-
+                $company = $this->getOrCreateCompany($companyId, $companyProperties, $managedCompanies, $savedCompanies);
                 $this->hydrateCompany($company, $companyData);
                 $this->entityManager->persist($company);
-
-                if ($isNewCompany) {
-                    ++$savedCompanies;
-                }
 
                 $associatedContacts = $this->extractAssociatedContacts($companyData);
 
@@ -106,23 +120,13 @@ class HubspotCompanySyncService
                     $contactId = $associationRow['id'];
                     $associationType = $associationRow['type'];
 
-                    if ($contactId === '') {
+                    if ($contactId === '' || $associationType === '') {
                         continue;
                     }
 
-                    $contact = $this->hubspotContactRepository->findOneByHubspotId($contactId);
-                    $isNewContact = false;
-                    $mustFetchContact = true;
+                    $contact = $this->getOrCreateContact($contactId, $managedContacts, $savedContacts);
 
-                    if (!$contact instanceof HubspotContact) {
-                        $contact = new HubspotContact();
-                        $contact->setHubspotId($contactId);
-                        $isNewContact = true;
-                    } elseif (isset($processedContactIds[$contactId])) {
-                        $mustFetchContact = false;
-                    }
-
-                    if ($mustFetchContact) {
+                    if (!isset($hydratedContactIds[$contactId])) {
                         $contactData = $this->hubSpotClient->getObject('contacts', $contactId, [
                             'properties' => self::CONTACT_PROPERTIES,
                         ]);
@@ -130,35 +134,31 @@ class HubspotCompanySyncService
                         $this->hydrateContact($contact, $contactData);
                         $this->entityManager->persist($contact);
 
-                        $processedContactIds[$contactId] = true;
-
-                        if ($isNewContact) {
-                            ++$savedContacts;
-                        }
+                        $hydratedContactIds[$contactId] = true;
                     }
 
-                    $relation = $this->hubspotCompanyContactRepository->findOneRelationByHubspotIds(
-                        $company->getHubspotId(),
-                        $contact->getHubspotId(),
-                        $associationType
+                    $this->createRelationIfNeeded(
+                        $company,
+                        $contact,
+                        $associationType,
+                        $associationRow,
+                        $managedRelations,
+                        $savedRelations
                     );
-
-                    if (!$relation instanceof HubspotCompanyContact) {
-                        $relation = new HubspotCompanyContact();
-                        $relation
-                            ->setCompany($company)
-                            ->setContact($contact)
-                            ->setAssociationType($associationType)
-                            ->setRawPayload($associationRow);
-
-                        $this->entityManager->persist($relation);
-                        ++$savedRelations;
-                    }
                 }
             }
 
             $this->entityManager->flush();
             $this->entityManager->clear();
+
+            /**
+             * Après clear(), les objets Doctrine sont détachés.
+             * On vide donc les caches d'objets gérés, mais on garde les IDs déjà hydratés
+             * pour éviter de refetch inutilement dans le même run si besoin métier.
+             */
+            $managedCompanies = [];
+            $managedContacts = [];
+            $managedRelations = [];
 
             $after = $companiesResponse['paging']['next']['after'] ?? null;
         } while ($after !== null);
@@ -168,6 +168,107 @@ class HubspotCompanySyncService
             'savedContacts' => $savedContacts,
             'savedRelations' => $savedRelations,
         ];
+    }
+
+    /**
+     * @param array<string, mixed> $companyProperties
+     * @param array<string, HubspotCompany> $managedCompanies
+     */
+    private function getOrCreateCompany(
+        string $companyId,
+        array $companyProperties,
+        array &$managedCompanies,
+        int &$savedCompanies,
+    ): HubspotCompany {
+        if (isset($managedCompanies[$companyId])) {
+            return $managedCompanies[$companyId];
+        }
+
+        $company = $this->hubspotCompanyRepository->findOneByHubspotId($companyId);
+
+        if (!$company instanceof HubspotCompany) {
+            $company = new HubspotCompany();
+            $company->setHubspotId($companyId);
+            $company->setIdErp($this->nullableString($companyProperties['id_erp'] ?? null));
+            $this->entityManager->persist($company);
+            ++$savedCompanies;
+        }
+
+        $managedCompanies[$companyId] = $company;
+
+        return $company;
+    }
+
+    /**
+     * @param array<string, HubspotContact> $managedContacts
+     */
+    private function getOrCreateContact(
+        string $contactId,
+        array &$managedContacts,
+        int &$savedContacts,
+    ): HubspotContact {
+        if (isset($managedContacts[$contactId])) {
+            return $managedContacts[$contactId];
+        }
+
+        $contact = $this->hubspotContactRepository->findOneByHubspotId($contactId);
+
+        if (!$contact instanceof HubspotContact) {
+            $contact = new HubspotContact();
+            $contact->setHubspotId($contactId);
+            $this->entityManager->persist($contact);
+            ++$savedContacts;
+        }
+
+        $managedContacts[$contactId] = $contact;
+
+        return $contact;
+    }
+
+    /**
+     * @param array{id: string, type: string} $associationRow
+     * @param array<string, bool> $managedRelations
+     */
+    private function createRelationIfNeeded(
+        HubspotCompany $company,
+        HubspotContact $contact,
+        string $associationType,
+        array $associationRow,
+        array &$managedRelations,
+        int &$savedRelations,
+    ): void {
+        $companyId = (string) $company->getHubspotId();
+        $contactId = (string) $contact->getHubspotId();
+
+        if ($companyId === '' || $contactId === '') {
+            return;
+        }
+
+        $relationKey = $companyId . '|' . $contactId . '|' . $associationType;
+
+        if (isset($managedRelations[$relationKey])) {
+            return;
+        }
+
+        $relation = $this->hubspotCompanyContactRepository->findOneRelationByHubspotIds(
+            $companyId,
+            $contactId,
+            $associationType
+        );
+
+        if (!$relation instanceof HubspotCompanyContact) {
+            $relation = new HubspotCompanyContact();
+            $relation
+                ->setCompany($company)
+                ->setContact($contact)
+                ->setAssociationType($associationType)
+                ->setRawPayload($associationRow);
+
+            $this->entityManager->persist($relation);
+            ++$savedRelations;
+        }
+
+        $managedRelations[$relationKey] = true;
     }
 
     private function hydrateCompany(HubspotCompany $company, array $companyData): void
@@ -187,6 +288,7 @@ class HubspotCompanySyncService
             ->setCity($this->nullableString($properties['city'] ?? null))
             ->setCountry($this->nullableString($properties['country'] ?? null))
             ->setSageIntegration($this->nullableString($properties['sage_integration'] ?? null))
+            ->setIdErp($this->nullableString($properties['id_erp'] ?? $company->getIdErp()))
             ->setArchived((bool) ($companyData['archived'] ?? false))
             ->setHubspotUrl($this->nullableString($companyData['url'] ?? null))
             ->setRawProperties($properties)

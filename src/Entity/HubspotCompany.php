@@ -52,7 +52,7 @@ class HubspotCompany
     #[ORM\Column(length: 150, nullable: true)]
     private ?string $country = null;
 
-    #[ORM\Column(name: 'id_erp', length: 32)]
+    #[ORM\Column(name: 'id_erp', length: 32, nullable: true)]
     private ?string $idErp = null;
 
     #[ORM\Column(name: 'sage_integration', length: 255, nullable: true)]
