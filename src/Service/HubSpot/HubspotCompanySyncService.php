@@ -24,6 +24,7 @@ class HubspotCompanySyncService
         'country',
         'sage_integration',
         'hs_object_id',
+        'id_erp',
     ];
 
     private const CONTACT_PROPERTIES = [
@@ -88,6 +89,7 @@ class HubspotCompanySyncService
                 if (!$company instanceof HubspotCompany) {
                     $company = new HubspotCompany();
                     $company->setHubspotId($companyId);
+                    $company->setIdErp($companyProperties['id_erp']);
                     $isNewCompany = true;
                 }
 

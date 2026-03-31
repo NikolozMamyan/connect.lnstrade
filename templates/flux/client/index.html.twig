@@ -563,7 +563,7 @@
     </h1>
     
     <div class="sync-header__actions">
-        <form method="post" action="{{ path('flux_client_sync') }}">
+       <form method="post" action="{{ path('flux_client_sync') }}" onsubmit="this.querySelector('button[type=submit]').disabled = true;">
             {{ include('ui/button.html.twig', {
                 label: 'Lancer la synchronisation',
                 variant: 'primary',

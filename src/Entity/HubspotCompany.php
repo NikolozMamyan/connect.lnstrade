@@ -52,6 +52,9 @@ class HubspotCompany
     #[ORM\Column(length: 150, nullable: true)]
     private ?string $country = null;
 
+    #[ORM\Column(name: 'id_erp', length: 32)]
+    private ?string $idErp = null;
+
     #[ORM\Column(name: 'sage_integration', length: 255, nullable: true)]
     private ?string $sageIntegration = null;
 
@@ -375,4 +378,15 @@ class HubspotCompany
 
         return $this;
     }
+    public function getIdErp(): ?string
+{
+    return $this->idErp;
+}
+
+public function setIdErp(?string $idErp): static
+{
+    $this->idErp = $idErp;
+
+    return $this;
+}
 }

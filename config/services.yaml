@@ -1,6 +1,11 @@
 parameters:
     base_uri_hubspot: 'https://api.hubapi.com'
     hubspot_access: '%env(HUBSPOT_ACCESS_TOKEN)%'
+    base_uri_sage: '%env(SAGE_BASE_URI)%'
+    sage_username: '%env(SAGE_USERNAME)%'
+    sage_password: '%env(SAGE_PASSWORD)%'
+    # sage_client_id: '%env(default::SAGE_CLIENT_ID)%'
+    # sage_client_secret: '%env(default::SAGE_CLIENT_SECRET)%'    
 
 services:
     _defaults:
