@@ -554,12 +554,12 @@
         <div>{{ message }}</div>
     </div>
 {% endfor %}
-
+ {% include 'partials/flux_tabs.html.twig' with { flux: 'client' } %}
 <!-- Page Header -->
 <div class="sync-header">
     <h1 class="sync-header__title">
-        <i class="fab fa-hubspot"></i>
-        Synchronisation HubSpot
+
+        Flux Client - Logs
     </h1>
     
     <div class="sync-header__actions">
@@ -588,7 +588,7 @@
     </div>
 </div>
 {% endif %}
-  {% include 'partials/flux_tabs.html.twig' with { flux: 'client' } %}
+ 
 <!-- Companies Table -->
 {% if companies is empty %}
     <div class="sync-empty-state">
