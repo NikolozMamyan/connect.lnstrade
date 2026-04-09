@@ -79,7 +79,7 @@ class ErpCompanyExportService
 
     private function buildErpPayload(HubspotCompany $company): ?array
     {
-        $reference = $this->resolveReference($company);
+        $reference = $this->ensureCompanyReference($company);
 
         if ($reference === null || $reference === '') {
             return null;
@@ -111,6 +111,25 @@ class ErpCompanyExportService
         ];
 
         return $this->removeNulls($payload);
+    }
+
+    private function ensureCompanyReference(HubspotCompany $company): ?string
+    {
+        $reference = $this->resolveReference($company);
+
+        if ($reference === null || $reference === '') {
+            return null;
+        }
+
+        if ($company->getIdErp() !== $reference) {
+            $company
+                ->setIdErp($reference)
+                ->setUpdatedAt(new \DateTimeImmutable());
+
+            $this->hubspotCompanyRepository->save($company, true);
+        }
+
+        return $reference;
     }
 
     private function exportCompany(HubspotCompany $company): array

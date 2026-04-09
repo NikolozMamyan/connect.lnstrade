@@ -31,4 +31,83 @@ class SyncLogRepository extends ServiceEntityRepository
             ->getQuery()
             ->getResult();
     }
+
+    /**
+     * @return SyncLog[]
+     */
+    public function findLatest(int $limit = 20): array
+    {
+        return $this->createQueryBuilder('l')
+            ->orderBy('l.createdAt', 'DESC')
+            ->setMaxResults($limit)
+            ->getQuery()
+            ->getResult();
+    }
+
+    public function countSince(\DateTimeImmutable $since): int
+    {
+        return (int) $this->createQueryBuilder('l')
+            ->select('COUNT(l.id)')
+            ->andWhere('l.createdAt >= :since')
+            ->setParameter('since', $since)
+            ->getQuery()
+            ->getSingleScalarResult();
+    }
+
+    /**
+     * @return array<string, int>
+     */
+    public function countByLevelSince(\DateTimeImmutable $since): array
+    {
+        $rows = $this->createQueryBuilder('l')
+            ->select('l.level AS level, COUNT(l.id) AS total')
+            ->andWhere('l.createdAt >= :since')
+            ->setParameter('since', $since)
+            ->groupBy('l.level')
+            ->getQuery()
+            ->getArrayResult();
+
+        $counts = [];
+
+        foreach ($rows as $row) {
+            $level = (string) ($row['level'] ?? '');
+
+            if ($level === '') {
+                continue;
+            }
+
+            $counts[$level] = (int) ($row['total'] ?? 0);
+        }
+
+        return $counts;
+    }
+
+    /**
+     * @return array<string, int>
+     */
+    public function countByFluxSince(\DateTimeImmutable $since): array
+    {
+        $rows = $this->createQueryBuilder('l')
+            ->select('l.fluxKey AS fluxKey, COUNT(l.id) AS total')
+            ->andWhere('l.createdAt >= :since')
+            ->setParameter('since', $since)
+            ->groupBy('l.fluxKey')
+            ->orderBy('total', 'DESC')
+            ->getQuery()
+            ->getArrayResult();
+
+        $counts = [];
+
+        foreach ($rows as $row) {
+            $fluxKey = (string) ($row['fluxKey'] ?? '');
+
+            if ($fluxKey === '') {
+                continue;
+            }
+
+            $counts[$fluxKey] = (int) ($row['total'] ?? 0);
+        }
+
+        return $counts;
+    }
 }

@@ -1,3 +1,301 @@
 {% extends 'layout/app.html.twig' %}
-{% block page_title %}Mes clients{% endblock %}
-{% block content %}...{% endblock %}
+
+{% block page_title %}Tableau de bord{% endblock %}
+{% block page_subtitle %}Vue d'ensemble des flux HubSpot x Sage, de l'activite recente et des points de vigilance.{% endblock %}
+
+{% block page_actions %}
+    <a href="{{ path('flux_client_logs') }}" class="btn btn-secondary btn-md">
+        <i class="fas fa-stream"></i>
+        Voir les logs clients
+    </a>
+    <a href="{{ path('flux_produits_logs') }}" class="btn btn-primary btn-md">
+        <i class="fas fa-boxes-stacked"></i>
+        Voir les logs produits
+    </a>
+{% endblock %}
+
+{% block content %}
+    <section class="dashboard-hero">
+        <div class="dashboard-hero__content">
+            <span class="dashboard-hero__eyebrow">Centre de supervision</span>
+            <h2 class="dashboard-hero__title">Pilotage temps reel des synchronisations HubSpot, Sage et webhook.</h2>
+            <p class="dashboard-hero__text">
+                Sur les 24 dernieres heures, {{ stats.logs24h }} evenements ont ete enregistres,
+                dont {{ stats.success24h }} succes, {{ stats.warning24h }} alertes et {{ stats.error24h }} erreurs.
+            </p>
+        </div>
+
+        <div class="dashboard-hero__signal">
+            {% set health_state = stats.error24h > 0 ? 'alert' : (stats.warning24h > 0 ? 'watch' : 'good') %}
+            <div class="dashboard-health dashboard-health--{{ health_state }}">
+                <div class="dashboard-health__ring">
+                    <span>
+                        {% if health_state == 'alert' %}
+                            Alerte
+                        {% elseif health_state == 'watch' %}
+                            Surveillance
+                        {% else %}
+                            Stable
+                        {% endif %}
+                    </span>
+                </div>
+                <div class="dashboard-health__meta">
+                    <strong>
+                        {% if health_state == 'alert' %}
+                            Intervention recommandee
+                        {% elseif health_state == 'watch' %}
+                            Quelques signaux faibles
+                        {% else %}
+                            Aucun incident majeur detecte
+                        {% endif %}
+                    </strong>
+                    <span>Basee sur les derniers logs de synchronisation.</span>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="dashboard-kpis">
+        <article class="stat-card dashboard-kpi-card dashboard-kpi-card--clients">
+            <div class="stat-header">
+                <span class="stat-label">Companies synchronisees</span>
+                <div class="stat-icon accent"><i class="fas fa-building"></i></div>
+            </div>
+            <div class="stat-value">{{ stats.companies }}</div>
+            <div class="dashboard-kpi-card__meta">
+                <span>{{ stats.companiesReady }} pretes pour Sage</span>
+                <span>{{ stats.companiesWithErpId }} avec identifiant ERP</span>
+            </div>
+        </article>
+
+        <article class="stat-card dashboard-kpi-card dashboard-kpi-card--contacts">
+            <div class="stat-header">
+                <span class="stat-label">Contacts en base</span>
+                <div class="stat-icon blue"><i class="fas fa-address-book"></i></div>
+            </div>
+            <div class="stat-value">{{ stats.contacts }}</div>
+            <div class="dashboard-kpi-card__meta">
+                <span>Associes aux companies HubSpot</span>
+            </div>
+        </article>
+
+        <article class="stat-card dashboard-kpi-card dashboard-kpi-card--products">
+            <div class="stat-header">
+                <span class="stat-label">Produits actifs</span>
+                <div class="stat-icon green"><i class="fas fa-box-open"></i></div>
+            </div>
+            <div class="stat-value">{{ stats.products }}</div>
+            <div class="dashboard-kpi-card__meta">
+                <span>{{ stats.productsLinkedToHubspot }} relies a HubSpot</span>
+                <span>{{ stats.stockUpdatedToday }} stocks mis a jour sur 24h</span>
+            </div>
+        </article>
+
+        <article class="stat-card dashboard-kpi-card dashboard-kpi-card--logs">
+            <div class="stat-header">
+                <span class="stat-label">Activite recente</span>
+                <div class="stat-icon orange"><i class="fas fa-wave-square"></i></div>
+            </div>
+            <div class="stat-value">{{ stats.logs24h }}</div>
+            <div class="dashboard-kpi-card__meta">
+                <span>{{ stats.error24h }} erreurs</span>
+                <span>{{ stats.warning24h }} alertes</span>
+            </div>
+        </article>
+    </section>
+
+    <section class="dashboard-flow-grid">
+        {% for flow in fluxStatusCards %}
+            <article class="dashboard-flow-card dashboard-flow-card--{{ flow.status }}">
+                <div class="dashboard-flow-card__top">
+                    <div>
+                        <p class="dashboard-flow-card__label">{{ flow.label }}</p>
+                        <h3>{{ flow.statusLabel }}</h3>
+                    </div>
+                    <span class="tag tag-{{ flow.status == 'success' ? 'success' : (flow.status == 'warning' ? 'warning' : (flow.status == 'error' ? 'error' : 'info')) }}">
+                        {{ flow.statusLabel }}
+                    </span>
+                </div>
+                <p class="dashboard-flow-card__message">{{ flow.message }}</p>
+                <div class="dashboard-flow-card__footer">
+                    <span>Dernier signal</span>
+                    <strong>{{ flow.lastAt ? flow.lastAt|date('d/m/Y H:i') : 'Jamais' }}</strong>
+                </div>
+            </article>
+        {% endfor %}
+    </section>
+
+    <section class="dashboard-main-grid">
+        <div class="dashboard-main-grid__primary">
+            <div class="card dashboard-chart-card">
+                <div class="card-header">
+                    <span class="card-title">Repartition des logs sur 24h</span>
+                    <span class="tag tag-muted">Observabilite</span>
+                </div>
+                <div class="card-body">
+                    {% set total_levels = levelCounts.success + levelCounts.info + levelCounts.warning + levelCounts.error %}
+                    {% set total_levels = total_levels > 0 ? total_levels : 1 %}
+                    <div class="dashboard-distribution">
+                        <div class="dashboard-distribution__bar">
+                            <span class="dashboard-distribution__segment dashboard-distribution__segment--success" style="width: {{ (levelCounts.success / total_levels * 100)|round(1) }}%"></span>
+                            <span class="dashboard-distribution__segment dashboard-distribution__segment--info" style="width: {{ (levelCounts.info / total_levels * 100)|round(1) }}%"></span>
+                            <span class="dashboard-distribution__segment dashboard-distribution__segment--warning" style="width: {{ (levelCounts.warning / total_levels * 100)|round(1) }}%"></span>
+                            <span class="dashboard-distribution__segment dashboard-distribution__segment--error" style="width: {{ (levelCounts.error / total_levels * 100)|round(1) }}%"></span>
+                        </div>
+                        <div class="dashboard-distribution__legend">
+                            <div><span class="dot dot-success"></span>Succes <strong>{{ levelCounts.success }}</strong></div>
+                            <div><span class="dot dot-info"></span>Info <strong>{{ levelCounts.info }}</strong></div>
+                            <div><span class="dot dot-warning"></span>Warning <strong>{{ levelCounts.warning }}</strong></div>
+                            <div><span class="dot dot-error"></span>Erreur <strong>{{ levelCounts.error }}</strong></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card dashboard-table-card">
+                <div class="card-header">
+                    <span class="card-title">Flux les plus actifs</span>
+                    <span class="tag tag-accent">24h</span>
+                </div>
+                <div class="card-body card-body-flush">
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>Flux</th>
+                                <th>Volume</th>
+                                <th>Poids</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% set total_flux = 0 %}
+                            {% for total in fluxCounts %}
+                                {% set total_flux = total_flux + total %}
+                            {% endfor %}
+                            {% set total_flux = total_flux > 0 ? total_flux : 1 %}
+                            {% for fluxKey, total in fluxCounts %}
+                                <tr>
+                                    <td>
+                                        <div class="client-name">{{ fluxKey|replace({'_': ' '})|title }}</div>
+                                    </td>
+                                    <td class="amount-cell">{{ total }}</td>
+                                    <td>
+                                        <div class="dashboard-mini-bar">
+                                            <span style="width: {{ (total / total_flux * 100)|round(1) }}%"></span>
+                                        </div>
+                                    </td>
+                                </tr>
+                            {% else %}
+                                <tr>
+                                    <td colspan="3">Aucune activite recente.</td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="card dashboard-table-card">
+                <div class="card-header">
+                    <span class="card-title">Derniers evenements</span>
+                    <span class="tag tag-muted">{{ recentLogs|length }} lignes</span>
+                </div>
+                <div class="card-body">
+                    <div class="activity-list">
+                        {% for log in recentLogs %}
+                            <div class="activity-item">
+                                <div class="activity-dot {{ log.level == 'success' ? 'green' : (log.level == 'warning' ? 'orange' : (log.level == 'error' ? 'red' : 'blue')) }}"></div>
+                                <div class="activity-text">
+                                    <strong>[{{ log.fluxKey }}]</strong> {{ log.title }}
+                                    {% if log.message %}
+                                        <div>{{ log.message }}</div>
+                                    {% endif %}
+                                    <div class="activity-time">{{ log.createdAt|date('d/m/Y H:i:s') }}</div>
+                                </div>
+                            </div>
+                        {% else %}
+                            <div class="activity-item">
+                                <div class="activity-dot blue"></div>
+                                <div class="activity-text">
+                                    <strong>Aucun evenement</strong>
+                                    <div class="activity-time">Les journaux apparaitront ici.</div>
+                                </div>
+                            </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <aside class="dashboard-main-grid__aside">
+            <div class="card dashboard-side-card">
+                <div class="card-header">
+                    <span class="card-title">Planning des flux</span>
+                    <span class="tag tag-info">Cron</span>
+                </div>
+                <div class="card-body">
+                    <div class="dashboard-schedule">
+                        {% for item in syncSchedule %}
+                            <div class="dashboard-schedule__row">
+                                <div>
+                                    <strong>{{ item.label }}</strong>
+                                    <span>{{ item.frequency }}</span>
+                                </div>
+                                <code>{{ item.time }}</code>
+                            </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+
+            <div class="card dashboard-side-card">
+                <div class="card-header">
+                    <span class="card-title">Points de vigilance</span>
+                    <span class="tag tag-warning">{{ alertLogs|length }}</span>
+                </div>
+                <div class="card-body">
+                    <div class="dashboard-alert-list">
+                        {% for log in alertLogs %}
+                            <div class="dashboard-alert-list__item dashboard-alert-list__item--{{ log.level }}">
+                                <div class="dashboard-alert-list__head">
+                                    <span>[{{ log.fluxKey }}]</span>
+                                    <time>{{ log.createdAt|date('H:i') }}</time>
+                                </div>
+                                <strong>{{ log.title }}</strong>
+                                {% if log.message %}
+                                    <p>{{ log.message }}</p>
+                                {% endif %}
+                            </div>
+                        {% else %}
+                            <div class="dashboard-alert-empty">
+                                Aucun warning ni aucune erreur recente.
+                            </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+
+            <div class="card dashboard-side-card">
+                <div class="card-header">
+                    <span class="card-title">Indicateurs stock</span>
+                    <span class="tag tag-accent">Produits</span>
+                </div>
+                <div class="card-body">
+                    <div class="dashboard-metric-stack">
+                        <div class="dashboard-metric-stack__item">
+                            <span>Stocks mis a jour sur 24h</span>
+                            <strong>{{ stats.stockUpdatedToday }}</strong>
+                        </div>
+                        <div class="dashboard-metric-stack__item">
+                            <span>Produits relies a HubSpot</span>
+                            <strong>{{ stats.productsLinkedToHubspot }}</strong>
+                        </div>
+                        <div class="dashboard-metric-stack__item">
+                            <span>Valorisation theorique TTC</span>
+                            <strong>{{ stats.stockValue|number_format(0, ',', ' ') }} €</strong>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </aside>
+    </section>
+{% endblock %}
