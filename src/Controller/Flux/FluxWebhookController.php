@@ -165,7 +165,7 @@ class FluxWebhookController extends AbstractController
                 continue;
             }
 
-            if ($propertyValue !== 'yes') {
+            if ($propertyValue !== 'Yes') {
                 continue;
             }
 
