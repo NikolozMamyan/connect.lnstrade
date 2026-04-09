@@ -1,21 +1,293 @@
 {% extends 'layout/app.html.twig' %}
-{% block page_title %}Produits — Logistique & Stock{% endblock %}
-{% block page_subtitle %}Sage Article › Logistique + Stock → HubSpot Products{% endblock %}
+
+{% block page_title %}Produits - Logistique et Stock{% endblock %}
+{% block page_subtitle %}Sage Article vers HubSpot Products{% endblock %}
+
 {% block content %}
+    <style>
+        .sync-header {
+            margin-bottom: var(--space-8);
+        }
+
+        .sync-header__title {
+            font-size: var(--text-3xl);
+            font-weight: var(--font-bold);
+            color: var(--text-primary);
+            margin: 0 0 var(--space-3) 0;
+            display: flex;
+            align-items: center;
+            gap: var(--space-4);
+        }
+
+        .sync-header__title i {
+            color: var(--color-brand-accent);
+            font-size: var(--text-2xl);
+        }
+
+        .sync-header__actions {
+            margin-top: var(--space-6);
+        }
+
+        .search-bar {
+            display: flex;
+            gap: var(--space-4);
+            margin-bottom: var(--space-6);
+            flex-wrap: wrap;
+        }
+
+        .search-input {
+            flex: 1;
+            min-width: 280px;
+            position: relative;
+        }
+
+        .search-input i {
+            position: absolute;
+            left: var(--space-4);
+            top: 50%;
+            transform: translateY(-50%);
+            color: var(--text-muted);
+            font-size: var(--text-base);
+        }
+
+        .search-input input {
+            width: 100%;
+            padding: var(--space-3) var(--space-4) var(--space-3) var(--space-10);
+            border: var(--border-width) solid var(--border-color);
+            border-radius: var(--border-radius-md);
+            font-size: var(--text-sm);
+            color: var(--text-primary);
+            background: var(--bg-surface);
+        }
+
+        .results-count {
+            display: flex;
+            align-items: center;
+            gap: var(--space-2);
+            padding: var(--space-3) var(--space-4);
+            background: var(--bg-base);
+            border-radius: var(--border-radius-md);
+            font-size: var(--text-sm);
+            color: var(--text-secondary);
+            white-space: nowrap;
+        }
+
+        .results-count__number {
+            font-weight: var(--font-semibold);
+            color: var(--color-brand-accent);
+        }
+
+        .table-container {
+            background: var(--bg-surface);
+            border-radius: var(--border-radius-lg);
+            border: var(--border-width) solid var(--border-color);
+            overflow: hidden;
+            box-shadow: var(--shadow-sm);
+        }
+
+        .table-wrapper {
+            overflow-x: auto;
+        }
+
+        .stocks-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: var(--text-sm);
+        }
+
+        .stocks-table thead {
+            background: var(--bg-base);
+            border-bottom: var(--border-width) solid var(--border-color);
+        }
+
+        .stocks-table th,
+        .stocks-table td {
+            padding: var(--space-4);
+            text-align: left;
+            vertical-align: middle;
+        }
+
+        .stocks-table th {
+            font-weight: var(--font-semibold);
+            color: var(--text-secondary);
+            font-size: var(--text-xs);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            white-space: nowrap;
+        }
+
+        .stocks-table tbody tr {
+            border-bottom: var(--border-width) solid var(--border-color);
+        }
+
+        .stocks-table tbody tr:last-child {
+            border-bottom: none;
+        }
+
+        .stocks-table tbody tr:hover {
+            background: var(--bg-surface-hover);
+        }
+
+        .stock-name {
+            font-weight: var(--font-medium);
+            color: var(--text-primary);
+        }
+
+        .stock-reference {
+            color: var(--text-muted);
+            font-size: var(--text-xs);
+            margin-top: 2px;
+        }
+
+        .stock-value {
+            font-variant-numeric: tabular-nums;
+        }
+
+        .muted {
+            color: var(--text-muted);
+            font-style: italic;
+        }
+
+        @media (max-width: 768px) {
+            .search-bar {
+                flex-direction: column;
+            }
+
+            .search-input {
+                min-width: 100%;
+            }
+
+            .results-count {
+                width: 100%;
+                justify-content: center;
+            }
+
+            .sync-header__title {
+                font-size: var(--text-2xl);
+                flex-direction: column;
+                align-items: flex-start;
+            }
+        }
+    </style>
+
     {% include 'partials/flux_tabs.html.twig' with { flux: 'produits' } %}
+
+    {% for message in app.flashes('success') %}
+        <div class="sync-notification sync-notification--success" style="margin-bottom:var(--space-4);">
+            <i class="fas fa-check-circle"></i>
+            <div>{{ message }}</div>
+        </div>
+    {% endfor %}
+
+    <div class="sync-header">
+        <h1 class="sync-header__title">
+            <i class="fas fa-warehouse"></i>
+            Stocks
+        </h1>
+
+        <div class="sync-header__actions">
+            <form method="post" action="{{ path('flux_produits_sync_stock') }}" onsubmit="this.querySelector('button[type=submit]').disabled = true;">
+                {{ include('ui/button.html.twig', {
+                    label: 'Lancer la synchro stock',
+                    variant: 'primary',
+                    type: 'submit',
+                    icon: '<i class="fas fa-warehouse"></i>'
+                }) }}
+            </form>
+        </div>
+    </div>
+
     <div class="flux-info-banner flux-info-banner--note">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-        <div>Flux unilatéral Sage → HubSpot. Condition "Toujours" = synchronisation systématique sans condition de vide.</div>
+        <div>Flux unilateral Sage vers HubSpot. Les stocks sont recuperes depuis Sage par reference produit, sauvegardes en base puis pushes vers HubSpot.</div>
     </div>
+
+    {% if products is not empty %}
+        <div class="search-bar">
+            <div class="search-input">
+                <i class="fas fa-search"></i>
+                <input type="text" id="searchStockTable" placeholder="Rechercher un produit, une reference...">
+            </div>
+            <div class="results-count">
+                <i class="fas fa-boxes"></i>
+                <span id="resultCount" class="results-count__number">{{ products|length }}</span>
+                <span>produits</span>
+            </div>
+        </div>
+    {% endif %}
+
     <div class="card">
         <div class="card-header">
-            <span class="card-title">Produits — Logistique & Stock</span>
-            <span class="flux-direction-badge flux-direction-badge--sage-hs">Sage → HubSpot</span>
+            <span class="card-title">Stocks Produits</span>
+            <span class="flux-direction-badge flux-direction-badge--sage-hs">Sage vers HubSpot</span>
         </div>
-        <div class="card-body" style="text-align:center;padding:var(--space-12) var(--space-8);">
-            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--border-color-dark)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="margin:0 auto var(--space-4);"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
-            <p style="font-size:15px;font-weight:600;color:var(--text-secondary);margin-bottom:var(--space-2);">Mapping à implémenter</p>
-            <p style="font-size:13px;color:var(--text-muted);">Le tableau de mapping détaillé sera affiché ici.</p>
+        <div class="card-body" style="padding:0;">
+            {% if products is empty %}
+                <div style="text-align:center;padding:var(--space-12) var(--space-8);">
+                    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--border-color-dark)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="margin:0 auto var(--space-4);"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>
+                    <p style="font-size:15px;font-weight:600;color:var(--text-secondary);margin-bottom:var(--space-2);">Aucun produit disponible</p>
+                    <p style="font-size:13px;color:var(--text-muted);">Lance d abord la synchronisation produits.</p>
+                </div>
+            {% else %}
+                <div class="table-container" style="border:none;border-radius:0;box-shadow:none;">
+                    <div class="table-wrapper">
+                        <table class="stocks-table">
+                            <thead>
+                                <tr>
+                                    <th>Nom</th>
+                                    <th>Reference</th>
+                                    <th>Stock physique</th>
+                                    <th>En commande</th>
+                                    <th>Stock reel</th>
+                                </tr>
+                            </thead>
+                            <tbody id="stockTableBody">
+                                {% for product in products %}
+                                    <tr>
+                                        <td>
+                                            <div class="stock-name">{{ product.designation ?: 'Produit sans designation' }}</div>
+                                        </td>
+                                        <td>
+                                            <div class="stock-reference">{{ product.reference ?: '-' }}</div>
+                                        </td>
+                                        <td class="stock-value">
+                                            {{ product.stockDispo is not null ? product.stockDispo|number_format(0, '.', ' ') : 0 }}
+                                        </td>
+                                        <td class="stock-value">
+                                            {{ product.stockATerme is not null ? product.stockATerme|number_format(0, '.', ' ') : 0 }}
+                                        </td>
+                                        <td class="stock-value">
+                                            {{ product.stockReel is not null ? product.stockReel|number_format(0, '.', ' ') : 0 }}
+                                        </td>
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            {% endif %}
         </div>
     </div>
+
+    {% if products is not empty %}
+        <script>
+            document.getElementById('searchStockTable')?.addEventListener('input', function(e) {
+                const searchTerm = e.target.value.toLowerCase();
+                const rows = document.querySelectorAll('#stockTableBody tr');
+                let visibleCount = 0;
+
+                rows.forEach(row => {
+                    const text = row.textContent.toLowerCase();
+                    const isVisible = text.includes(searchTerm);
+                    row.style.display = isVisible ? '' : 'none';
+
+                    if (isVisible) {
+                        visibleCount++;
+                    }
+                });
+
+                document.getElementById('resultCount').textContent = visibleCount;
+            });
+        </script>
+    {% endif %}
 {% endblock %}

@@ -1,35 +1,456 @@
 {% extends 'layout/app.html.twig' %}
+
 {% block page_title %}Flux Produits / Articles{% endblock %}
-{% block page_subtitle %}Synchronisation Sage Article → HubSpot Products{% endblock %}
+{% block page_subtitle %}Synchronisation Sage Article vers HubSpot Products{% endblock %}
+
 {% block content %}
-    {% include 'partials/flux_tabs.html.twig' with { flux: 'produits' } %}
-    <div class="flux-header">
-        <span class="flux-direction-badge flux-direction-badge--sage-hs">Sage Article → HubSpot Products</span>
+<style>
+    .sync-notification {
+        padding: var(--space-4) var(--space-6);
+        border-radius: var(--border-radius-md);
+        margin-bottom: var(--space-6);
+        display: flex;
+        align-items: center;
+        gap: var(--space-3);
+        font-size: var(--text-sm);
+        box-shadow: var(--shadow-sm);
+    }
+
+    .sync-notification--success {
+        background: var(--color-success-bg);
+        color: var(--color-success);
+        border-left: 4px solid var(--color-success);
+    }
+
+    .sync-notification--error {
+        background: var(--color-error-bg);
+        color: var(--color-error);
+        border-left: 4px solid var(--color-error);
+    }
+
+    .sync-header {
+        margin-bottom: var(--space-8);
+    }
+
+    .sync-header__title {
+        font-size: var(--text-3xl);
+        font-weight: var(--font-bold);
+        color: var(--text-primary);
+        margin: 0 0 var(--space-3) 0;
+        display: flex;
+        align-items: center;
+        gap: var(--space-4);
+    }
+
+    .sync-header__title i {
+        color: var(--color-brand-accent);
+        font-size: var(--text-2xl);
+    }
+
+    .sync-header__actions {
+        margin-top: var(--space-6);
+    }
+
+    .search-bar {
+        display: flex;
+        gap: var(--space-4);
+        margin-bottom: var(--space-6);
+        flex-wrap: wrap;
+    }
+
+    .search-input {
+        flex: 1;
+        min-width: 280px;
+        position: relative;
+    }
+
+    .search-input i {
+        position: absolute;
+        left: var(--space-4);
+        top: 50%;
+        transform: translateY(-50%);
+        color: var(--text-muted);
+        font-size: var(--text-base);
+    }
+
+    .search-input input {
+        width: 100%;
+        padding: var(--space-3) var(--space-4) var(--space-3) var(--space-10);
+        border: var(--border-width) solid var(--border-color);
+        border-radius: var(--border-radius-md);
+        font-size: var(--text-sm);
+        color: var(--text-primary);
+        background: var(--bg-surface);
+    }
+
+    .results-count {
+        display: flex;
+        align-items: center;
+        gap: var(--space-2);
+        padding: var(--space-3) var(--space-4);
+        background: var(--bg-base);
+        border-radius: var(--border-radius-md);
+        font-size: var(--text-sm);
+        color: var(--text-secondary);
+        white-space: nowrap;
+    }
+
+    .results-count__number {
+        font-weight: var(--font-semibold);
+        color: var(--color-brand-accent);
+    }
+
+    .sync-empty-state {
+        text-align: center;
+        padding: var(--space-12) var(--space-6);
+        background: var(--bg-surface);
+        border-radius: var(--border-radius-lg);
+        border: 2px dashed var(--border-color);
+    }
+
+    .sync-empty-state__icon {
+        font-size: 64px;
+        color: var(--text-muted);
+        margin-bottom: var(--space-4);
+    }
+
+    .sync-empty-state__text {
+        font-size: var(--text-lg);
+        color: var(--text-secondary);
+        margin: 0;
+    }
+
+    .table-container {
+        background: var(--bg-surface);
+        border-radius: var(--border-radius-lg);
+        border: var(--border-width) solid var(--border-color);
+        overflow: hidden;
+        box-shadow: var(--shadow-sm);
+    }
+
+    .table-wrapper {
+        overflow-x: auto;
+    }
+
+    .products-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: var(--text-sm);
+    }
+
+    .products-table thead {
+        background: var(--bg-base);
+        border-bottom: var(--border-width) solid var(--border-color);
+    }
+
+    .products-table th {
+        padding: var(--space-4);
+        text-align: left;
+        font-weight: var(--font-semibold);
+        color: var(--text-secondary);
+        font-size: var(--text-xs);
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        white-space: nowrap;
+    }
+
+    .products-table th:first-child,
+    .products-table td:first-child {
+        padding-left: var(--space-6);
+    }
+
+    .products-table th:last-child,
+    .products-table td:last-child {
+        padding-right: var(--space-6);
+    }
+
+    .products-table tbody tr {
+        border-bottom: var(--border-width) solid var(--border-color);
+    }
+
+    .products-table tbody tr:last-child {
+        border-bottom: none;
+    }
+
+    .products-table tbody tr:hover {
+        background: var(--bg-surface-hover);
+    }
+
+    .products-table td {
+        padding: var(--space-4);
+        color: var(--text-primary);
+        vertical-align: middle;
+    }
+
+    .product-name-cell {
+        display: flex;
+        align-items: center;
+        gap: var(--space-3);
+        min-width: 280px;
+    }
+
+    .product-icon {
+        width: 40px;
+        height: 40px;
+        background: var(--color-brand-accent-light);
+        border-radius: var(--border-radius-md);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+    }
+
+    .product-icon i {
+        color: var(--color-brand-accent);
+        font-size: var(--text-base);
+    }
+
+    .product-name {
+        font-weight: var(--font-semibold);
+        color: var(--text-primary);
+    }
+
+    .product-ref {
+        color: var(--text-muted);
+        font-size: var(--text-xs);
+        margin-top: 2px;
+    }
+
+    .badge {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--space-2);
+        padding: var(--space-1) var(--space-3);
+        border-radius: var(--border-radius-full);
+        font-size: var(--text-xs);
+        font-weight: var(--font-medium);
+    }
+
+    .badge--success {
+        background: var(--color-success-bg);
+        color: var(--color-success);
+    }
+
+    .badge--neutral {
+        background: var(--bg-base);
+        color: var(--text-muted);
+    }
+
+    .muted {
+        color: var(--text-muted);
+        font-style: italic;
+    }
+
+    @media (max-width: 1024px) {
+        .products-table th:nth-child(4),
+        .products-table td:nth-child(4),
+        .products-table th:nth-child(6),
+        .products-table td:nth-child(6) {
+            display: none;
+        }
+    }
+
+    @media (max-width: 768px) {
+        .search-bar {
+            flex-direction: column;
+        }
+
+        .search-input {
+            min-width: 100%;
+        }
+
+        .results-count {
+            width: 100%;
+            justify-content: center;
+        }
+
+        .sync-header__title {
+            font-size: var(--text-2xl);
+            flex-direction: column;
+            align-items: flex-start;
+        }
+
+        .products-table th:nth-child(3),
+        .products-table td:nth-child(3),
+        .products-table th:nth-child(5),
+        .products-table td:nth-child(5) {
+            display: none;
+        }
+
+        .products-table th,
+        .products-table td {
+            padding: var(--space-3) var(--space-2);
+        }
+
+        .products-table th:first-child,
+        .products-table td:first-child {
+            padding-left: var(--space-3);
+        }
+
+        .products-table th:last-child,
+        .products-table td:last-child {
+            padding-right: var(--space-3);
+        }
+    }
+</style>
+
+{% include 'partials/flux_tabs.html.twig' with { flux: 'produits' } %}
+
+{% for message in app.flashes('success') %}
+    <div class="sync-notification sync-notification--success">
+        <i class="fas fa-check-circle"></i>
+        <div>{{ message }}</div>
     </div>
-    <div class="flux-info-banner flux-info-banner--info">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-        <div>Les articles créés dans Sage sont synchronisés vers HubSpot Products. Le stock est remonté par dépôt (Strasbourg). Flux unilatéral Sage → HubSpot, condition "Toujours" (pas de condition de vide).</div>
+{% endfor %}
+
+{% for message in app.flashes('error') %}
+    <div class="sync-notification sync-notification--error">
+        <i class="fas fa-exclamation-circle"></i>
+        <div>{{ message }}</div>
     </div>
-    <div class="stats-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:var(--space-6);">
-        <div class="stat-card"><div class="stat-header"><span class="stat-label">Articles Sage</span><div class="stat-icon accent"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#00C2A8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg></div></div><div class="stat-value">—</div><div class="stat-delta" style="color:var(--text-muted)">À implémenter</div></div>
-        <div class="stat-card"><div class="stat-header"><span class="stat-label">Products HubSpot</span><div class="stat-icon blue"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#3B82F6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg></div></div><div class="stat-value">—</div><div class="stat-delta" style="color:var(--text-muted)">À implémenter</div></div>
-        <div class="stat-card"><div class="stat-header"><span class="stat-label">Stock réel (Strbg)</span><div class="stat-icon orange"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#F97316" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></div></div><div class="stat-value">—</div><div class="stat-delta" style="color:var(--text-muted)">À implémenter</div></div>
-        <div class="stat-card"><div class="stat-header"><span class="stat-label">Erreurs</span><div class="stat-icon red"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#E8394D" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg></div></div><div class="stat-value">—</div><div class="stat-delta" style="color:var(--text-muted)">À implémenter</div></div>
+{% endfor %}
+
+<div class="sync-header">
+    <h1 class="sync-header__title">
+        <i class="fas fa-box"></i>
+        Synchronisation Produits
+    </h1>
+
+    <div class="sync-header__actions">
+        <form method="post" action="{{ path('flux_produits_sync') }}" onsubmit="this.querySelector('button[type=submit]').disabled = true;">
+            {{ include('ui/button.html.twig', {
+                label: 'Lancer la synchronisation',
+                variant: 'primary',
+                type: 'submit',
+                icon: '<i class="fas fa-sync-alt"></i>'
+            }) }}
+        </form>
     </div>
-    <div class="card">
-        <div class="card-header"><span class="card-title">Sections mappées</span></div>
-        <div style="padding:0 4px;">
-            <table class="table">
-                <thead><tr><th>Section Sage</th><th>Champs mappés</th><th>Statut</th></tr></thead>
-                <tbody>
-                    <tr><td><strong>Article › Identification</strong></td><td>SKU, Désignation, Prix d'achat</td><td><span class="sync-status sync-status--pending">À implémenter</span></td></tr>
-                    <tr><td><strong>Article › Descriptif</strong></td><td>Type produit, Format, Famille, Licence, Code fiscal, Pays d'origine</td><td><span class="sync-status sync-status--pending">À implémenter</span></td></tr>
-                    <tr><td><strong>Article › Logistique</strong></td><td>Code barres EAN, Poids net/brut</td><td><span class="sync-status sync-status--pending">À implémenter</span></td></tr>
-                    <tr><td><strong>Article › Stock</strong></td><td>Stock réel Strasbourg, Stock disponible</td><td><span class="sync-status sync-status--pending">À implémenter</span></td></tr>
-                    <tr><td><strong>Article › Champs libres</strong></td><td>Dossier HS (Catalogue Produit)</td><td><span class="sync-status sync-status--pending">À implémenter</span></td></tr>
-                    <tr><td><strong>Article › Gestion de production</strong></td><td>Nature du produit</td><td><span class="sync-status sync-status--pending">À implémenter</span></td></tr>
+</div>
+
+{% if products is not empty %}
+    <div class="search-bar">
+        <div class="search-input">
+            <i class="fas fa-search"></i>
+            <input type="text" id="searchTable" placeholder="Rechercher un produit, SKU, famille, licence...">
+        </div>
+        <div class="results-count">
+            <i class="fas fa-boxes"></i>
+            <span id="resultCount" class="results-count__number">{{ products|length }}</span>
+            <span>produits</span>
+        </div>
+    </div>
+{% endif %}
+
+{% if products is empty %}
+    <div class="sync-empty-state">
+        <div class="sync-empty-state__icon">
+            <i class="fas fa-box-open"></i>
+        </div>
+        <p class="sync-empty-state__text">Aucun produit synchronise</p>
+    </div>
+{% else %}
+    <div class="table-container">
+        <div class="table-wrapper">
+            <table class="products-table">
+                <thead>
+                    <tr>
+                        <th>Produit</th>
+                        <th>Famille</th>
+                        <th>Licence</th>
+                        <th>Prix TTC</th>
+                        <th>Statut Sage</th>
+                        <th>Sync HubSpot</th>
+                        <th>Maj</th>
+                    </tr>
+                </thead>
+                <tbody id="productsTableBody">
+                    {% for product in products %}
+                        <tr>
+                            <td>
+                                <div class="product-name-cell">
+                                    <div class="product-icon">
+                                        <i class="fas fa-box"></i>
+                                    </div>
+                                    <div>
+                                        <div class="product-name" title="{{ product.designation ?: product.reference }}">
+                                            {{ product.designation ?: 'Produit sans designation' }}
+                                        </div>
+                                        <div class="product-ref">{{ product.reference ?: 'Reference inconnue' }}</div>
+                                    </div>
+                                </div>
+                            </td>
+                            <td>
+                                {{ product.famille ?: '-' }}
+                            </td>
+                            <td>
+                                {{ product.catalogue4 ?: '-' }}
+                            </td>
+                            <td>
+                                {% if product.prixTtc is not null %}
+                                    {{ product.prixTtc|number_format(2, '.', ' ') }}
+                                {% else %}
+                                    <span class="muted">Non renseigne</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if product.statut == 'Actif' %}
+                                    <span class="badge badge--success">
+                                        <i class="fas fa-check-circle"></i>
+                                        {{ product.statut }}
+                                    </span>
+                                {% else %}
+                                    <span class="badge badge--neutral">
+                                        <i class="fas fa-minus-circle"></i>
+                                        {{ product.statut ?: 'Inconnu' }}
+                                    </span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if product.hubspotObjectId %}
+                                    <span class="badge badge--success">
+                                        <i class="fab fa-hubspot"></i>
+                                        Synchronise
+                                    </span>
+                                {% else %}
+                                    <span class="badge badge--neutral">
+                                        <i class="fas fa-clock"></i>
+                                        En attente
+                                    </span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if product.updatedAt %}
+                                    {{ product.updatedAt|date('d/m/Y H:i') }}
+                                {% else %}
+                                    <span class="muted">-</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                    {% endfor %}
                 </tbody>
             </table>
         </div>
     </div>
+
+    <script>
+        document.getElementById('searchTable')?.addEventListener('input', function(e) {
+            const searchTerm = e.target.value.toLowerCase();
+            const rows = document.querySelectorAll('#productsTableBody tr');
+            let visibleCount = 0;
+
+            rows.forEach(row => {
+                const text = row.textContent.toLowerCase();
+                const isVisible = text.includes(searchTerm);
+                row.style.display = isVisible ? '' : 'none';
+
+                if (isVisible) {
+                    visibleCount++;
+                }
+            });
+
+            document.getElementById('resultCount').textContent = visibleCount;
+        });
+    </script>
+{% endif %}
 {% endblock %}
