@@ -1,0 +1,172 @@
+{% extends 'layout/app.html.twig' %}
+
+{% block page_title %}Logs de synchronisation{% endblock %}
+{% block page_subtitle %}Supervision globale des flux clients, produits, stocks et webhook.{% endblock %}
+
+{% block page_actions %}
+    <a href="{{ path('app_dashboard') }}" class="btn btn-secondary btn-md">
+        <i class="fas fa-chart-line"></i>
+        Retour au dashboard
+    </a>
+{% endblock %}
+
+{% block content %}
+    <section class="dashboard-hero dashboard-hero--compact">
+        <div class="dashboard-hero__content">
+            <span class="dashboard-hero__eyebrow">Journal centralise</span>
+            <h2 class="dashboard-hero__title">Tous les evenements de synchronisation regroupes au meme endroit.</h2>
+            <p class="dashboard-hero__text">
+                {{ totalLogs24h }} lignes ont ete enregistrees sur les 24 dernieres heures.
+                Les alertes et erreurs sont remontees en priorite pour accelerer le diagnostic.
+            </p>
+        </div>
+
+        <div class="dashboard-hero__signal">
+            {% set health_state = levelCounts.error > 0 ? 'alert' : (levelCounts.warning > 0 ? 'watch' : 'good') %}
+            <div class="dashboard-health dashboard-health--{{ health_state }}">
+                <div class="dashboard-health__ring">
+                    <span>{{ totalLogs24h }}</span>
+                </div>
+                <div class="dashboard-health__meta">
+                    <strong>{{ levelCounts.error }} erreurs • {{ levelCounts.warning }} alertes</strong>
+                    <span>Lecture prioritaire des incidents les plus recents.</span>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="dashboard-kpis">
+        <article class="stat-card dashboard-kpi-card dashboard-kpi-card--logs">
+            <div class="stat-header">
+                <span class="stat-label">Succes 24h</span>
+                <div class="stat-icon green"><i class="fas fa-circle-check"></i></div>
+            </div>
+            <div class="stat-value">{{ levelCounts.success }}</div>
+        </article>
+
+        <article class="stat-card dashboard-kpi-card dashboard-kpi-card--contacts">
+            <div class="stat-header">
+                <span class="stat-label">Infos 24h</span>
+                <div class="stat-icon blue"><i class="fas fa-circle-info"></i></div>
+            </div>
+            <div class="stat-value">{{ levelCounts.info }}</div>
+        </article>
+
+        <article class="stat-card dashboard-kpi-card dashboard-kpi-card--products">
+            <div class="stat-header">
+                <span class="stat-label">Warnings 24h</span>
+                <div class="stat-icon orange"><i class="fas fa-triangle-exclamation"></i></div>
+            </div>
+            <div class="stat-value">{{ levelCounts.warning }}</div>
+        </article>
+
+        <article class="stat-card dashboard-kpi-card dashboard-kpi-card--clients">
+            <div class="stat-header">
+                <span class="stat-label">Erreurs 24h</span>
+                <div class="stat-icon red"><i class="fas fa-bug"></i></div>
+            </div>
+            <div class="stat-value">{{ levelCounts.error }}</div>
+        </article>
+    </section>
+
+    <section class="dashboard-main-grid">
+        <div class="dashboard-main-grid__primary">
+            <div class="card dashboard-table-card">
+                <div class="card-header">
+                    <span class="card-title">Derniers evenements</span>
+                    <span class="tag tag-muted">{{ latestEvents|length }} lignes</span>
+                </div>
+                <div class="card-body">
+                    <div class="activity-list">
+                        {% for log in latestEvents %}
+                            <div class="activity-item">
+                                <div class="activity-dot {{ log.level == 'success' ? 'green' : (log.level == 'warning' ? 'orange' : (log.level == 'error' ? 'red' : 'blue')) }}"></div>
+                                <div class="activity-text">
+                                    <strong>[{{ log.fluxKey }}]</strong> {{ log.title }}
+                                    {% if log.message %}
+                                        <div>{{ log.message }}</div>
+                                    {% endif %}
+                                    <div class="activity-time">{{ log.createdAt|date('d/m/Y H:i:s') }}</div>
+                                </div>
+                            </div>
+                        {% else %}
+                            <div class="activity-item">
+                                <div class="activity-dot blue"></div>
+                                <div class="activity-text">
+                                    <strong>Aucun evenement</strong>
+                                    <div class="activity-time">Les lignes apparaitront ici.</div>
+                                </div>
+                            </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+
+            <div class="card dashboard-table-card">
+                <div class="card-header">
+                    <span class="card-title">Journal complet</span>
+                    <span class="tag tag-accent">Global</span>
+                </div>
+                <div class="card-body" style="padding: 0;">
+                    {% include 'partials/sync_logs_table.html.twig' with {
+                        title: 'Historique complet des synchronisations',
+                        empty_title: 'Aucun log disponible',
+                        empty_text: 'Les lignes de synchronisation apparaitront ici.',
+                        logs: logs
+                    } %}
+                </div>
+            </div>
+        </div>
+
+        <aside class="dashboard-main-grid__aside">
+            <div class="card dashboard-side-card">
+                <div class="card-header">
+                    <span class="card-title">Alertes recentes</span>
+                    <span class="tag tag-warning">{{ alertLogs|length }}</span>
+                </div>
+                <div class="card-body">
+                    <div class="dashboard-alert-list">
+                        {% for log in alertLogs %}
+                            <div class="dashboard-alert-list__item dashboard-alert-list__item--{{ log.level }}">
+                                <div class="dashboard-alert-list__head">
+                                    <span>[{{ log.fluxKey }}]</span>
+                                    <time>{{ log.createdAt|date('H:i') }}</time>
+                                </div>
+                                <strong>{{ log.title }}</strong>
+                                {% if log.message %}
+                                    <p>{{ log.message }}</p>
+                                {% endif %}
+                            </div>
+                        {% else %}
+                            <div class="dashboard-alert-empty">
+                                Aucune alerte recente.
+                            </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+
+            <div class="card dashboard-side-card">
+                <div class="card-header">
+                    <span class="card-title">Activite par flux</span>
+                    <span class="tag tag-info">24h</span>
+                </div>
+                <div class="card-body">
+                    <div class="dashboard-schedule">
+                        {% for fluxKey, total in fluxCounts %}
+                            <div class="dashboard-schedule__row">
+                                <div>
+                                    <strong>{{ fluxKey|replace({'_': ' '})|title }}</strong>
+                                    <span>Evenements detectes sur la periode</span>
+                                </div>
+                                <code>{{ total }}</code>
+                            </div>
+                        {% else %}
+                            <div class="dashboard-alert-empty">Aucune activite recente.</div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        </aside>
+    </section>
+{% endblock %}
