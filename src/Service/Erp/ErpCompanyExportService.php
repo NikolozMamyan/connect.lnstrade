@@ -176,12 +176,22 @@ class ErpCompanyExportService
 
     private function findClientByReference(string $reference): ?array
     {
-        $response = $this->sageClient->get('/Clients', [
-            'limit' => 1,
-            'offset' => 0,
-            'reference' => $reference,
-            'estEnSommeil' => false,
-        ]);
+        try {
+            $response = $this->sageClient->get('/Clients', [
+                'limit' => 1,
+                'offset' => 0,
+                'reference' => $reference,
+                'estEnSommeil' => false,
+            ]);
+        } catch (\RuntimeException $e) {
+            $message = $e->getMessage();
+
+            if (str_contains($message, 'Erreur API Sage [404]')) {
+                return null;
+            }
+
+            throw $e;
+        }
 
         if (isset($response['results']) && \is_array($response['results']) && $response['results'] !== []) {
             return $response['results'][0];

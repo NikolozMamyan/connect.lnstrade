@@ -45,6 +45,17 @@ class FluxWebhookController extends AbstractController
         $skipped = 0;
         $errors = [];
 
+        $syncLogService->info(
+            'webhook',
+            'Webhook HubSpot recu',
+            'Webhook HubSpot recu pour surveillance de sage_integration.',
+            [
+                'events' => count($events),
+                'companiesDetected' => count($companyIds),
+                'sample' => $events[0] ?? null,
+            ]
+        );
+
         foreach ($companyIds as $companyId) {
             try {
                 $syncResult = $hubspotCompanySyncService->syncCompanyById($companyId);
@@ -109,8 +120,8 @@ class FluxWebhookController extends AbstractController
         if ($events !== []) {
             $syncLogService->info(
                 'webhook',
-                'Webhook HubSpot recu',
-                'Webhook HubSpot recu pour surveillance de sage_integration.',
+                'Webhook HubSpot termine',
+                'Webhook HubSpot traite.',
                 [
                     'events' => count($events),
                     'companiesDetected' => count($companyIds),
@@ -142,6 +153,10 @@ class FluxWebhookController extends AbstractController
             return array_values(array_filter($payload['events'], 'is_array'));
         }
 
+        if (\is_array($payload) && isset($payload['eventId'])) {
+            return [$payload];
+        }
+
         return [];
     }
 
@@ -165,7 +180,7 @@ class FluxWebhookController extends AbstractController
                 continue;
             }
 
-            if ($propertyValue !== 'Yes') {
+            if ($propertyValue !== 'yes') {
                 continue;
             }
 
