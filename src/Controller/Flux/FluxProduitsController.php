@@ -5,6 +5,8 @@ namespace App\Controller\Flux;
 use App\Message\SyncProductMessage;
 use App\Message\SyncProductStockMessage;
 use App\Repository\ErpProductRepository;
+use App\Repository\SyncLogRepository;
+use App\Service\Log\SyncLogService;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Messenger\MessageBusInterface;
@@ -27,9 +29,15 @@ class FluxProduitsController extends AbstractController
     }
 
     #[Route('/sync', name: 'sync', methods: ['POST'])]
-    public function sync(MessageBusInterface $bus): Response
+    public function sync(MessageBusInterface $bus, SyncLogService $syncLogService): Response
     {
         $bus->dispatch(new SyncProductMessage());
+
+        $syncLogService->info(
+            'product',
+            'Synchronisation produits demandee',
+            'Le message Messenger a ete envoye pour lancer la synchronisation produits.'
+        );
 
         $this->addFlash('success', 'Synchronisation produits lancee en arriere-plan.');
 
@@ -66,9 +74,15 @@ class FluxProduitsController extends AbstractController
     }
 
     #[Route('/mapping/logistique/sync-stock', name: 'sync_stock', methods: ['POST'])]
-    public function syncStock(MessageBusInterface $bus): Response
+    public function syncStock(MessageBusInterface $bus, SyncLogService $syncLogService): Response
     {
         $bus->dispatch(new SyncProductStockMessage());
+
+        $syncLogService->info(
+            'product_stock',
+            'Synchronisation stock demandee',
+            'Le message Messenger a ete envoye pour lancer la synchronisation des stocks produits.'
+        );
 
         $this->addFlash('success', 'Synchronisation stock produits lancee en arriere-plan.');
 
@@ -79,8 +93,10 @@ class FluxProduitsController extends AbstractController
      * Logs de synchronisation produits
      */
     #[Route('/logs', name: 'logs')]
-    public function logs(): Response
+    public function logs(SyncLogRepository $syncLogRepository): Response
     {
-        return $this->render('flux/produits/logs.html.twig');
+        return $this->render('flux/produits/logs.html.twig', [
+            'logs' => $syncLogRepository->findLatestByFluxKeys(['product', 'product_stock'], 150),
+        ]);
     }
 }

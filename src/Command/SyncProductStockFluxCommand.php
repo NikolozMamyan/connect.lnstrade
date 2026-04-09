@@ -11,10 +11,10 @@ use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\Style\SymfonyStyle;
 
 #[AsCommand(
-    name: 'app:sync:product-flux',
-    description: 'Synchronise les produits Sage puis prepare l export HubSpot.',
+    name: 'app:sync:product-stock-flux',
+    description: 'Synchronise les stocks produits Sage puis met a jour HubSpot.',
 )]
-class SyncProductFluxCommand extends Command
+class SyncProductStockFluxCommand extends Command
 {
     public function __construct(
         private readonly ClientFluxOrchestrator $clientFluxOrchestrator,
@@ -27,79 +27,78 @@ class SyncProductFluxCommand extends Command
     {
         $io = new SymfonyStyle($input, $output);
 
-        $io->title('Lancement de la synchronisation du flux produit');
+        $io->title('Lancement de la synchronisation du stock produit');
 
         try {
             $this->syncLogService->info(
-                'product',
-                'Synchronisation produits demarree via commande',
-                'Execution de la commande app:sync:product-flux.'
+                'product_stock',
+                'Synchronisation stock demarree via commande',
+                'Execution de la commande app:sync:product-stock-flux.'
             );
 
-            $result = $this->clientFluxOrchestrator->runProductSync();
+            $result = $this->clientFluxOrchestrator->runProductStockSync();
 
             $this->syncLogService->success(
-                'product',
-                'Synchronisation produits terminee via commande',
+                'product_stock',
+                'Synchronisation stock terminee via commande',
                 sprintf(
-                    '%d produits importes, %d produits envoyes a HubSpot.',
-                    $result['imported'] ?? 0,
+                    '%d stocks mis a jour, %d lignes envoyees a HubSpot.',
+                    $result['stockUpdated'] ?? 0,
                     $result['hubspotSent'] ?? 0,
                 ),
                 $result
             );
 
             $io->success(sprintf(
-                'Synchronisation terminee : %d produit(s) importe(s), %d produit(s) HubSpot envoye(s).',
-                $result['imported'] ?? 0,
+                'Synchronisation terminee : %d stock(s) mis a jour, %d ligne(s) envoyee(s) a HubSpot.',
+                $result['stockUpdated'] ?? 0,
                 $result['hubspotSent'] ?? 0,
             ));
 
-            if (($result['importSkipped'] ?? 0) > 0) {
+            if (($result['stockSkipped'] ?? 0) > 0) {
                 $this->syncLogService->warning(
-                    'product',
-                    'Produits ignores a l import',
-                    sprintf('%d produit(s) Sage ignores a l import.', $result['importSkipped']),
-                    ['importSkipped' => $result['importSkipped']]
+                    'product_stock',
+                    'Stocks ignores cote Sage',
+                    sprintf('%d ligne(s) de stock ignoree(s) pendant la mise a jour Sage.', $result['stockSkipped']),
+                    ['stockSkipped' => $result['stockSkipped']]
                 );
 
                 $io->warning(sprintf(
-                    '%d produit(s) Sage ignore(s) a l import.',
-                    $result['importSkipped']
+                    '%d ligne(s) de stock ignoree(s) cote Sage.',
+                    $result['stockSkipped']
                 ));
             }
 
             if (($result['hubspotSkipped'] ?? 0) > 0) {
                 $this->syncLogService->warning(
-                    'product',
-                    'Produits ignores a l export',
-                    sprintf('%d produit(s) HubSpot ignores a l export.', $result['hubspotSkipped']),
+                    'product_stock',
+                    'Stocks ignores cote HubSpot',
+                    sprintf('%d ligne(s) ignoree(s) pendant la mise a jour HubSpot.', $result['hubspotSkipped']),
                     ['hubspotSkipped' => $result['hubspotSkipped']]
                 );
 
                 $io->warning(sprintf(
-                    '%d produit(s) HubSpot ignore(s) a l export.',
+                    '%d ligne(s) ignoree(s) cote HubSpot.',
                     $result['hubspotSkipped']
                 ));
             }
 
-            if (!empty($result['importErrors'])) {
+            if (!empty($result['stockErrors'])) {
                 $this->syncLogService->error(
-                    'product',
-                    'Erreurs pendant l import Sage',
-                    sprintf('%d erreur(s) detectee(s) pendant l import Sage.', count($result['importErrors'])),
-                    ['importErrors' => $result['importErrors']]
+                    'product_stock',
+                    'Erreurs pendant la recuperation des stocks',
+                    sprintf('%d erreur(s) detectee(s) pendant la recuperation des stocks Sage.', count($result['stockErrors'])),
+                    ['stockErrors' => $result['stockErrors']]
                 );
 
                 $io->error(sprintf(
-                    '%d erreur(s) pendant l import Sage.',
-                    count($result['importErrors'])
+                    '%d erreur(s) pendant la recuperation des stocks.',
+                    count($result['stockErrors'])
                 ));
 
-                foreach ($result['importErrors'] as $error) {
+                foreach ($result['stockErrors'] as $error) {
                     $io->writeln(sprintf(
-                        '- [%s] %s',
-                        $error['reference'] ?? 'N/A',
+                        '- %s',
                         $error['message'] ?? 'Erreur inconnue'
                     ));
                 }
@@ -107,14 +106,14 @@ class SyncProductFluxCommand extends Command
 
             if (!empty($result['hubspotErrors'])) {
                 $this->syncLogService->error(
-                    'product',
-                    'Erreurs pendant l export HubSpot',
-                    sprintf('%d erreur(s) detectee(s) pendant l export HubSpot.', count($result['hubspotErrors'])),
+                    'product_stock',
+                    'Erreurs pendant l export stock HubSpot',
+                    sprintf('%d erreur(s) detectee(s) pendant l export stock HubSpot.', count($result['hubspotErrors'])),
                     ['hubspotErrors' => $result['hubspotErrors']]
                 );
 
                 $io->error(sprintf(
-                    '%d erreur(s) pendant l export HubSpot.',
+                    '%d erreur(s) pendant l export stock HubSpot.',
                     count($result['hubspotErrors'])
                 ));
 
@@ -130,12 +129,12 @@ class SyncProductFluxCommand extends Command
             return Command::SUCCESS;
         } catch (\Throwable $e) {
             $this->syncLogService->error(
-                'product',
-                'Erreur synchronisation produits via commande',
+                'product_stock',
+                'Erreur synchronisation stock via commande',
                 $e->getMessage()
             );
 
-            $io->error('Erreur lors de la synchronisation : ' . $e->getMessage());
+            $io->error('Erreur lors de la synchronisation du stock : ' . $e->getMessage());
 
             return Command::FAILURE;
         }

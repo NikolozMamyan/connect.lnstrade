@@ -1,0 +1,15 @@
+{% extends 'layout/app.html.twig' %}
+
+{% block page_title %}Flux Client - Logs{% endblock %}
+{% block page_subtitle %}Historique des synchronisations client{% endblock %}
+
+{% block content %}
+    {% include 'partials/flux_tabs.html.twig' with { flux: 'client' } %}
+
+    {% include 'partials/sync_logs_table.html.twig' with {
+        title: 'Logs du flux client',
+        empty_title: 'Aucun log disponible',
+        empty_text: 'Les lignes de synchronisation client apparaitront ici.',
+        logs: logs
+    } %}
+{% endblock %}

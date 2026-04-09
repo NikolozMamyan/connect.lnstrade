@@ -3,6 +3,7 @@
 namespace App\Command;
 
 use App\Service\Flux\ClientFluxOrchestrator;
+use App\Service\Log\SyncLogService;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputInterface;
@@ -11,12 +12,13 @@ use Symfony\Component\Console\Style\SymfonyStyle;
 
 #[AsCommand(
     name: 'app:sync:client-flux',
-    description: 'Synchronise les companies/contacts HubSpot puis prépare l’export ERP.',
+    description: 'Synchronise les companies/contacts HubSpot puis prepare l export ERP.',
 )]
 class SyncClientFluxCommand extends Command
 {
     public function __construct(
         private readonly ClientFluxOrchestrator $clientFluxOrchestrator,
+        private readonly SyncLogService $syncLogService,
     ) {
         parent::__construct();
     }
@@ -28,10 +30,29 @@ class SyncClientFluxCommand extends Command
         $io->title('Lancement de la synchronisation du flux client');
 
         try {
+            $this->syncLogService->info(
+                'client',
+                'Synchronisation client demarree via commande',
+                'Execution de la commande app:sync:client-flux.'
+            );
+
             $result = $this->clientFluxOrchestrator->run();
 
+            $this->syncLogService->success(
+                'client',
+                'Synchronisation client terminee via commande',
+                sprintf(
+                    '%d companies, %d contacts, %d relations, %d exports ERP.',
+                    $result['savedCompanies'] ?? 0,
+                    $result['savedContacts'] ?? 0,
+                    $result['savedRelations'] ?? 0,
+                    $result['erpSent'] ?? 0,
+                ),
+                $result
+            );
+
             $io->success(sprintf(
-                'Synchronisation terminée : %d company(s), %d contact(s), %d relation(s), %d export(s) ERP préparé(s).',
+                'Synchronisation terminee : %d company(s), %d contact(s), %d relation(s), %d export(s) ERP prepares.',
                 $result['savedCompanies'] ?? 0,
                 $result['savedContacts'] ?? 0,
                 $result['savedRelations'] ?? 0,
@@ -39,15 +60,29 @@ class SyncClientFluxCommand extends Command
             ));
 
             if (($result['erpSkipped'] ?? 0) > 0) {
+                $this->syncLogService->warning(
+                    'client',
+                    'Exports ERP ignores',
+                    sprintf('%d export(s) ERP ignores.', $result['erpSkipped']),
+                    ['erpSkipped' => $result['erpSkipped']]
+                );
+
                 $io->warning(sprintf(
-                    '%d export(s) ERP ignoré(s).',
+                    '%d export(s) ERP ignores.',
                     $result['erpSkipped']
                 ));
             }
 
             if (!empty($result['erpErrors'])) {
+                $this->syncLogService->error(
+                    'client',
+                    'Erreurs pendant l export ERP',
+                    sprintf('%d erreur(s) detectee(s) pendant l export ERP.', count($result['erpErrors'])),
+                    ['erpErrors' => $result['erpErrors']]
+                );
+
                 $io->error(sprintf(
-                    '%d erreur(s) pendant l’export ERP.',
+                    '%d erreur(s) pendant l export ERP.',
                     count($result['erpErrors'])
                 ));
 
@@ -63,6 +98,12 @@ class SyncClientFluxCommand extends Command
 
             return Command::SUCCESS;
         } catch (\Throwable $e) {
+            $this->syncLogService->error(
+                'client',
+                'Erreur synchronisation client via commande',
+                $e->getMessage()
+            );
+
             $io->error('Erreur lors de la synchronisation : ' . $e->getMessage());
 
             return Command::FAILURE;

@@ -1,0 +1,214 @@
+<style>
+    .logs-search-bar {
+        display: flex;
+        gap: var(--space-4);
+        margin-bottom: var(--space-6);
+        flex-wrap: wrap;
+    }
+
+    .logs-search-input {
+        flex: 1;
+        min-width: 280px;
+        position: relative;
+    }
+
+    .logs-search-input i {
+        position: absolute;
+        left: var(--space-4);
+        top: 50%;
+        transform: translateY(-50%);
+        color: var(--text-muted);
+    }
+
+    .logs-search-input input {
+        width: 100%;
+        box-sizing: border-box;
+        padding: var(--space-3) var(--space-4) var(--space-3) var(--space-10);
+        border: var(--border-width) solid var(--border-color);
+        border-radius: var(--border-radius-md);
+        background: var(--bg-surface);
+    }
+
+    .logs-count {
+        display: flex;
+        align-items: center;
+        gap: var(--space-2);
+        padding: var(--space-3) var(--space-4);
+        background: var(--bg-base);
+        border-radius: var(--border-radius-md);
+        font-size: var(--text-sm);
+        color: var(--text-secondary);
+    }
+
+    .logs-count__number {
+        color: var(--color-brand-accent);
+        font-weight: var(--font-semibold);
+    }
+
+    .log-lines {
+        padding: var(--space-2) 0;
+    }
+
+    .log-line {
+        display: grid;
+        grid-template-columns: 88px 82px 110px 1fr;
+        gap: var(--space-3);
+        align-items: start;
+        padding: var(--space-3) var(--space-6);
+        border-bottom: var(--border-width) solid var(--border-color);
+        font-family: var(--font-mono);
+        font-size: 13px;
+        line-height: 1.55;
+    }
+
+    .log-line:last-child {
+        border-bottom: none;
+    }
+
+    .log-line:hover {
+        background: var(--bg-surface-hover);
+    }
+
+    .log-time {
+        color: var(--text-muted);
+        white-space: nowrap;
+    }
+
+    .log-level {
+        font-weight: var(--font-semibold);
+        white-space: nowrap;
+    }
+
+    .log-level--info { color: var(--color-info); }
+    .log-level--success { color: var(--color-success); }
+    .log-level--warning { color: var(--color-warning); }
+    .log-level--error { color: var(--color-error); }
+
+    .log-flux {
+        color: var(--text-secondary);
+        white-space: nowrap;
+    }
+
+    .log-content {
+        min-width: 0;
+        color: var(--text-primary);
+    }
+
+    .log-title {
+        font-weight: var(--font-medium);
+        color: var(--text-primary);
+    }
+
+    .log-message {
+        color: var(--text-secondary);
+    }
+
+    .log-context {
+        margin-top: 2px;
+        color: var(--text-muted);
+        font-size: 12px;
+        word-break: break-word;
+    }
+
+    .log-context code {
+        font-family: var(--font-mono);
+        color: var(--text-secondary);
+        background: transparent;
+        padding: 0;
+    }
+
+    @media (max-width: 900px) {
+        .log-line {
+            grid-template-columns: 1fr;
+            gap: var(--space-1);
+        }
+    }
+</style>
+
+{% if logs is not empty %}
+    <div class="logs-search-bar">
+        <div class="logs-search-input">
+            <i class="fas fa-search"></i>
+            <input type="text" id="syncLogsSearch" placeholder="Rechercher une ligne, un flux, un niveau...">
+        </div>
+        <div class="logs-count">
+            <i class="fas fa-stream"></i>
+            <span id="syncLogsCount" class="logs-count__number">{{ logs|length }}</span>
+            <span>lignes</span>
+        </div>
+    </div>
+{% endif %}
+
+<div class="card">
+    <div class="card-header">
+        <span class="card-title">{{ title }}</span>
+        <span class="flux-direction-badge flux-direction-badge--sage-hs">Historique</span>
+    </div>
+
+    {% if logs is empty %}
+        <div class="card-body" style="text-align:center;padding:var(--space-12) var(--space-8);">
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--border-color-dark)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="margin:0 auto var(--space-4);">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                <polyline points="14 2 14 8 20 8"/>
+                <line x1="16" y1="13" x2="8" y2="13"/>
+                <line x1="16" y1="17" x2="8" y2="17"/>
+            </svg>
+            <p style="font-size:15px;font-weight:600;color:var(--text-secondary);margin-bottom:var(--space-2);">{{ empty_title }}</p>
+            <p style="font-size:13px;color:var(--text-muted);">{{ empty_text }}</p>
+        </div>
+    {% else %}
+        <div class="card-body" style="padding:0;">
+            <div class="log-lines" id="syncLogsTableBody">
+                {% for log in logs %}
+                    <div class="log-line">
+                        <div class="log-time">{{ log.createdAt|date('H:i:s') }}</div>
+                        <div class="log-level log-level--{{ log.level }}">{{ log.level|upper }}</div>
+                        <div class="log-flux">[{{ log.fluxKey }}]</div>
+                        <div class="log-content">
+                            <span class="log-title">{{ log.title }}</span>
+                            {% if log.message %}
+                                <span class="log-message"> {{ log.message }}</span>
+                            {% endif %}
+                            {% if log.context %}
+                                <div class="log-context">
+                                    {% for key, value in log.context %}
+                                        {% if loop.index <= 6 %}
+                                            <code>{{ key }}</code>=
+                                            {% if value is iterable %}
+                                                <span>[{{ value|length }}]</span>
+                                            {% else %}
+                                                <span>{{ value }}</span>
+                                            {% endif %}
+                                            {% if not loop.last and loop.index < 6 %} · {% endif %}
+                                        {% endif %}
+                                    {% endfor %}
+                                    {% if log.context|length > 6 %} · …{% endif %}
+                                </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                {% endfor %}
+            </div>
+        </div>
+
+        <script>
+            document.getElementById('syncLogsSearch')?.addEventListener('input', function(e) {
+                const searchTerm = e.target.value.toLowerCase();
+                const rows = document.querySelectorAll('#syncLogsTableBody .log-line');
+                let visibleCount = 0;
+
+                rows.forEach(row => {
+                    const text = row.textContent.toLowerCase();
+                    const isVisible = text.includes(searchTerm);
+                    row.style.display = isVisible ? '' : 'none';
+
+                    if (isVisible) {
+                        visibleCount++;
+                    }
+                });
+
+                document.getElementById('syncLogsCount').textContent = visibleCount;
+            });
+        </script>
+    {% endif %}
+</div>

@@ -34,17 +34,14 @@ class ErpCompanyExportService
             }
 
             try {
-                $payload = $this->buildErpPayload($company);
+                $result = $this->exportCompany($company);
 
-                if ($payload === null) {
+                if (($result['skipped'] ?? false) === true) {
                     ++$skipped;
                     continue;
                 }
 
-                $payloads[] = $payload;
-
-                $result = $this->sendToErpApi($payload);
-
+                $payloads[] = $result['payload'];
                 ++$sent;
 
                 if (($result['action'] ?? null) === 'create') {
@@ -52,13 +49,6 @@ class ErpCompanyExportService
                 } elseif (($result['action'] ?? null) === 'update') {
                     ++$updated;
                 }
-
-                $this->logger->info('ERP company sent', [
-                    'companyHubspotId' => $company->getHubspotId(),
-                    'companyName' => $company->getName(),
-                    'action' => $result['action'] ?? null,
-                    'reference' => $payload['reference'] ?? null,
-                ]);
             } catch (\Throwable $e) {
                 $error = [
                     'companyHubspotId' => $company->getHubspotId(),
@@ -80,6 +70,11 @@ class ErpCompanyExportService
             'errors' => $errors,
             'payloads' => $payloads,
         ];
+    }
+
+    public function sendCompanyToErp(HubspotCompany $company): array
+    {
+        return $this->exportCompany($company);
     }
 
     private function buildErpPayload(HubspotCompany $company): ?array
@@ -116,6 +111,38 @@ class ErpCompanyExportService
         ];
 
         return $this->removeNulls($payload);
+    }
+
+    private function exportCompany(HubspotCompany $company): array
+    {
+        $payload = $this->buildErpPayload($company);
+
+        if ($payload === null) {
+            return [
+                'skipped' => true,
+                'companyHubspotId' => $company->getHubspotId(),
+                'companyName' => $company->getName(),
+            ];
+        }
+
+        $result = $this->sendToErpApi($payload);
+
+        $this->logger->info('ERP company sent', [
+            'companyHubspotId' => $company->getHubspotId(),
+            'companyName' => $company->getName(),
+            'action' => $result['action'] ?? null,
+            'reference' => $payload['reference'] ?? null,
+        ]);
+
+        return [
+            'skipped' => false,
+            'action' => $result['action'] ?? null,
+            'payload' => $payload,
+            'response' => $result['response'] ?? null,
+            'reference' => $payload['reference'] ?? null,
+            'companyHubspotId' => $company->getHubspotId(),
+            'companyName' => $company->getName(),
+        ];
     }
 
     private function sendToErpApi(array $payload): array

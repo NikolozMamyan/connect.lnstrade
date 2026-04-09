@@ -588,7 +588,7 @@
     </div>
 </div>
 {% endif %}
-
+  {% include 'partials/flux_tabs.html.twig' with { flux: 'client' } %}
 <!-- Companies Table -->
 {% if companies is empty %}
     <div class="sync-empty-state">

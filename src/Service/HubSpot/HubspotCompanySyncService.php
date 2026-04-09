@@ -170,6 +170,83 @@ class HubspotCompanySyncService
         ];
     }
 
+    public function syncCompanyById(string $companyId): array
+    {
+        $companyId = trim($companyId);
+
+        if ($companyId === '') {
+            throw new \InvalidArgumentException('HubSpot company id is required.');
+        }
+
+        $companyData = $this->hubSpotClient->getObject('companies', $companyId, [
+            'properties' => self::COMPANY_PROPERTIES,
+            'associations' => ['contacts'],
+        ]);
+
+        $companyProperties = $companyData['properties'] ?? [];
+
+        if (mb_strtolower((string) ($companyProperties['sage_integration'] ?? '')) !== 'yes') {
+            return [
+                'savedCompanies' => 0,
+                'savedContacts' => 0,
+                'savedRelations' => 0,
+                'skipped' => true,
+            ];
+        }
+
+        $savedCompanies = 0;
+        $savedContacts = 0;
+        $savedRelations = 0;
+        $managedCompanies = [];
+        $managedContacts = [];
+        $managedRelations = [];
+        $hydratedContactIds = [];
+
+        $company = $this->getOrCreateCompany($companyId, $companyProperties, $managedCompanies, $savedCompanies);
+        $this->hydrateCompany($company, $companyData);
+        $this->entityManager->persist($company);
+
+        foreach ($this->extractAssociatedContacts($companyData) as $associationRow) {
+            $contactId = $associationRow['id'];
+            $associationType = $associationRow['type'];
+
+            if ($contactId === '' || $associationType === '') {
+                continue;
+            }
+
+            $contact = $this->getOrCreateContact($contactId, $managedContacts, $savedContacts);
+
+            if (!isset($hydratedContactIds[$contactId])) {
+                $contactData = $this->hubSpotClient->getObject('contacts', $contactId, [
+                    'properties' => self::CONTACT_PROPERTIES,
+                ]);
+
+                $this->hydrateContact($contact, $contactData);
+                $this->entityManager->persist($contact);
+                $hydratedContactIds[$contactId] = true;
+            }
+
+            $this->createRelationIfNeeded(
+                $company,
+                $contact,
+                $associationType,
+                $associationRow,
+                $managedRelations,
+                $savedRelations
+            );
+        }
+
+        $this->entityManager->flush();
+
+        return [
+            'savedCompanies' => $savedCompanies,
+            'savedContacts' => $savedContacts,
+            'savedRelations' => $savedRelations,
+            'companyHubspotId' => $companyId,
+            'skipped' => false,
+        ];
+    }
+
     /**
      * @param array<string, mixed> $companyProperties
      * @param array<string, HubspotCompany> $managedCompanies
