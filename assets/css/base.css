@@ -26,7 +26,6 @@ body {
     color: var(--text-primary);
     min-height: 100vh;
     display: flex;
-    overflow: hidden;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
 }

@@ -101,6 +101,11 @@ final class DashboardController extends AbstractController
             ],
         ]);
     }
+    #[Route('/', name: 'app_index')]
+    public function appIndex(): Response 
+    {
+        return $this->redirectToRoute('app_login');
+    }
 
     private function buildFluxStatusCard(string $fluxKey, string $label, SyncLogRepository $syncLogRepository): array
     {
