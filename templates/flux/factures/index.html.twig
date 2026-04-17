@@ -1,0 +1,212 @@
+{% extends 'layout/app.html.twig' %}
+
+{% block page_title %}Flux Factures{% endblock %}
+{% block page_subtitle %}Exploration en lecture directe des factures retournees par Sage.{% endblock %}
+
+{% block content %}
+    <style>
+        .invoice-filters {
+            display: flex;
+            gap: var(--space-4);
+            flex-wrap: wrap;
+            align-items: center;
+        }
+
+        .invoice-field {
+            flex: 1;
+            min-width: 260px;
+            position: relative;
+        }
+
+        .invoice-field i {
+            position: absolute;
+            left: var(--space-4);
+            top: 50%;
+            transform: translateY(-50%);
+            color: var(--text-muted);
+        }
+
+        .invoice-field input {
+            width: 100%;
+            box-sizing: border-box;
+            padding: var(--space-3) var(--space-4) var(--space-3) var(--space-10);
+            border: var(--border-width) solid var(--border-color);
+            border-radius: var(--border-radius-md);
+            background: var(--bg-surface);
+        }
+    </style>
+
+    <div class="flux-header">
+        <span class="flux-direction-badge flux-direction-badge--sage-hs">Sage → Extranet</span>
+        {% if not synced %}
+            <span class="sync-status sync-status--pending">Rafraichissement en arriere-plan</span>
+        {% endif %}
+    </div>
+
+    {% if latestInvoiceLogs is not empty %}
+        {% set latestLog = latestInvoiceLogs[0] %}
+        <div class="flux-info-banner {{ latestLog.level == 'error' ? 'flux-info-banner--warning' : 'flux-info-banner--note' }}">
+            <strong style="margin-right: 6px;">Dernier evenement facture:</strong>
+            <span>[{{ latestLog.level|upper }}]</span>
+            <span>{{ latestLog.title }}</span>
+            {% if latestLog.message %}
+                <span>• {{ latestLog.message }}</span>
+            {% endif %}
+        </div>
+    {% endif %}
+
+    <div class="card" style="margin-bottom: var(--space-6);">
+        <div class="card-body">
+            <form method="get" class="invoice-filters">
+                <div class="invoice-field">
+                    <i class="fas fa-search"></i>
+                    <input type="text" name="q" value="{{ filters.q }}" placeholder="Rechercher un numero de facture ou un clientId">
+                </div>
+                <div class="invoice-field">
+                    <i class="fas fa-building"></i>
+                    <input type="text" name="clientId" value="{{ filters.clientId }}" placeholder="Filtrer par clientId">
+                </div>
+                <div class="invoice-field">
+                    <i class="fas fa-folder-tree"></i>
+                    <select name="type" style="width: 100%; box-sizing: border-box; padding: var(--space-3) var(--space-4) var(--space-3) var(--space-10); border: var(--border-width) solid var(--border-color); border-radius: var(--border-radius-md); background: var(--bg-surface);">
+                        <option value="" {{ filters.type == '' ? 'selected' : '' }}>Tous les types</option>
+                        <option value="facture" {{ filters.type == 'facture' ? 'selected' : '' }}>Factures</option>
+                        <option value="avoir" {{ filters.type == 'avoir' ? 'selected' : '' }}>Avoirs</option>
+                    </select>
+                </div>
+                <button type="submit" class="btn btn-primary btn-md">
+                    <i class="fas fa-filter"></i>
+                    Filtrer
+                </button>
+                <a href="{{ path('flux_factures_index') }}" class="btn btn-secondary btn-md">
+                    <i class="fas fa-rotate"></i>
+                    Relancer la sync
+                </a>
+            </form>
+        </div>
+    </div>
+
+    <div class="stats-grid" style="margin-bottom: var(--space-6);">
+        <article class="stat-card">
+            <div class="stat-header">
+                <span class="stat-label">Factures trouvees</span>
+                <div class="stat-icon accent"><i class="fas fa-file-invoice"></i></div>
+            </div>
+            <div class="stat-value">{{ total }}</div>
+        </article>
+        <article class="stat-card">
+            <div class="stat-header">
+                <span class="stat-label">Page courante</span>
+                <div class="stat-icon blue"><i class="fas fa-list-ol"></i></div>
+            </div>
+            <div class="stat-value">{{ page }}</div>
+        </article>
+        <article class="stat-card">
+            <div class="stat-header">
+                <span class="stat-label">Par page</span>
+                <div class="stat-icon orange"><i class="fas fa-table"></i></div>
+            </div>
+            <div class="stat-value">{{ perPage }}</div>
+        </article>
+        <article class="stat-card">
+            <div class="stat-header">
+                <span class="stat-label">Total pages</span>
+                <div class="stat-icon green"><i class="fas fa-copy"></i></div>
+            </div>
+            <div class="stat-value">{{ totalPages }}</div>
+        </article>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <span class="card-title">Factures Sage</span>
+            <span class="tag tag-info">{{ total }} resultat(s)</span>
+        </div>
+        <div class="card-body" style="padding: 0;">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Numero</th>
+                        <th>Type</th>
+                        <th>Client</th>
+                        <th>Lignes</th>
+                        <th>Quantite totale</th>
+                        <th>Montant total</th>
+                        <th>Derniere sync</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for invoice in invoices %}
+                        <tr>
+                            <td class="client-name">{{ invoice.numero_facture }}</td>
+                            <td>
+                                <span class="tag {{ invoice.document_type == 'Avoir' ? 'tag-warning' : 'tag-success' }}">
+                                    {{ invoice.document_type }}
+                                </span>
+                            </td>
+                            <td>{{ invoice.clientid }}</td>
+                            <td>{{ invoice.line_count }}</td>
+                            <td>{{ invoice.quantity_total|number_format(0, ',', ' ') }}</td>
+                            <td class="amount-cell">{{ invoice.amount_total|number_format(2, ',', ' ') }} €</td>
+                            <td class="date-cell">{{ invoice.last_synced_at ? invoice.last_synced_at|date('d/m/Y H:i') : 'Jamais' }}</td>
+                            <td>
+                                <a href="{{ path('flux_factures_show', { invoiceNumber: invoice.numero_facture }) }}" class="btn btn-secondary btn-sm">
+                                    Voir
+                                </a>
+                            </td>
+                        </tr>
+                    {% else %}
+                        <tr>
+                            <td colspan="7">Aucune facture ne correspond aux filtres courants.</td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% if totalPages > 1 %}
+            <div class="card-footer" style="display:flex;justify-content:space-between;align-items:center;gap:var(--space-4);flex-wrap:wrap;">
+                <span>Page {{ page }} / {{ totalPages }}</span>
+                <div style="display:flex;gap:var(--space-2);">
+                    {% if page > 1 %}
+                        <a class="btn btn-secondary btn-sm" href="{{ path('flux_factures_index', { page: page - 1, q: filters.q, clientId: filters.clientId, type: filters.type, synced: synced ? 1 : 0 }) }}">Precedent</a>
+                    {% endif %}
+                    {% if page < totalPages %}
+                        <a class="btn btn-secondary btn-sm" href="{{ path('flux_factures_index', { page: page + 1, q: filters.q, clientId: filters.clientId, type: filters.type, synced: synced ? 1 : 0 }) }}">Suivant</a>
+                    {% endif %}
+                </div>
+            </div>
+        {% endif %}
+    </div>
+
+    {% if watchSince %}
+        <script>
+            (() => {
+                const since = {{ watchSince|json_encode|raw }};
+                const pollUrl = {{ path('flux_factures_sync_status', { since: 'PLACEHOLDER' })|json_encode|raw }};
+                const currentUrl = new URL(window.location.href);
+
+                const interval = window.setInterval(async () => {
+                    try {
+                        const response = await fetch(pollUrl.replace('PLACEHOLDER', encodeURIComponent(since)), {
+                            headers: { 'X-Requested-With': 'XMLHttpRequest' }
+                        });
+
+                        if (!response.ok) {
+                            return;
+                        }
+
+                        const data = await response.json();
+
+                        if (data.completed) {
+                            window.clearInterval(interval);
+                            currentUrl.searchParams.set('synced', '1');
+                            window.location.href = currentUrl.toString();
+                        }
+                    } catch (e) {
+                    }
+                }, 4000);
+            })();
+        </script>
+    {% endif %}
+{% endblock %}

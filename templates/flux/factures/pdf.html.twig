@@ -1,0 +1,418 @@
+{% extends 'layout/app.html.twig' %}
+
+{% block page_title %}PDF facture {{ invoice.numero_facture }}{% endblock %}
+{% block page_subtitle %}Aperçu du modèle PDF construit uniquement avec les champs actuellement disponibles.{% endblock %}
+
+{% block page_actions %}
+    <a href="{{ path('flux_factures_show', { invoiceNumber: invoice.numero_facture }) }}" class="btn btn-secondary btn-md">
+        <i class="fas fa-arrow-left"></i>
+        Retour au detail
+    </a>
+    <a href="{{ path('flux_factures_pdf_download', { invoiceNumber: invoice.numero_facture }) }}" class="btn btn-primary btn-md">
+        <i class="fas fa-download"></i>
+        Telecharger le PDF
+    </a>
+{% endblock %}
+
+{% block content %}
+    <style>
+        .pdf-preview-shell {
+            display: grid;
+            gap: var(--space-6);
+        }
+
+        .pdf-preview-note {
+            margin-bottom: 0;
+        }
+
+        .pdf-preview-layout {
+            display: grid;
+            grid-template-columns: minmax(0, 1.35fr) 360px;
+            gap: var(--space-4);
+        }
+
+        .pdf-preview {
+            background: #fff;
+            border: 1px solid var(--border-color);
+            border-radius: 22px;
+            box-shadow: var(--shadow-md);
+            padding: 34px 34px 28px;
+        }
+
+        .pdf-preview__header {
+            display: grid;
+            grid-template-columns: 1fr 310px;
+            gap: 24px;
+            margin-bottom: 26px;
+        }
+
+        .pdf-brand {
+            display: grid;
+            gap: 18px;
+        }
+
+        .pdf-brand__logo {
+            font-size: 44px;
+            font-weight: 900;
+            line-height: 0.95;
+            letter-spacing: -0.06em;
+            color: #000;
+            text-transform: uppercase;
+        }
+
+        .pdf-brand__sub {
+            font-size: 18px;
+            font-weight: 700;
+            color: #111827;
+        }
+
+        .pdf-company-block,
+        .pdf-address-box,
+        .pdf-summary-box,
+        .pdf-footer-box {
+            border: 1px solid #1f2937;
+            padding: 14px 16px;
+            background: #fff;
+        }
+
+        .pdf-address-box + .pdf-address-box,
+        .pdf-summary-box + .pdf-summary-box {
+            margin-top: 10px;
+        }
+
+        .pdf-doc-title {
+            margin-bottom: 16px;
+            text-align: left;
+        }
+
+        .pdf-doc-title h2 {
+            margin: 0;
+            font-size: 18px;
+            font-weight: 800;
+            color: #000;
+            text-transform: uppercase;
+        }
+
+        .pdf-doc-title span {
+            display: block;
+            margin-top: 4px;
+            color: #111827;
+            font-size: 14px;
+        }
+
+        .pdf-meta {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+
+        .pdf-meta-list,
+        .pdf-company-block,
+        .pdf-address-box,
+        .pdf-footer-box {
+            font-size: 13px;
+            line-height: 1.5;
+            color: #111827;
+        }
+
+        .pdf-meta-list dl {
+            margin: 0;
+        }
+
+        .pdf-meta-list__row {
+            display: grid;
+            grid-template-columns: 140px 1fr;
+            gap: 10px;
+            margin-bottom: 4px;
+        }
+
+        .pdf-meta-list dt {
+            font-weight: 700;
+        }
+
+        .pdf-placeholder {
+            color: #9ca3af;
+            font-style: italic;
+        }
+
+        .pdf-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 20px;
+            font-size: 12px;
+            color: #111827;
+        }
+
+        .pdf-table th,
+        .pdf-table td {
+            border: 1px solid #374151;
+            padding: 8px 7px;
+            vertical-align: top;
+        }
+
+        .pdf-table th {
+            font-size: 11px;
+            font-weight: 800;
+            text-transform: uppercase;
+            color: #000;
+            background: #f8fafc;
+        }
+
+        .pdf-table td strong {
+            color: #000;
+        }
+
+        .pdf-table__muted {
+            display: block;
+            margin-top: 4px;
+            color: #9ca3af;
+            font-style: italic;
+        }
+
+        .pdf-bottom {
+            display: grid;
+            grid-template-columns: 1.2fr 0.9fr;
+            gap: 18px;
+        }
+
+        .pdf-totals-row {
+            display: flex;
+            justify-content: space-between;
+            gap: 12px;
+            margin-bottom: 8px;
+            font-size: 13px;
+        }
+
+        .pdf-totals-row strong {
+            color: #000;
+        }
+
+        .pdf-totals-row--grand {
+            margin-top: 10px;
+            padding-top: 10px;
+            border-top: 1px solid #111827;
+            font-size: 15px;
+            font-weight: 800;
+        }
+
+        .pdf-legal {
+            margin-top: 16px;
+            border: 1px solid #374151;
+            padding: 10px 12px;
+            text-align: center;
+            font-size: 11px;
+            color: #374151;
+        }
+
+        .pdf-side-panel {
+            display: grid;
+            gap: var(--space-4);
+        }
+
+        .pdf-checklist {
+            display: grid;
+            gap: 10px;
+        }
+
+        .pdf-checklist__item {
+            display: flex;
+            gap: 10px;
+            align-items: flex-start;
+            font-size: 13px;
+            color: var(--text-secondary);
+        }
+
+        .pdf-checklist__item strong {
+            color: var(--text-primary);
+        }
+
+        .pdf-checklist__dot {
+            width: 8px;
+            height: 8px;
+            min-width: 8px;
+            margin-top: 5px;
+            border-radius: 50%;
+            background: var(--color-warning);
+        }
+
+        @media (max-width: 1180px) {
+            .pdf-preview-layout,
+            .pdf-preview__header,
+            .pdf-meta,
+            .pdf-bottom {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+
+    <div class="pdf-preview-shell">
+        <div class="flux-info-banner flux-info-banner--note pdf-preview-note">
+            Cet aperçu respecte au mieux ton template avec les champs déjà disponibles. Les zones grisées ou marquées “à enrichir API” correspondent aux données encore absentes côté Sage.
+        </div>
+
+        <div class="pdf-preview-layout">
+            <div class="pdf-preview">
+                <div class="pdf-preview__header">
+                    <div class="pdf-brand">
+                        <div>
+                            <div class="pdf-brand__logo">ULTRAPOP</div>
+                            <div class="pdf-brand__sub">By Lnstrade.</div>
+                        </div>
+
+                        <div class="pdf-company-block">
+                            <strong>LNSTR ADE</strong><br>
+                            <span class="pdf-placeholder">Informations société emettrice à enrichir API / config</span>
+                        </div>
+                    </div>
+
+                    <div>
+                        <div class="pdf-doc-title">
+                            <h2>Invoice</h2>
+                            <span>N° {{ invoice.numero_facture }}</span>
+                        </div>
+
+                        <div class="pdf-address-box">
+                            <strong>Billing address :</strong><br>
+                            <strong class="pdf-placeholder">Nom client à enrichir API</strong><br>
+                            <span class="pdf-placeholder">Adresse de facturation à enrichir API</span><br>
+                            <span>Client code : {{ invoice.clientid }}</span><br>
+                            <span class="pdf-placeholder">N° TVA : à enrichir API</span>
+                        </div>
+
+                        <div class="pdf-address-box">
+                            <strong>Delivery address :</strong><br>
+                            <strong class="pdf-placeholder">Nom livraison à enrichir API</strong><br>
+                            <span class="pdf-placeholder">Adresse de livraison à enrichir API</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="pdf-meta">
+                    <div class="pdf-meta-list">
+                        <dl>
+                            <div class="pdf-meta-list__row"><dt>Date :</dt><dd class="pdf-placeholder">à enrichir API</dd></div>
+                            <div class="pdf-meta-list__row"><dt>Order N° :</dt><dd class="pdf-placeholder">à enrichir API</dd></div>
+                            <div class="pdf-meta-list__row"><dt>Sales representative :</dt><dd class="pdf-placeholder">à enrichir API</dd></div>
+                            <div class="pdf-meta-list__row"><dt>Nature of operations :</dt><dd class="pdf-placeholder">à enrichir API</dd></div>
+                            <div class="pdf-meta-list__row"><dt>Incoterm :</dt><dd class="pdf-placeholder">à enrichir API</dd></div>
+                            <div class="pdf-meta-list__row"><dt>Client code :</dt><dd>{{ invoice.clientid }}</dd></div>
+                        </dl>
+                    </div>
+
+                    <div class="pdf-summary-box">
+                        <div class="pdf-meta-list__row"><dt>Lignes :</dt><dd>{{ invoice.line_count }}</dd></div>
+                        <div class="pdf-meta-list__row"><dt>Qté totale :</dt><dd>{{ invoice.quantity_total|number_format(0, ',', ' ') }}</dd></div>
+                        <div class="pdf-meta-list__row"><dt>Montant :</dt><dd>{{ invoice.amount_total|number_format(2, ',', ' ') }} €</dd></div>
+                        <div class="pdf-meta-list__row"><dt>Sync :</dt><dd>{{ invoice.last_synced_at ? invoice.last_synced_at|date('d/m/Y H:i') : 'N/A' }}</dd></div>
+                    </div>
+                </div>
+
+                <table class="pdf-table">
+                    <thead>
+                        <tr>
+                            <th>Line</th>
+                            <th>Product ref</th>
+                            <th>Description</th>
+                            <th>Unit price</th>
+                            <th>Qty</th>
+                            <th>Disc.</th>
+                            <th>Amount Ext</th>
+                            <th>*</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for line in lines %}
+                            <tr>
+                                <td>{{ loop.index }}</td>
+                                <td><strong>{{ line.reference }}</strong></td>
+                                <td>
+                                    <strong>{{ line.intitule }}</strong>
+                                    <span class="pdf-table__muted">EAN / Lot à enrichir API</span>
+                                </td>
+                                <td>{{ line.prix_unitaire|number_format(3, ',', ' ') }}</td>
+                                <td>{{ line.quantite|number_format(0, ',', ' ') }}</td>
+                                <td class="pdf-placeholder">N/A</td>
+                                <td>{{ line.total|number_format(2, ',', ' ') }}</td>
+                                <td class="pdf-placeholder">N/A</td>
+                            </tr>
+                        {% else %}
+                            <tr>
+                                <td colspan="8" class="pdf-placeholder">Aucune ligne facture disponible.</td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+
+                <div class="pdf-bottom">
+                    <div class="pdf-footer-box">
+                        <div><strong>Payment method :</strong> <span class="pdf-placeholder">à enrichir API</span></div>
+                        <div><strong>Due date :</strong> <span class="pdf-placeholder">à enrichir API</span></div>
+                        <div><strong>Banque :</strong> <span class="pdf-placeholder">config société</span></div>
+                        <div><strong>IBAN :</strong> <span class="pdf-placeholder">config société</span></div>
+                        <div><strong>BIC :</strong> <span class="pdf-placeholder">config société</span></div>
+                    </div>
+
+                    <div>
+                        <div class="pdf-footer-box" style="margin-bottom: 10px;">
+                            <strong>Comments :</strong><br>
+                            <span class="pdf-placeholder">Commentaires à enrichir API</span>
+                        </div>
+
+                        <div class="pdf-footer-box">
+                            <div class="pdf-totals-row"><span>Shipping costs</span><strong class="pdf-placeholder">N/A</strong></div>
+                            <div class="pdf-totals-row"><span>Amount Ext</span><strong>{{ invoice.amount_total|number_format(2, ',', ' ') }} €</strong></div>
+                            <div class="pdf-totals-row"><span>Total discount</span><strong class="pdf-placeholder">N/A</strong></div>
+                            <div class="pdf-totals-row"><span>Amount</span><strong>{{ invoice.amount_total|number_format(2, ',', ' ') }} €</strong></div>
+                            <div class="pdf-totals-row"><span>Acompte</span><strong class="pdf-placeholder">N/A</strong></div>
+                            <div class="pdf-totals-row pdf-totals-row--grand"><span>Total</span><strong>{{ invoice.amount_total|number_format(2, ',', ' ') }} €</strong></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="pdf-legal">
+                    Mentions legales, penalites de retard, informations societes, bio certification, telephone, email et site web : <span class="pdf-placeholder">à enrichir via configuration / API</span>
+                </div>
+            </div>
+
+            <aside class="pdf-side-panel">
+                <div class="card">
+                    <div class="card-header">
+                        <span class="card-title">Champs déjà utilisables</span>
+                        <span class="tag tag-success">{{ pdfAudit.availableFields|length }}</span>
+                    </div>
+                    <div class="card-body">
+                        <div class="activity-list">
+                            {% for field in pdfAudit.availableFields %}
+                                <div class="activity-item">
+                                    <div class="activity-dot green"></div>
+                                    <div class="activity-text">
+                                        <strong>{{ field.label }}</strong>
+                                        <div>{{ field.value }}</div>
+                                    </div>
+                                </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-header">
+                        <span class="card-title">Champs encore manquants</span>
+                        <span class="tag tag-warning">{{ pdfAudit.missingFields|length }}</span>
+                    </div>
+                    <div class="card-body">
+                        <div class="pdf-checklist">
+                            {% for field in pdfAudit.missingFields %}
+                                <div class="pdf-checklist__item">
+                                    <span class="pdf-checklist__dot"></span>
+                                    <div><strong>{{ field }}</strong></div>
+                                </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+            </aside>
+        </div>
+    </div>
+{% endblock %}

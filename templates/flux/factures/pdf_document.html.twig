@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>Invoice {{ invoice.numero_facture }}</title>
+    <style>
+        body {
+            font-family: DejaVu Sans, sans-serif;
+            color: #111111;
+            font-size: 12px;
+            margin: 0;
+            padding: 18px 20px;
+        }
+
+        .header {
+            width: 100%;
+            margin-bottom: 18px;
+        }
+
+        .header-left,
+        .header-right {
+            vertical-align: top;
+        }
+
+        .header-left {
+            width: 54%;
+        }
+
+        .header-right {
+            width: 46%;
+        }
+
+        .logo {
+            font-size: 42px;
+            font-weight: 900;
+            line-height: 0.95;
+            letter-spacing: -1px;
+            margin-bottom: 4px;
+        }
+
+        .sublogo {
+            font-size: 16px;
+            font-weight: 700;
+            margin-bottom: 26px;
+        }
+
+        .title {
+            font-size: 22px;
+            font-weight: 800;
+            text-transform: uppercase;
+            margin-bottom: 8px;
+        }
+
+        .address-box {
+            border: 1px solid #222;
+            padding: 10px 12px;
+            margin-top: 10px;
+        }
+
+        .label {
+            font-weight: 700;
+        }
+
+        .muted {
+            color: #777;
+            font-style: italic;
+        }
+
+        .meta {
+            width: 100%;
+            margin-bottom: 14px;
+        }
+
+        .meta td {
+            vertical-align: top;
+            padding-right: 18px;
+        }
+
+        .meta-row {
+            margin-bottom: 4px;
+        }
+
+        .lines {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 8px;
+        }
+
+        .lines th,
+        .lines td {
+            border: 1px solid #222;
+            padding: 6px 5px;
+            vertical-align: top;
+        }
+
+        .lines th {
+            font-size: 10px;
+            text-transform: uppercase;
+            font-weight: 800;
+            background: #f4f4f4;
+        }
+
+        .desc-title {
+            font-weight: 700;
+            margin-bottom: 2px;
+        }
+
+        .bottom {
+            width: 100%;
+            margin-top: 20px;
+        }
+
+        .bottom-left,
+        .bottom-right {
+            vertical-align: top;
+        }
+
+        .bottom-left {
+            width: 57%;
+            padding-right: 10px;
+        }
+
+        .bottom-right {
+            width: 43%;
+        }
+
+        .comment-box,
+        .totals-box,
+        .payment-box {
+            border: 1px solid #222;
+            padding: 10px 12px;
+            margin-bottom: 10px;
+        }
+
+        .totals-row {
+            width: 100%;
+            margin-bottom: 5px;
+        }
+
+        .totals-row td:last-child {
+            text-align: right;
+            font-weight: 700;
+        }
+
+        .total-final {
+            border-top: 1px solid #222;
+            margin-top: 6px;
+            padding-top: 6px;
+            font-size: 16px;
+            font-weight: 800;
+        }
+
+        .legal {
+            border: 1px solid #222;
+            text-align: center;
+            font-size: 10px;
+            padding: 8px 10px;
+            margin-top: 12px;
+        }
+    </style>
+</head>
+<body>
+    <table class="header">
+        <tr>
+            <td class="header-left">
+                <div class="logo">ULTRAPOP</div>
+                <div class="sublogo">By Lnstrade.</div>
+
+                <div>
+                    <div class="label">LNSTRADE</div>
+                    <div class="muted">Informations société à enrichir API / config</div>
+                </div>
+            </td>
+            <td class="header-right">
+                <div class="title">Invoice</div>
+                <div>N° {{ invoice.numero_facture }}</div>
+
+                <div class="address-box">
+                    <div class="label">Billing address :</div>
+                    <div class="muted">Nom et adresse de facturation à enrichir API</div>
+                    <div>Client code : {{ invoice.clientid }}</div>
+                    <div class="muted">N° TVA : à enrichir API</div>
+                </div>
+
+                <div class="address-box">
+                    <div class="label">Delivery address :</div>
+                    <div class="muted">Adresse de livraison à enrichir API</div>
+                </div>
+            </td>
+        </tr>
+    </table>
+
+    <table class="meta">
+        <tr>
+            <td>
+                <div class="meta-row"><span class="label">Date :</span> <span class="muted">à enrichir API</span></div>
+                <div class="meta-row"><span class="label">Order N° :</span> <span class="muted">à enrichir API</span></div>
+                <div class="meta-row"><span class="label">Sales representative :</span> <span class="muted">à enrichir API</span></div>
+                <div class="meta-row"><span class="label">Nature of operations :</span> <span class="muted">à enrichir API</span></div>
+                <div class="meta-row"><span class="label">Incoterm :</span> <span class="muted">à enrichir API</span></div>
+                <div class="meta-row"><span class="label">Client code :</span> {{ invoice.clientid }}</div>
+            </td>
+            <td>
+                <div class="meta-row"><span class="label">Lignes :</span> {{ invoice.line_count }}</div>
+                <div class="meta-row"><span class="label">Qté totale :</span> {{ invoice.quantity_total|number_format(0, ',', ' ') }}</div>
+                <div class="meta-row"><span class="label">Montant :</span> {{ invoice.amount_total|number_format(2, ',', ' ') }} €</div>
+                <div class="meta-row"><span class="label">Sync :</span> {{ invoice.last_synced_at ? invoice.last_synced_at|date('d/m/Y H:i') : 'N/A' }}</div>
+            </td>
+        </tr>
+    </table>
+
+    <table class="lines">
+        <thead>
+            <tr>
+                <th style="width: 7%;">Line</th>
+                <th style="width: 12%;">Product ref</th>
+                <th style="width: 39%;">Description</th>
+                <th style="width: 11%;">Unit price</th>
+                <th style="width: 8%;">Qty</th>
+                <th style="width: 8%;">Disc.</th>
+                <th style="width: 10%;">Amount Ext</th>
+                <th style="width: 5%;">*</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for line in lines %}
+                <tr>
+                    <td>{{ loop.index }}</td>
+                    <td><strong>{{ line.reference }}</strong></td>
+                    <td>
+                        <div class="desc-title">{{ line.intitule }}</div>
+                        <div class="muted">EAN / Lot à enrichir API</div>
+                    </td>
+                    <td>{{ line.prix_unitaire|number_format(3, ',', ' ') }}</td>
+                    <td>{{ line.quantite|number_format(0, ',', ' ') }}</td>
+                    <td class="muted">N/A</td>
+                    <td>{{ line.total|number_format(2, ',', ' ') }}</td>
+                    <td class="muted">N/A</td>
+                </tr>
+            {% else %}
+                <tr>
+                    <td colspan="8" class="muted">Aucune ligne facture disponible.</td>
+                </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    <table class="bottom">
+        <tr>
+            <td class="bottom-left">
+                <div class="payment-box">
+                    <div><span class="label">Payment method :</span> <span class="muted">à enrichir API</span></div>
+                    <div><span class="label">Due date :</span> <span class="muted">à enrichir API</span></div>
+                    <div><span class="label">Banque :</span> <span class="muted">config société</span></div>
+                    <div><span class="label">IBAN :</span> <span class="muted">config société</span></div>
+                    <div><span class="label">BIC :</span> <span class="muted">config société</span></div>
+                </div>
+            </td>
+            <td class="bottom-right">
+                <div class="comment-box">
+                    <div class="label">Comments :</div>
+                    <div class="muted">Commentaires à enrichir API</div>
+                </div>
+
+                <div class="totals-box">
+                    <table class="totals-row">
+                        <tr><td>Shipping costs</td><td class="muted">N/A</td></tr>
+                    </table>
+                    <table class="totals-row">
+                        <tr><td>Amount Ext</td><td>{{ invoice.amount_total|number_format(2, ',', ' ') }} €</td></tr>
+                    </table>
+                    <table class="totals-row">
+                        <tr><td>Total discount</td><td class="muted">N/A</td></tr>
+                    </table>
+                    <table class="totals-row">
+                        <tr><td>Amount</td><td>{{ invoice.amount_total|number_format(2, ',', ' ') }} €</td></tr>
+                    </table>
+                    <table class="totals-row">
+                        <tr><td>Acompte</td><td class="muted">N/A</td></tr>
+                    </table>
+                    <table class="totals-row total-final">
+                        <tr><td>Total</td><td>{{ invoice.amount_total|number_format(2, ',', ' ') }} €</td></tr>
+                    </table>
+                </div>
+            </td>
+        </tr>
+    </table>
+
+    <div class="legal">
+        Mentions legales, penalites de retard, informations societes, bio certification, telephone, email et site web :
+        <span class="muted">à enrichir via configuration / API</span>
+    </div>
+</body>
+</html>

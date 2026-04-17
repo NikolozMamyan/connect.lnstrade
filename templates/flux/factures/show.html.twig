@@ -1,0 +1,115 @@
+{% extends 'layout/app.html.twig' %}
+
+{% block page_title %}Facture {{ invoice.numero_facture }}{% endblock %}
+{% block page_subtitle %}Detail complet de la facture retournee par Sage pour le client {{ invoice.clientid }}.{% endblock %}
+
+{% block page_actions %}
+    <a href="{{ path('flux_factures_index', { clientId: invoice.clientid }) }}" class="btn btn-secondary btn-md">
+        <i class="fas fa-arrow-left"></i>
+        Retour a la liste
+    </a>
+    <a href="{{ path('flux_factures_pdf', { invoiceNumber: invoice.numero_facture }) }}" class="btn btn-primary btn-md">
+        <i class="fas fa-file-pdf"></i>
+        Gerer le PDF
+    </a>
+{% endblock %}
+
+{% block content %}
+    <div class="flux-header">
+        <span class="tag {{ invoice.document_type == 'Avoir' ? 'tag-warning' : 'tag-success' }}">
+            {{ invoice.document_type }}
+        </span>
+    </div>
+
+    <div class="stats-grid" style="margin-bottom: var(--space-6);">
+        <article class="stat-card">
+            <div class="stat-header">
+                <span class="stat-label">Numero</span>
+                <div class="stat-icon accent"><i class="fas fa-hashtag"></i></div>
+            </div>
+            <div class="stat-value" style="font-size: 24px;">{{ invoice.numero_facture }}</div>
+        </article>
+        <article class="stat-card">
+            <div class="stat-header">
+                <span class="stat-label">Client</span>
+                <div class="stat-icon blue"><i class="fas fa-building"></i></div>
+            </div>
+            <div class="stat-value" style="font-size: 24px;">{{ invoice.clientid }}</div>
+        </article>
+        <article class="stat-card">
+            <div class="stat-header">
+                <span class="stat-label">Lignes</span>
+                <div class="stat-icon orange"><i class="fas fa-list"></i></div>
+            </div>
+            <div class="stat-value">{{ invoice.line_count }}</div>
+        </article>
+        <article class="stat-card">
+            <div class="stat-header">
+                <span class="stat-label">Montant total</span>
+                <div class="stat-icon green"><i class="fas fa-euro-sign"></i></div>
+            </div>
+            <div class="stat-value" style="font-size: 24px;">{{ invoice.amount_total|number_format(2, ',', ' ') }}</div>
+        </article>
+    </div>
+
+    <div class="content-grid">
+        <div>
+            <div class="card">
+                <div class="card-header">
+                    <span class="card-title">Lignes de facture</span>
+                    <span class="tag tag-info">{{ lines|length }} ligne(s)</span>
+                </div>
+                <div class="card-body" style="padding: 0;">
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>Reference</th>
+                                <th>Intitule</th>
+                                <th>Quantite</th>
+                                <th>Prix unitaire</th>
+                                <th>Total</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for line in lines %}
+                                <tr>
+                                    <td class="client-name">{{ line.reference }}</td>
+                                    <td>{{ line.intitule }}</td>
+                                    <td>{{ line.quantite|number_format(0, ',', ' ') }}</td>
+                                    <td>{{ line.prix_unitaire|number_format(4, ',', ' ') }} €</td>
+                                    <td class="amount-cell">{{ line.total|number_format(2, ',', ' ') }} €</td>
+                                </tr>
+                            {% else %}
+                                <tr>
+                                    <td colspan="5">Aucune ligne disponible.</td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <aside>
+            <div class="card">
+                <div class="card-header">
+                    <span class="card-title">Etape suivante</span>
+                    <span class="tag tag-accent">API</span>
+                </div>
+                <div class="card-body">
+                    <div class="activity-list">
+                        {% for action in transformActions %}
+                            <div class="activity-item">
+                                <div class="activity-dot blue"></div>
+                                <div class="activity-text">
+                                    <strong>{{ action.label }}</strong>
+                                    <div>{{ action.endpoint }}</div>
+                                </div>
+                            </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        </aside>
+    </div>
+{% endblock %}
