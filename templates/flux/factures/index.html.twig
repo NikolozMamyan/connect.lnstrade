@@ -26,7 +26,8 @@
             color: var(--text-muted);
         }
 
-        .invoice-field input {
+        .invoice-field input,
+        .invoice-field select {
             width: 100%;
             box-sizing: border-box;
             padding: var(--space-3) var(--space-4) var(--space-3) var(--space-10);
@@ -34,12 +35,78 @@
             border-radius: var(--border-radius-md);
             background: var(--bg-surface);
         }
+
+        .invoice-sync-indicator {
+            display: inline-flex;
+            align-items: center;
+            gap: 9px;
+            padding: 7px 12px;
+            border-radius: var(--border-radius-full);
+            font-size: 12px;
+            font-weight: 600;
+            background: var(--color-warning-bg);
+            color: #9a3412;
+            border: 1px solid #fed7aa;
+        }
+
+        .invoice-sync-indicator--success {
+            background: var(--color-success-bg);
+            color: #166534;
+            border-color: #bbf7d0;
+        }
+
+        .invoice-sync-indicator__spinner,
+        .invoice-sync-indicator__check {
+            width: 14px;
+            height: 14px;
+            flex-shrink: 0;
+        }
+
+        .invoice-sync-indicator__spinner {
+            border: 2px solid rgba(249, 115, 22, 0.22);
+            border-top-color: var(--color-warning);
+            border-radius: 50%;
+            animation: invoice-spin 0.9s linear infinite;
+        }
+
+        .invoice-sync-indicator__check {
+            display: none;
+            align-items: center;
+            justify-content: center;
+            border-radius: 50%;
+            background: var(--color-success);
+            color: #fff;
+            font-size: 10px;
+            font-weight: 700;
+        }
+
+        .invoice-sync-indicator--success .invoice-sync-indicator__spinner {
+            display: none;
+        }
+
+        .invoice-sync-indicator--success .invoice-sync-indicator__check {
+            display: inline-flex;
+        }
+
+        @keyframes invoice-spin {
+            to { transform: rotate(360deg); }
+        }
     </style>
 
     <div class="flux-header">
-        <span class="flux-direction-badge flux-direction-badge--sage-hs">Sage → Extranet</span>
+        <span class="flux-direction-badge flux-direction-badge--sage-hs">Sage -> Extranet</span>
         {% if not synced %}
-            <span class="sync-status sync-status--pending">Rafraichissement en arriere-plan</span>
+            <span id="invoiceSyncIndicator" class="invoice-sync-indicator">
+                <span class="invoice-sync-indicator__spinner"></span>
+                <span class="invoice-sync-indicator__check">✓</span>
+                <span id="invoiceSyncIndicatorLabel">Rafraichissement en arriere-plan</span>
+            </span>
+        {% else %}
+            <span class="invoice-sync-indicator invoice-sync-indicator--success">
+                <span class="invoice-sync-indicator__spinner"></span>
+                <span class="invoice-sync-indicator__check">✓</span>
+                <span>Synchronisation terminee</span>
+            </span>
         {% endif %}
     </div>
 
@@ -68,7 +135,7 @@
                 </div>
                 <div class="invoice-field">
                     <i class="fas fa-folder-tree"></i>
-                    <select name="type" style="width: 100%; box-sizing: border-box; padding: var(--space-3) var(--space-4) var(--space-3) var(--space-10); border: var(--border-width) solid var(--border-color); border-radius: var(--border-radius-md); background: var(--bg-surface);">
+                    <select name="type">
                         <option value="" {{ filters.type == '' ? 'selected' : '' }}>Tous les types</option>
                         <option value="facture" {{ filters.type == 'facture' ? 'selected' : '' }}>Factures</option>
                         <option value="avoir" {{ filters.type == 'avoir' ? 'selected' : '' }}>Avoirs</option>
@@ -158,7 +225,7 @@
                         </tr>
                     {% else %}
                         <tr>
-                            <td colspan="7">Aucune facture ne correspond aux filtres courants.</td>
+                            <td colspan="8">Aucune facture ne correspond aux filtres courants.</td>
                         </tr>
                     {% endfor %}
                 </tbody>
@@ -200,8 +267,19 @@
 
                         if (data.completed) {
                             window.clearInterval(interval);
+
+                            const indicator = document.getElementById('invoiceSyncIndicator');
+                            const label = document.getElementById('invoiceSyncIndicatorLabel');
+
+                            if (indicator && label) {
+                                indicator.classList.add('invoice-sync-indicator--success');
+                                label.textContent = 'Synchronisation terminee';
+                            }
+
                             currentUrl.searchParams.set('synced', '1');
-                            window.location.href = currentUrl.toString();
+                            window.setTimeout(() => {
+                                window.location.href = currentUrl.toString();
+                            }, 900);
                         }
                     } catch (e) {
                     }
