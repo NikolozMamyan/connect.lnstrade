@@ -6,6 +6,7 @@ use App\Entity\Deal;
 use App\Entity\DealLineItem;
 use App\Entity\OrderForm;
 use App\Repository\OrderFormRepository;
+use App\Service\HubSpot\HubspotOrderFormDealSyncService;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Symfony\Component\HttpFoundation\File\UploadedFile;
@@ -17,6 +18,7 @@ class OrderFormSubmissionService
         private readonly EntityManagerInterface $entityManager,
         private readonly OrderFormRepository $orderFormRepository,
         private readonly OrderFormSpreadsheetParser $spreadsheetParser,
+        private readonly HubspotOrderFormDealSyncService $hubspotOrderFormDealSyncService,
         private readonly SluggerInterface $slugger,
         #[Autowire('%order_form_upload_dir%')]
         private readonly string $orderFormUploadDir,
@@ -58,14 +60,11 @@ class OrderFormSubmissionService
         $parseResult = $this->spreadsheetParser->parse($storedFilePath);
 
         if (($parseResult['success'] ?? false) !== true) {
-            $orderForm
-                ->setStatus(OrderForm::STATUS_FAILED)
-                ->setProcessedAt(new \DateTimeImmutable())
-                ->setProcessingErrors($parseResult['errors'] ?? [])
-                ->setRetryRows($parseResult['failedRows'] ?? []);
-
-            $this->entityManager->persist($orderForm);
-            $this->entityManager->flush();
+            $this->markOrderFormAsFailed(
+                $orderForm,
+                $parseResult['errors'] ?? [],
+                $parseResult['failedRows'] ?? [],
+            );
 
             return [
                 'success' => false,
@@ -75,7 +74,44 @@ class OrderFormSubmissionService
             ];
         }
 
-        $deal = $this->createDealFromOrderForm($orderForm, $parseResult['lineItems'] ?? []);
+        $lineItems = $parseResult['lineItems'] ?? [];
+        try {
+            $hubspotResult = $this->hubspotOrderFormDealSyncService->sync($orderForm, $lineItems);
+        } catch (\Throwable $exception) {
+            $hubspotErrors = [[
+                'field' => 'hubspot',
+                'message' => 'La synchronisation HubSpot a echoue. Merci de reessayer.',
+                'details' => $exception->getMessage(),
+            ]];
+
+            $this->markOrderFormAsFailed($orderForm, $hubspotErrors, []);
+
+            return [
+                'success' => false,
+                'orderForm' => $orderForm,
+                'deal' => null,
+                'errors' => $hubspotErrors,
+            ];
+        }
+
+        if (($hubspotResult['success'] ?? false) !== true) {
+            $hubspotErrors = $hubspotResult['errors'] ?? [];
+
+            $this->markOrderFormAsFailed($orderForm, $hubspotErrors, []);
+
+            return [
+                'success' => false,
+                'orderForm' => $orderForm,
+                'deal' => null,
+                'errors' => $hubspotErrors,
+            ];
+        }
+
+        $deal = $this->createDealFromOrderForm(
+            $orderForm,
+            $lineItems,
+            $hubspotResult['hubspotDealId'] ?? null,
+        );
 
         $orderForm
             ->setStatus(OrderForm::STATUS_VALIDATED)
@@ -94,6 +130,22 @@ class OrderFormSubmissionService
             'deal' => $deal,
             'errors' => [],
         ];
+    }
+
+    /**
+     * @param array<int, array<string, mixed>> $errors
+     * @param array<int, array<string, mixed>> $retryRows
+     */
+    private function markOrderFormAsFailed(OrderForm $orderForm, array $errors, array $retryRows): void
+    {
+        $orderForm
+            ->setStatus(OrderForm::STATUS_FAILED)
+            ->setProcessedAt(new \DateTimeImmutable())
+            ->setProcessingErrors($errors)
+            ->setRetryRows($retryRows === [] ? null : $retryRows);
+
+        $this->entityManager->persist($orderForm);
+        $this->entityManager->flush();
     }
 
     private function storeFile(UploadedFile $uploadedFile, string $referenceNumber): string
@@ -126,14 +178,14 @@ class OrderFormSubmissionService
     /**
      * @param array<int, array<string, mixed>> $lineItems
      */
-    private function createDealFromOrderForm(OrderForm $orderForm, array $lineItems): Deal
+    private function createDealFromOrderForm(OrderForm $orderForm, array $lineItems, ?string $hubspotDealId): Deal
     {
         $deal = (new Deal())
             ->setOrderForm($orderForm)
             ->setCommercial($orderForm->getCommercial())
             ->setReferenceNumber((string) $orderForm->getReferenceNumber())
             ->setDealType((string) $orderForm->getDealType())
-            ->setDealId($orderForm->getDealId())
+            ->setDealId($hubspotDealId ?? $orderForm->getDealId())
             ->setEnterpriseId($orderForm->getEnterpriseId())
             ->setSubmittedAt($orderForm->getSubmittedAt() ?? new \DateTimeImmutable())
             ->setSourceFileName($orderForm->getOriginalFileName())

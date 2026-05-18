@@ -1,6 +1,14 @@
 parameters:
     base_uri_hubspot: 'https://api.hubapi.com'
     hubspot_access: '%env(HUBSPOT_ACCESS_TOKEN)%'
+    hubspot_order_form_pipeline_label: 'Pipeline sales'
+    hubspot_order_form_pipeline_value: 'default'
+    hubspot_order_form_stage_label: 'Sending the offer'
+    hubspot_order_form_tax_rate_id: '115152086'
+    hubspot_order_form_tax_rate_percentage: 20.0
+    hubspot_order_form_tax_rate_group_ids:
+        '5.5': '115152085'
+        '20': '115152086'
     base_uri_sage: '%env(SAGE_BASE_URI)%'
     sage_username: '%env(SAGE_USERNAME)%'
     sage_password: '%env(SAGE_PASSWORD)%'

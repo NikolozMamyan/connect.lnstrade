@@ -719,7 +719,19 @@
                     }
                 });
 
-                flash(errors[0].message, 'error');
+                flash(formatServerError(errors[0]), 'error');
+            }
+
+            function formatServerError(error) {
+                if (!error || !error.message) {
+                    return 'La soumission a échoué sans détail de validation.';
+                }
+
+                if (error.details) {
+                    return `${error.message} Détail HubSpot : ${error.details}`;
+                }
+
+                return error.message;
             }
 
             function showFieldError(field, message) {
