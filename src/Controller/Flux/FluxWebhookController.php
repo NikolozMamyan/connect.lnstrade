@@ -4,6 +4,7 @@ namespace App\Controller\Flux;
 
 use App\Repository\HubspotCompanyRepository;
 use App\Service\Erp\ErpCompanyExportService;
+use App\Service\Erp\ErpOrderExportService;
 use App\Service\HubSpot\HubspotCompanySyncService;
 use App\Service\Log\SyncLogService;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
@@ -20,6 +21,7 @@ class FluxWebhookController extends AbstractController
         HubspotCompanySyncService $hubspotCompanySyncService,
         HubspotCompanyRepository $hubspotCompanyRepository,
         ErpCompanyExportService $erpCompanyExportService,
+        ErpOrderExportService $erpOrderExportService,
         SyncLogService $syncLogService,
     ): JsonResponse {
         try {
@@ -41,6 +43,7 @@ class FluxWebhookController extends AbstractController
 
         $events = $this->normalizeEvents($payload);
         $companyIds = $this->extractEligibleCompanyIds($events);
+        $dealIds = $this->extractEligibleDealIds($events);
         $processed = 0;
         $skipped = 0;
         $errors = [];
@@ -52,6 +55,7 @@ class FluxWebhookController extends AbstractController
             [
                 'events' => count($events),
                 'companiesDetected' => count($companyIds),
+                'dealsDetected' => count($dealIds),
                 'sample' => $events[0] ?? null,
             ]
         );
@@ -117,6 +121,45 @@ class FluxWebhookController extends AbstractController
             }
         }
 
+        foreach ($dealIds as $dealId) {
+            try {
+                $erpResult = $erpOrderExportService->sendDealToErp($dealId);
+
+                if (($erpResult['skipped'] ?? false) === true) {
+                    ++$skipped;
+                    continue;
+                }
+
+                ++$processed;
+
+                $syncLogService->success(
+                    'webhook',
+                    'Webhook HubSpot deal traite',
+                    'Le deal HubSpot a ete prepare pour envoi ERP.',
+                    [
+                        'dealHubspotId' => $dealId,
+                        'referenceCommande' => $erpResult['payload']['referenceCommande'] ?? null,
+                        'numClient' => $erpResult['payload']['numClient'] ?? null,
+                    ]
+                );
+            } catch (\Throwable $e) {
+                $errors[] = [
+                    'dealHubspotId' => $dealId,
+                    'message' => $e->getMessage(),
+                ];
+
+                $syncLogService->error(
+                    'webhook',
+                    'Erreur webhook HubSpot deal',
+                    'Le traitement du webhook HubSpot a echoue pour un deal.',
+                    [
+                        'dealHubspotId' => $dealId,
+                        'error' => $e->getMessage(),
+                    ]
+                );
+            }
+        }
+
         if ($events !== []) {
             $syncLogService->info(
                 'webhook',
@@ -125,6 +168,7 @@ class FluxWebhookController extends AbstractController
                 [
                     'events' => count($events),
                     'companiesDetected' => count($companyIds),
+                    'dealsDetected' => count($dealIds),
                     'processed' => $processed,
                     'skipped' => $skipped,
                     'errors' => count($errors),
@@ -176,7 +220,7 @@ class FluxWebhookController extends AbstractController
             $subscriptionType = mb_strtolower(trim((string) ($event['subscriptionType'] ?? '')));
             $objectId = trim((string) ($event['objectId'] ?? ''));
 
-            if ($propertyName !== 'sage_integration') {
+            if ($propertyName !== 'integrate_into_sage') {
                 continue;
             }
 
@@ -200,5 +244,47 @@ class FluxWebhookController extends AbstractController
         }
 
         return array_values($companyIds);
+    }
+
+    /**
+     * @param array<int, array<string, mixed>> $events
+     *
+     * @return array<int, string>
+     */
+    private function extractEligibleDealIds(array $events): array
+    {
+        $dealIds = [];
+
+        foreach ($events as $event) {
+            $propertyName = mb_strtolower(trim((string) ($event['propertyName'] ?? '')));
+            $propertyValue = mb_strtolower(trim((string) ($event['propertyValue'] ?? '')));
+            $objectType = mb_strtolower(trim((string) ($event['objectType'] ?? '')));
+            $subscriptionType = mb_strtolower(trim((string) ($event['subscriptionType'] ?? '')));
+            $objectId = trim((string) ($event['objectId'] ?? ''));
+
+            if ($propertyName !== 'sage_integration') {
+                continue;
+            }
+
+            if ($propertyValue !== 'yes') {
+                continue;
+            }
+
+            if ($objectId === '') {
+                continue;
+            }
+
+            $looksLikeDealEvent = $objectType === 'deal'
+                || str_contains($subscriptionType, 'deal.')
+                || str_contains($subscriptionType, 'deals.');
+
+            if (!$looksLikeDealEvent) {
+                continue;
+            }
+
+            $dealIds[$objectId] = $objectId;
+        }
+
+        return array_values($dealIds);
     }
 }

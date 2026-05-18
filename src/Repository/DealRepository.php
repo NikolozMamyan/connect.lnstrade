@@ -41,6 +41,20 @@ class DealRepository extends ServiceEntityRepository
             ->getSingleScalarResult();
     }
 
+    public function findOneByDealIdWithLineItems(string $dealId): ?Deal
+    {
+        return $this->createQueryBuilder('d')
+            ->leftJoin('d.commercial', 'c')
+            ->addSelect('c')
+            ->leftJoin('d.lineItems', 'li')
+            ->addSelect('li')
+            ->andWhere('d.dealId = :dealId')
+            ->setParameter('dealId', $dealId)
+            ->orderBy('li.position', 'ASC')
+            ->getQuery()
+            ->getOneOrNullResult();
+    }
+
     public function sumTotalAmount(): float
     {
         return (float) $this->createQueryBuilder('d')
