@@ -4,6 +4,7 @@ parameters:
     base_uri_sage: '%env(SAGE_BASE_URI)%'
     sage_username: '%env(SAGE_USERNAME)%'
     sage_password: '%env(SAGE_PASSWORD)%'
+    order_form_upload_dir: '%kernel.project_dir%/var/uploads/order_forms'
     # sage_client_id: '%env(default::SAGE_CLIENT_ID)%'
     # sage_client_secret: '%env(default::SAGE_CLIENT_SECRET)%'    
 

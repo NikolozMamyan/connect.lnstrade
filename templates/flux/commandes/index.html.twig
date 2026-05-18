@@ -1,35 +1,85 @@
 {% extends 'layout/app.html.twig' %}
 {% block page_title %}Flux Commandes / Deals{% endblock %}
-{% block page_subtitle %}Synchronisation Sage Bon de commande → HubSpot Deals & Orders{% endblock %}
+{% block page_subtitle %}Deals créés à partir des order forms publics validés{% endblock %}
 {% block content %}
     {% include 'partials/flux_tabs.html.twig' with { flux: 'commandes' } %}
     <div class="flux-header">
-        <span class="flux-direction-badge flux-direction-badge--sage-hs">Sage Bon de commande → HubSpot Deals/Orders</span>
+        <span class="flux-direction-badge flux-direction-badge--sage-hs">Order Form public → Deal interne</span>
     </div>
     <div class="flux-info-banner flux-info-banner--info">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-        <div>Les commandes remontent de Sage vers HubSpot via les Deals ou Orders. Les lignes de commande (SKU, quantité, prix) sont synchronisées. Le statut de paiement est indiqué via le lettrage comptable.</div>
+        <div>Chaque order form validé crée un deal et ses line items. Les soumissions invalides restent historisées avec un statut failed et les lignes à reprendre.</div>
     </div>
     <div class="stats-grid" style="grid-template-columns:repeat(3,1fr);margin-bottom:var(--space-6);">
-        <div class="stat-card"><div class="stat-header"><span class="stat-label">Commandes sync.</span><div class="stat-icon accent"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#00C2A8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg></div></div><div class="stat-value">—</div><div class="stat-delta" style="color:var(--text-muted)">À implémenter</div></div>
-        <div class="stat-card"><div class="stat-header"><span class="stat-label">Montant total</span><div class="stat-icon blue"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#3B82F6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></div></div><div class="stat-value">—</div><div class="stat-delta" style="color:var(--text-muted)">À implémenter</div></div>
-        <div class="stat-card"><div class="stat-header"><span class="stat-label">Erreurs</span><div class="stat-icon red"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#E8394D" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg></div></div><div class="stat-value">—</div><div class="stat-delta" style="color:var(--text-muted)">À implémenter</div></div>
+        <div class="stat-card"><div class="stat-header"><span class="stat-label">Deals validés</span><div class="stat-icon accent"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#00C2A8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg></div></div><div class="stat-value">{{ dealCount }}</div><div class="stat-delta" style="color:var(--text-muted)">Soumissions exploitables</div></div>
+        <div class="stat-card"><div class="stat-header"><span class="stat-label">Montant total</span><div class="stat-icon blue"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#3B82F6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></div></div><div class="stat-value">{{ totalAmount|number_format(2, ',', ' ') }} €</div><div class="stat-delta" style="color:var(--text-muted)">Total des line items</div></div>
+        <div class="stat-card"><div class="stat-header"><span class="stat-label">Soumissions failed</span><div class="stat-icon red"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#E8394D" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg></div></div><div class="stat-value">{{ failedCount }}</div><div class="stat-delta" style="color:var(--text-muted)">Fichiers à reprendre</div></div>
     </div>
     <div class="card">
-        <div class="card-header"><span class="card-title">Champs synchronisés</span></div>
+        <div class="card-header"><span class="card-title">Deals créés</span></div>
         <div style="padding:0 4px;">
             <table class="table">
-                <thead><tr><th>Source (Sage)</th><th>Destination (HubSpot)</th><th>Champ API</th></tr></thead>
+                <thead><tr><th>Deal</th><th>Commercial</th><th>Dépôt</th><th>Line items</th><th>Total</th></tr></thead>
                 <tbody>
-                    <tr><td>Ligne de commande › Référence article</td><td>Deal Line Items / Orders</td><td><code class="mapping-api">hs_sku</code></td></tr>
-                    <tr><td>Ligne de commande › Quantité</td><td>Deal Line Items / Orders</td><td><code class="mapping-api">quantity</code></td></tr>
-                    <tr><td>Ligne de commande › P.U. H.T.</td><td>Deal Line Items / Orders</td><td><code class="mapping-api">price</code></td></tr>
-                    <tr><td>Ligne de commande › Remise</td><td>Deal Line Items / Orders</td><td><code class="mapping-api">discount</code></td></tr>
-                    <tr><td>Bon de commande › Condition de livraison</td><td>Deal / Orders</td><td><code class="mapping-api">incoterm</code></td></tr>
-                    <tr><td>Bon de commande › Mode de règlement</td><td>Deal / Orders</td><td><code class="mapping-api">payment_term</code></td></tr>
-                    <tr><td>Lettrage comptable</td><td>Deal / Orders</td><td><code class="mapping-api">payed</code></td></tr>
-                    <tr><td>Récapitulation Net à payer</td><td>Deal / Orders</td><td><code class="mapping-api">amount</code></td></tr>
-                    <tr><td>Client › Champs libres HUBSPOT_ID</td><td>Deal / Orders</td><td><code class="mapping-api">hs_object_id</code></td></tr>
+                    {% for deal in deals %}
+                        <tr>
+                            <td>
+                                <div class="client-name">{{ deal.referenceNumber }}</div>
+                                <div style="font-size:11.5px;color:var(--text-muted);">
+                                    {{ deal.dealType == 'nouveau' ? 'Nouveau deal' : 'Deal existant' }}
+                                    {% if deal.dealId %} · Deal ID {{ deal.dealId }}{% endif %}
+                                    {% if deal.enterpriseId %} · Entreprise {{ deal.enterpriseId }}{% endif %}
+                                </div>
+                            </td>
+                            <td>{{ deal.commercial ? deal.commercial.fullName : 'N/A' }}</td>
+                            <td style="color:var(--text-muted);font-family:var(--font-mono);font-size:12.5px;">{{ deal.submittedAt ? deal.submittedAt|date('d/m/Y H:i') : 'N/A' }}</td>
+                            <td>
+                                {% for lineItem in deal.lineItems %}
+                                    <div style="margin-bottom:8px;">
+                                        <strong>{{ lineItem.articleRef }}</strong> · {{ lineItem.quantity|number_format(0, ',', ' ') }} × {{ lineItem.unitPrice|number_format(2, ',', ' ') }} €
+                                        {% if lineItem.description %}<div style="font-size:11.5px;color:var(--text-muted);">{{ lineItem.description }}</div>{% endif %}
+                                        {% if lineItem.eanUnit %}<div style="font-size:11.5px;color:var(--text-muted);">EAN {{ lineItem.eanUnit }}</div>{% endif %}
+                                    </div>
+                                {% else %}
+                                    <span style="color:var(--text-muted)">Aucune ligne</span>
+                                {% endfor %}
+                            </td>
+                            <td style="font-weight:600;">{{ deal.totalAmount|number_format(2, ',', ' ') }} €</td>
+                        </tr>
+                    {% else %}
+                        <tr>
+                            <td colspan="5" style="text-align:center;color:var(--text-muted);padding:24px;">Aucun deal validé pour le moment.</td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    <div class="card" style="margin-top:var(--space-6);">
+        <div class="card-header"><span class="card-title">Soumissions failed récentes</span></div>
+        <div style="padding:0 4px;">
+            <table class="table">
+                <thead><tr><th>Référence</th><th>Commercial</th><th>Dépôt</th><th>Erreurs</th></tr></thead>
+                <tbody>
+                    {% for orderForm in failedOrderForms %}
+                        <tr>
+                            <td><div class="client-name">{{ orderForm.referenceNumber }}</div></td>
+                            <td>{{ orderForm.commercial ? orderForm.commercial.fullName : 'N/A' }}</td>
+                            <td style="color:var(--text-muted);font-family:var(--font-mono);font-size:12.5px;">{{ orderForm.submittedAt ? orderForm.submittedAt|date('d/m/Y H:i') : 'N/A' }}</td>
+                            <td>
+                                {% for error in orderForm.processingErrors ?? [] %}
+                                    <div style="margin-bottom:6px;color:var(--color-error);font-size:12px;">{{ error.message ?? 'Erreur de validation' }}</div>
+                                {% endfor %}
+                                {% if (orderForm.retryRows ?? []) is not empty %}
+                                    <div style="font-size:11.5px;color:var(--text-muted);">{{ (orderForm.retryRows ?? [])|length }} ligne(s) à reprendre.</div>
+                                {% endif %}
+                            </td>
+                        </tr>
+                    {% else %}
+                        <tr>
+                            <td colspan="4" style="text-align:center;color:var(--text-muted);padding:24px;">Aucune soumission failed.</td>
+                        </tr>
+                    {% endfor %}
                 </tbody>
             </table>
         </div>

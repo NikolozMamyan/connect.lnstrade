@@ -1,0 +1,887 @@
+{% extends 'base.html.twig' %}
+
+{% block title %}Order Form · Dépôt Commercial{% endblock %}
+
+{% block body %}
+    {% set flashPayload = [] %}
+    {% for label, messages in app.flashes %}
+        {% for message in messages %}
+            {% set flashPayload = flashPayload|merge([{type: label, message: message}]) %}
+        {% endfor %}
+    {% endfor %}
+
+    <div
+        class="order-form-page"
+        data-flashes="{{ flashPayload|json_encode|e('html_attr') }}"
+        data-submit-url="{{ path('order_form_submit') }}"
+    >
+        <div id="flash-zone" aria-live="polite" aria-atomic="true"></div>
+
+        <header class="public-header">
+            <div class="public-header-inner">
+                <div class="brand-lockup">
+                    <div class="brand-mark">LS</div>
+                    <div class="brand-copy">
+                        <strong>LSTRADE</strong>
+                        <span>Extranet public</span>
+                    </div>
+                </div>
+                <span class="header-badge">Order Form Wizard</span>
+            </div>
+        </header>
+
+        <main class="order-form-main">
+            <section class="order-form-intro">
+                <span class="eyebrow">Portail public LSTRADE</span>
+                <h1>Déposer un order form commercial</h1>
+                <p>Choisissez le type de deal, affectez le dossier au bon commercial puis transmettez votre fichier Excel. Le parcours reste volontairement court et guidé.</p>
+            </section>
+
+            <section class="progress-shell">
+                <div class="step-indicator" aria-label="Progression">
+                    <div class="step-item">
+                        <span class="step-num active" id="si-1">1</span>
+                        <span class="step-label active" id="sl-1">Type</span>
+                    </div>
+                    <span class="step-connector" id="sc-1"></span>
+                    <div class="step-item">
+                        <span class="step-num inactive" id="si-2">2</span>
+                        <span class="step-label inactive" id="sl-2">Détails</span>
+                    </div>
+                    <span class="step-connector" id="sc-2"></span>
+                    <div class="step-item">
+                        <span class="step-num inactive" id="si-3">3</span>
+                        <span class="step-label inactive" id="sl-3">Récapitulatif</span>
+                    </div>
+                    <span class="step-connector" id="sc-3"></span>
+                    <div class="step-item step-item-last">
+                        <span class="step-num inactive" id="si-4">✓</span>
+                        <span class="step-label inactive" id="sl-4">Succès</span>
+                    </div>
+                </div>
+
+                <div class="progress-bar">
+                    <span id="progress-fill"></span>
+                </div>
+            </section>
+
+            <form id="order-form" class="wizard-card" method="post" enctype="multipart/form-data" action="{{ path('order_form_submit') }}" novalidate>
+                <section class="step-panel active" id="panel-1">
+                    <div class="section-header">
+                        <h2>Quel type de dossier souhaitez-vous transmettre ?</h2>
+                        <p>Le parcours adapte ensuite les champs attendus et les règles de validation.</p>
+                    </div>
+
+                    <div class="choice-grid">
+                        <button class="choice-btn" type="button" data-deal-type="nouveau">
+                            <span class="choice-icon">
+                                <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
+                            </span>
+                            <span class="choice-title">Nouveau deal</span>
+                            <span class="choice-desc">Nécessite l’identifiant entreprise, le commercial référent et le fichier Excel.</span>
+                        </button>
+
+                        <button class="choice-btn" type="button" data-deal-type="existant">
+                            <span class="choice-icon">
+                                <svg viewBox="0 0 24 24"><path d="M8 12h8M12 8v8"/><rect x="4" y="4" width="16" height="16" rx="3"/></svg>
+                            </span>
+                            <span class="choice-title">Deal existant</span>
+                            <span class="choice-desc">Nécessite le deal ID existant, le commercial en charge et le fichier Excel à rattacher.</span>
+                        </button>
+                    </div>
+                </section>
+
+                <section class="step-panel" id="panel-2a">
+                    <div class="section-header">
+                        <h2>Nouveau deal</h2>
+                        <p>Renseignez l’entreprise cible et joignez le fichier source.</p>
+                    </div>
+
+                    <div class="field-group">
+                        <label class="field-label" for="enterprise-id">Identifiant entreprise <span>*</span></label>
+                        <input class="field-input" id="enterprise-id" name="enterpriseId" inputmode="numeric" placeholder="Ex. 123456" />
+                        <p class="field-error" data-error-for="enterpriseId"></p>
+                    </div>
+
+                    <div class="field-group">
+                        <label class="field-label" for="commercial-nouveau">Commercial <span>*</span></label>
+                        <div class="select-wrap">
+                            <select class="field-select" id="commercial-nouveau" name="commercialId">
+                                <option value="">Sélectionner un commercial</option>
+                                {% for commercial in commerciaux %}
+                                    <option value="{{ commercial.id }}">{{ commercial.fullName }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <p class="field-error" data-error-for="commercial"></p>
+                    </div>
+
+                    <div class="field-group">
+                        <label class="field-label">Fichier Excel <span>*</span></label>
+                        <div class="dropzone" data-dropzone>
+                            <div class="dropzone-icon">
+                                <svg viewBox="0 0 24 24"><path d="M12 16V4M7 9l5-5 5 5"/><path d="M5 20h14"/></svg>
+                            </div>
+                            <p class="dropzone-title">Glissez votre fichier ici</p>
+                            <p class="dropzone-sub">ou <strong>cliquez pour sélectionner</strong> un fichier `.xlsx` ou `.xls` jusqu’à 10 Mo</p>
+                            <input type="file" id="order-file-a" accept=".xlsx,.xls" />
+                        </div>
+                        <div class="file-preview" id="file-preview-a">
+                            <span class="file-icon">
+                                <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>
+                            </span>
+                            <div class="file-meta">
+                                <strong id="file-name-a"></strong>
+                                <span id="file-size-a"></span>
+                            </div>
+                            <button type="button" class="file-remove" data-remove-file>&times;</button>
+                        </div>
+                        <p class="field-error" data-error-for="uploadedFile"></p>
+                    </div>
+
+                    <div class="wizard-actions">
+                        <button class="btn btn-ghost" type="button" data-back-to-start>Retour</button>
+                        <button class="btn btn-accent" type="button" data-next-from-step-two>Continuer</button>
+                    </div>
+                </section>
+
+                <section class="step-panel" id="panel-2b">
+                    <div class="section-header">
+                        <h2>Deal existant</h2>
+                        <p>Rattachez le dépôt à un deal déjà ouvert dans votre workflow.</p>
+                    </div>
+
+                    <div class="field-group">
+                        <label class="field-label" for="deal-id">Deal ID <span>*</span></label>
+                        <input class="field-input" id="deal-id" name="dealId" inputmode="numeric" placeholder="Ex. 987654" />
+                        <p class="field-error" data-error-for="dealId"></p>
+                    </div>
+
+                    <div class="field-group">
+                        <label class="field-label" for="commercial-existant">Commercial <span>*</span></label>
+                        <div class="select-wrap">
+                            <select class="field-select" id="commercial-existant" name="commercialId">
+                                <option value="">Sélectionner un commercial</option>
+                                {% for commercial in commerciaux %}
+                                    <option value="{{ commercial.id }}">{{ commercial.fullName }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <p class="field-error" data-error-for="commercial"></p>
+                    </div>
+
+                    <div class="field-group">
+                        <label class="field-label">Fichier Excel <span>*</span></label>
+                        <div class="dropzone" data-dropzone>
+                            <div class="dropzone-icon">
+                                <svg viewBox="0 0 24 24"><path d="M12 16V4M7 9l5-5 5 5"/><path d="M5 20h14"/></svg>
+                            </div>
+                            <p class="dropzone-title">Déposez le fichier à rattacher</p>
+                            <p class="dropzone-sub">formats Excel acceptés uniquement, taille maximale 10 Mo</p>
+                            <input type="file" id="order-file-b" accept=".xlsx,.xls" />
+                        </div>
+                        <div class="file-preview" id="file-preview-b">
+                            <span class="file-icon">
+                                <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>
+                            </span>
+                            <div class="file-meta">
+                                <strong id="file-name-b"></strong>
+                                <span id="file-size-b"></span>
+                            </div>
+                            <button type="button" class="file-remove" data-remove-file>&times;</button>
+                        </div>
+                        <p class="field-error" data-error-for="uploadedFile"></p>
+                    </div>
+
+                    <div class="wizard-actions">
+                        <button class="btn btn-ghost" type="button" data-back-to-start>Retour</button>
+                        <button class="btn btn-accent" type="button" data-next-from-step-two>Continuer</button>
+                    </div>
+                </section>
+
+                <section class="step-panel" id="panel-3">
+                    <div class="section-header">
+                        <h2>Vérification finale</h2>
+                        <p>Contrôlez les informations avant l’envoi définitif.</p>
+                    </div>
+
+                    <div class="recap-type" id="recap-type"></div>
+                    <div class="recap-grid" id="recap-grid"></div>
+
+                    <div class="recap-file-row" id="recap-file-row">
+                        <span class="file-icon">
+                            <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>
+                        </span>
+                        <div class="file-meta">
+                            <strong id="recap-filename"></strong>
+                            <span id="recap-filesize"></span>
+                        </div>
+                    </div>
+
+                    <div class="wizard-actions">
+                        <button class="btn btn-ghost" type="button" id="go-back-from-recap">Modifier</button>
+                        <button class="btn btn-accent btn-submit" type="submit" id="submit-btn">
+                            <span class="btn-spinner" aria-hidden="true"></span>
+                            <span class="btn-label">Soumettre</span>
+                        </button>
+                    </div>
+                </section>
+
+                <section class="step-panel" id="panel-4">
+                    <div class="success-shell" id="confetti-anchor">
+                        <div class="success-hero">
+                            <div class="success-ring">
+                                <svg viewBox="0 0 80 80">
+                                    <circle class="circle-bg" cx="40" cy="40" r="36"></circle>
+                                    <circle class="check-circle" id="check-circle" cx="40" cy="40" r="36"></circle>
+                                    <path class="check-mark" id="check-mark" d="M24 41l11 11 21-24"></path>
+                                </svg>
+                            </div>
+                            <h2>Transmission enregistrée</h2>
+                            <p>Le dossier a été stocké et sera traité par l’équipe commerciale.</p>
+                        </div>
+                        <div class="success-body">
+                            <div class="success-ref">
+                                <span>Référence attribuée</span>
+                                <strong class="success-ref-pill" id="success-reference">OF-XXXXXX</strong>
+                            </div>
+                            <div class="success-cards" id="success-cards"></div>
+                            <div class="success-notice">
+                                <strong>Délai indicatif : 24h ouvrables.</strong>
+                                <span>Conservez la référence ci-dessus pour le suivi interne.</span>
+                            </div>
+                            <div class="wizard-actions">
+                                <button class="btn btn-ghost" type="button" id="reset-wizard">Nouveau dépôt</button>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+            </form>
+        </main>
+    </div>
+{% endblock %}
+
+{% block stylesheets %}
+    {{ parent() }}
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=DM+Sans:wght@300;400;500;600;700&display=swap');
+
+        :root {
+            --of-primary: #1A1F3C;
+            --of-secondary: #2B3160;
+            --of-accent: #00C2A8;
+            --of-accent-hover: #00A891;
+            --of-accent-light: #E6FAF8;
+            --of-base: #F4F5F9;
+            --of-surface: #FFFFFF;
+            --of-border: rgba(26, 31, 60, 0.12);
+            --of-text-soft: rgba(26, 31, 60, 0.58);
+            --of-error: #E53E3E;
+            --of-font-display: 'Syne', sans-serif;
+            --of-font-body: 'DM Sans', sans-serif;
+        }
+
+        html, body { min-height: 100%; }
+        body { margin: 0; background:
+            radial-gradient(circle at top, rgba(0,194,168,.10), transparent 28%),
+            radial-gradient(circle at 12% 18%, rgba(26,31,60,.05), transparent 18%),
+            linear-gradient(180deg, #f7f8fc 0%, #f2f4f9 100%);
+            color: var(--of-primary); font-family: var(--of-font-body); }
+        .order-form-page { min-height: 100vh; width: 100%; display: flex; flex-direction: column; align-items: center; }
+        .public-header { width: 100%; position: sticky; top: 0; z-index: 20; backdrop-filter: blur(12px); background: rgba(255,255,255,.84); border-bottom: 1px solid rgba(26,31,60,.08); }
+        .public-header-inner { width: min(100%, 1180px); margin: 0 auto; padding: 1rem 1.5rem; display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+        .brand-lockup { display: flex; align-items: center; gap: .8rem; }
+        .brand-mark { width: 38px; height: 38px; border-radius: 10px; background: var(--of-primary); color: var(--of-accent); display: inline-flex; align-items: center; justify-content: center; font-family: var(--of-font-display); font-weight: 800; font-size: .92rem; letter-spacing: -.04em; box-shadow: 0 10px 24px rgba(26,31,60,.18); }
+        .brand-copy { display: flex; flex-direction: column; line-height: 1.05; }
+        .brand-copy strong { font-family: var(--of-font-display); font-size: 1rem; letter-spacing: -.02em; }
+        .brand-copy span { color: rgba(26,31,60,.46); font-size: .76rem; text-transform: uppercase; letter-spacing: .08em; font-weight: 700; }
+        .header-badge { display: inline-flex; align-items: center; border-radius: 999px; background: var(--of-accent-light); color: #007c68; padding: .42rem .85rem; font-size: .76rem; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; }
+        #flash-zone { position: fixed; top: 1.5rem; right: 1.5rem; z-index: 1000; display: flex; flex-direction: column; gap: .65rem; }
+        .flash { min-width: 280px; max-width: 420px; padding: .85rem 1rem; border-radius: 12px; box-shadow: 0 18px 40px rgba(26,31,60,.12); display: flex; gap: .75rem; align-items: flex-start; background: #fff; border-left: 4px solid var(--of-primary); animation: slideIn .3s ease; }
+        .flash-success { border-color: #22c55e; }
+        .flash-error { border-color: var(--of-error); }
+        .flash-info { border-color: #3b82f6; }
+        .flash-warning { border-color: #f59e0b; }
+        .flash-close { margin-left: auto; border: 0; background: transparent; cursor: pointer; color: inherit; font-size: 1rem; }
+        .order-form-main { width: min(100%, 860px); margin: 0 auto; padding: 3.4rem 1.5rem 5rem; }
+        .order-form-intro { margin-bottom: 2rem; position: relative; }
+        .eyebrow { display: inline-flex; padding: .35rem .8rem; border-radius: 999px; background: var(--of-accent-light); color: #007c68; font-size: .78rem; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; box-shadow: inset 0 0 0 1px rgba(0,194,168,.14); }
+        .order-form-intro h1 { margin: 1rem 0 .75rem; font-family: var(--of-font-display); font-size: 2.55rem; line-height: .98; letter-spacing: -.045em; max-width: 760px; }
+        .order-form-intro p { max-width: 700px; color: var(--of-text-soft); font-size: 1rem; line-height: 1.72; }
+        .progress-shell { margin-bottom: 1.8rem; padding: 1rem 1.1rem 1.05rem; border-radius: 18px; background: rgba(255,255,255,.74); border: 1px solid rgba(255,255,255,.66); box-shadow: 0 14px 34px rgba(26,31,60,.06); backdrop-filter: blur(12px); }
+        .progress-bar { height: 8px; background: rgba(26,31,60,.08); border-radius: 999px; overflow: hidden; margin-top: 1rem; }
+        .progress-bar span { display: block; width: 25%; height: 100%; background: linear-gradient(90deg, var(--of-accent), #5eead4); transition: width .35s ease; }
+        .step-indicator { display: flex; align-items: center; gap: .25rem; }
+        .step-item { display: flex; align-items: center; gap: .75rem; flex: 1; }
+        .step-item-last { flex: 0; }
+        .step-num { width: 34px; height: 34px; display: inline-flex; align-items: center; justify-content: center; border-radius: 999px; border: 2px solid rgba(26,31,60,.14); background: #fff; color: rgba(26,31,60,.35); font-weight: 700; transition: all .25s ease; }
+        .step-num.active { background: var(--of-primary); border-color: var(--of-primary); color: #fff; box-shadow: 0 0 0 4px rgba(0,194,168,.18); }
+        .step-num.done { background: var(--of-accent); border-color: var(--of-accent); color: #fff; }
+        .step-label { color: rgba(26,31,60,.35); font-size: .82rem; font-weight: 600; }
+        .step-label.active { color: var(--of-primary); }
+        .step-label.done { color: #007c68; }
+        .step-connector { flex: 1; height: 2px; background: rgba(26,31,60,.1); position: relative; overflow: hidden; border-radius: 999px; }
+        .step-connector::after { content: ''; position: absolute; inset: 0; width: 0; background: var(--of-accent); transition: width .25s ease; }
+        .step-connector.filled::after { width: 100%; }
+        .wizard-card { background: linear-gradient(180deg, rgba(255,255,255,.96), rgba(255,255,255,.9)); border: 1px solid rgba(255,255,255,.72); box-shadow: 0 24px 70px rgba(26,31,60,.09); backdrop-filter: blur(14px); border-radius: 24px; padding: 2rem; position: relative; overflow: hidden; }
+        .wizard-card::before { content: ''; position: absolute; inset: 0 0 auto 0; height: 6px; background: linear-gradient(90deg, var(--of-primary), var(--of-accent) 58%, #76efe0); opacity: .95; }
+        .step-panel { display: none; animation: fadeUp .35s ease; }
+        .step-panel.active { display: block; }
+        .section-header h2 { font-family: var(--of-font-display); font-size: 1.45rem; margin: 0 0 .35rem; }
+        .section-header p { color: var(--of-text-soft); margin: 0 0 1.5rem; }
+        .choice-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; }
+        .choice-btn { text-align: left; border: 2px solid rgba(26,31,60,.08); background: linear-gradient(180deg, #fff, #fbfcfe); border-radius: 18px; padding: 1.6rem; cursor: pointer; transition: transform .2s ease, border-color .2s ease, box-shadow .2s ease, background .2s ease; display: flex; flex-direction: column; gap: .85rem; position: relative; overflow: hidden; }
+        .choice-btn::after { content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 4px; background: var(--of-accent); transform: scaleX(0); transform-origin: center; transition: transform .25s ease; }
+        .choice-btn:hover { transform: translateY(-2px); border-color: var(--of-accent); box-shadow: 0 18px 32px rgba(0,194,168,.12); background: linear-gradient(180deg, #fff, #f1fdfa); }
+        .choice-btn:hover::after { transform: scaleX(1); }
+        .choice-icon { width: 52px; height: 52px; border-radius: 14px; background: rgba(26,31,60,.06); display: inline-flex; align-items: center; justify-content: center; transition: background .2s ease, transform .2s ease; }
+        .choice-btn:hover .choice-icon { background: var(--of-accent); transform: translateY(-1px); }
+        .choice-btn:hover .choice-icon svg { stroke: #fff; }
+        .choice-icon svg { width: 24px; height: 24px; fill: none; stroke: var(--of-primary); stroke-width: 1.8; stroke-linecap: round; }
+        .choice-title { font-family: var(--of-font-display); font-size: 1.1rem; font-weight: 700; }
+        .choice-desc { color: var(--of-text-soft); line-height: 1.65; font-size: .92rem; }
+        .field-group { margin-bottom: 1.25rem; }
+        .field-label { display: block; margin-bottom: .5rem; text-transform: uppercase; letter-spacing: .05em; font-size: .76rem; font-weight: 700; }
+        .field-label span { color: var(--of-accent); }
+        .field-input, .field-select { width: 100%; border: 1.5px solid rgba(26,31,60,.13); border-radius: 12px; padding: .92rem 1rem; background: #fff; font: inherit; color: var(--of-primary); transition: border-color .2s ease, box-shadow .2s ease, background .2s ease; }
+        .field-input:focus, .field-select:focus { outline: none; border-color: var(--of-accent); box-shadow: 0 0 0 4px rgba(0,194,168,.12); }
+        .field-input.error, .field-select.error, .dropzone.error { border-color: var(--of-error); box-shadow: 0 0 0 4px rgba(229,62,62,.12); }
+        .field-error { margin-top: .45rem; color: var(--of-error); font-size: .8rem; display: none; }
+        .field-error.visible { display: block; }
+        .select-wrap { position: relative; }
+        .select-wrap::after { content: ''; position: absolute; right: 1rem; top: 50%; margin-top: -2px; border-left: 5px solid transparent; border-right: 5px solid transparent; border-top: 6px solid rgba(26,31,60,.42); pointer-events: none; }
+        .dropzone { position: relative; border: 2px dashed rgba(26,31,60,.16); border-radius: 18px; padding: 2.15rem 1rem; text-align: center; background: linear-gradient(180deg, rgba(244,245,249,.88), rgba(244,245,249,.56)); transition: all .2s ease; }
+        .dropzone.dragover { border-color: var(--of-accent); background: var(--of-accent-light); }
+        .dropzone input[type=file] { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+        .dropzone-icon { width: 58px; height: 58px; margin: 0 auto 1rem; border-radius: 15px; background: rgba(26,31,60,.07); display: flex; align-items: center; justify-content: center; }
+        .dropzone-icon svg { width: 26px; height: 26px; fill: none; stroke: var(--of-primary); stroke-width: 1.8; stroke-linecap: round; }
+        .dropzone-title { font-family: var(--of-font-display); font-weight: 700; margin-bottom: .35rem; }
+        .dropzone-sub { color: var(--of-text-soft); font-size: .86rem; }
+        .dropzone-sub strong { color: #007c68; }
+        .file-preview { display: none; margin-top: 1rem; align-items: center; gap: .85rem; background: linear-gradient(180deg, #ecfcf8, #e6faf8); border: 1px solid rgba(0,194,168,.22); border-radius: 14px; padding: .9rem 1rem; }
+        .file-preview.visible { display: flex; }
+        .file-icon { width: 38px; height: 38px; border-radius: 10px; display: inline-flex; align-items: center; justify-content: center; background: var(--of-accent); color: #fff; flex-shrink: 0; }
+        .file-icon svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; }
+        .file-meta { display: flex; flex-direction: column; gap: .15rem; }
+        .file-meta strong { font-size: .9rem; }
+        .file-meta span { font-size: .78rem; color: rgba(26,31,60,.52); }
+        .file-remove { margin-left: auto; border: 0; background: transparent; font-size: 1.5rem; line-height: 1; cursor: pointer; color: rgba(26,31,60,.42); }
+        .wizard-actions { display: flex; justify-content: space-between; gap: .75rem; margin-top: 1.75rem; }
+        .btn { appearance: none; border: 0; border-radius: 12px; padding: .9rem 1.2rem; cursor: pointer; font: inherit; font-weight: 700; transition: transform .2s ease, box-shadow .2s ease, background .2s ease, opacity .2s ease; }
+        .btn:hover { transform: translateY(-1px); }
+        .btn-accent { background: var(--of-accent); color: var(--of-primary); box-shadow: 0 14px 28px rgba(0,194,168,.2); }
+        .btn-accent:hover { background: var(--of-accent-hover); }
+        .btn-ghost { background: rgba(26,31,60,.05); color: var(--of-primary); }
+        .btn:disabled { opacity: .65; cursor: wait; transform: none; }
+        .btn-submit { min-width: 148px; display: inline-flex; align-items: center; justify-content: center; gap: .7rem; }
+        .btn-spinner { width: 16px; height: 16px; border: 2px solid rgba(26,31,60,.18); border-top-color: var(--of-primary); border-radius: 50%; display: none; flex-shrink: 0; animation: spin .7s linear infinite; }
+        .btn-submit.is-loading .btn-spinner { display: inline-block; }
+        .btn-submit.is-loading .btn-label { opacity: .95; }
+        .recap-type { margin-bottom: 1rem; }
+        .recap-badge { display: inline-flex; padding: .4rem .85rem; border-radius: 999px; font-size: .78rem; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; }
+        .badge-nouveau { background: rgba(0,194,168,.15); color: #007c68; }
+        .badge-existant { background: rgba(43,49,96,.12); color: var(--of-secondary); }
+        .recap-grid, .success-cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .9rem; }
+        .recap-item, .success-card { background: linear-gradient(180deg, rgba(247,248,252,.98), rgba(242,244,249,.92)); border-radius: 14px; padding: 1rem 1.1rem; border: 1px solid rgba(26,31,60,.06); }
+        .recap-label, .success-card-label { color: rgba(26,31,60,.38); font-size: .72rem; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; margin-bottom: .3rem; }
+        .recap-value, .success-card-value { font-weight: 600; }
+        .recap-file-row { display: flex; align-items: center; gap: .85rem; margin-top: 1rem; background: var(--of-accent-light); border: 1px solid rgba(0,194,168,.18); border-radius: 14px; padding: .9rem 1rem; }
+        .success-shell { overflow: hidden; border-radius: 18px; box-shadow: 0 22px 52px rgba(26,31,60,.12); }
+        .success-hero { background: linear-gradient(135deg, var(--of-primary), #121731 68%); color: #fff; text-align: center; padding: 2.75rem 1.5rem 1.95rem; position: relative; overflow: hidden; }
+        .success-hero::before { content: ''; position: absolute; top: -68px; right: -62px; width: 220px; height: 220px; border-radius: 50%; background: rgba(0,194,168,.08); }
+        .success-hero::after { content: ''; position: absolute; bottom: -82px; left: -36px; width: 184px; height: 184px; border-radius: 50%; background: rgba(255,255,255,.04); }
+        .success-hero h2 { font-family: var(--of-font-display); font-size: 1.6rem; margin: 0 0 .35rem; color: #fff; position: relative; z-index: 1; }
+        .success-hero p { margin: 0; color: rgba(255,255,255,.62); }
+        .success-body { padding: 1.65rem; background: linear-gradient(180deg, #fff 0%, #fbfcfe 100%); }
+        .success-ref { display: flex; gap: .65rem; align-items: center; justify-content: center; margin-bottom: 1.2rem; color: var(--of-primary); }
+        .success-ref-pill { border-radius: 999px; background: var(--of-accent-light); border: 1px solid rgba(0,194,168,.24); color: #007c68; padding: .35rem .85rem; }
+        .success-notice { margin-top: 1rem; display: flex; flex-direction: column; gap: .25rem; background: rgba(0,194,168,.08); border: 1px solid rgba(0,194,168,.18); border-radius: 14px; padding: 1rem 1.1rem; }
+        .success-ring { width: 80px; height: 80px; margin: 0 auto 1.2rem; position: relative; z-index: 1; }
+        .circle-bg { fill: rgba(0,194,168,.12); }
+        .check-circle, .check-mark { fill: none; stroke: var(--of-accent); stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
+        .check-circle { stroke-dasharray: 226; stroke-dashoffset: 226; transition: stroke-dashoffset .9s ease; }
+        .check-mark { stroke-dasharray: 46; stroke-dashoffset: 46; transition: stroke-dashoffset .45s ease .65s; }
+        .check-circle.done, .check-mark.done { stroke-dashoffset: 0; }
+        @keyframes slideIn { from { opacity: 0; transform: translateY(-6px) translateX(8px); } to { opacity: 1; transform: none; } }
+        @keyframes fadeUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+        @media (max-width: 720px) {
+            .order-form-intro h1 { font-size: 1.85rem; }
+            .choice-grid, .recap-grid, .success-cards { grid-template-columns: 1fr; }
+            .step-indicator { gap: .45rem; }
+            .step-label { display: none; }
+            .wizard-card { padding: 1.2rem; border-radius: 18px; }
+            .wizard-actions { flex-direction: column-reverse; }
+            .btn { width: 100%; }
+            .public-header-inner { padding: .9rem 1rem; }
+            .header-badge { display: none; }
+        }
+    </style>
+{% endblock %}
+
+{% block javascripts %}
+    <script>
+        (() => {
+            const root = document.querySelector('.order-form-page');
+            if (!root) {
+                return;
+            }
+
+            const state = {
+                step: 1,
+                dealType: null,
+                selectedCommercialId: '',
+                selectedCommercialName: '',
+                dealId: '',
+                enterpriseId: '',
+                file: null,
+                reference: null,
+            };
+
+            const submitUrl = root.dataset.submitUrl;
+            const flashData = JSON.parse(root.dataset.flashes || '[]');
+            const form = document.getElementById('order-form');
+            const progressFill = document.getElementById('progress-fill');
+            const submitButton = document.getElementById('submit-btn');
+            const panels = Array.from(document.querySelectorAll('.step-panel'));
+
+            flashData.forEach((item) => flash(item.message, normalizeFlashType(item.type)));
+
+            document.querySelectorAll('[data-deal-type]').forEach((button) => {
+                button.addEventListener('click', () => {
+                    state.dealType = button.dataset.dealType;
+                    clearErrors();
+                    goTo(2, state.dealType === 'nouveau' ? 'panel-2a' : 'panel-2b');
+                    flash(`Type sélectionné : ${state.dealType === 'nouveau' ? 'nouveau deal' : 'deal existant'}.`, 'info');
+                });
+            });
+
+            document.querySelectorAll('[data-back-to-start]').forEach((button) => {
+                button.addEventListener('click', () => goTo(1, 'panel-1'));
+            });
+
+            document.querySelectorAll('[data-next-from-step-two]').forEach((button) => {
+                button.addEventListener('click', () => {
+                    if (validateStepTwo()) {
+                        buildRecap();
+                        goTo(3, 'panel-3');
+                    }
+                });
+            });
+
+            document.getElementById('go-back-from-recap').addEventListener('click', () => {
+                goTo(2, state.dealType === 'nouveau' ? 'panel-2a' : 'panel-2b');
+            });
+
+            document.getElementById('reset-wizard').addEventListener('click', resetWizard);
+
+            form.addEventListener('submit', async (event) => {
+                event.preventDefault();
+
+                if (!validateStepTwo()) {
+                    goTo(2, state.dealType === 'nouveau' ? 'panel-2a' : 'panel-2b');
+                    return;
+                }
+
+                clearErrors();
+                setSubmitting(true);
+
+                const payload = new FormData();
+                payload.set('dealType', state.dealType);
+                payload.set('commercialId', state.selectedCommercialId);
+
+                if (state.dealType === 'nouveau') {
+                    payload.set('enterpriseId', state.enterpriseId);
+                }
+
+                if (state.dealType === 'existant') {
+                    payload.set('dealId', state.dealId);
+                }
+
+                if (state.file) {
+                    payload.set('orderFile', state.file);
+                }
+
+                try {
+                    const response = await fetch(submitUrl, {
+                        method: 'POST',
+                        body: payload,
+                        headers: {
+                            'X-Requested-With': 'XMLHttpRequest',
+                            'Accept': 'application/json',
+                        },
+                    });
+
+                    const data = await response.json();
+
+                    if (!response.ok || data.success !== true) {
+                        applyServerErrors(Array.isArray(data.errors) ? data.errors : []);
+                        setSubmitting(false);
+                        goTo(2, state.dealType === 'nouveau' ? 'panel-2a' : 'panel-2b');
+                        return;
+                    }
+
+                    state.reference = data.reference;
+                    buildSuccess(data.reference);
+                    goTo(4, 'panel-4');
+                    flash(`Order form ${data.reference} soumis avec succès.`, 'success');
+                    launchConfetti();
+                } catch (error) {
+                    flash('Une erreur réseau est survenue pendant l’envoi.', 'error');
+                    setSubmitting(false);
+                }
+            });
+
+            configureDropzone('order-file-a', 'file-preview-a', 'file-name-a', 'file-size-a');
+            configureDropzone('order-file-b', 'file-preview-b', 'file-name-b', 'file-size-b');
+            updateIndicator(1);
+            progressFill.style.width = '25%';
+
+            function configureDropzone(inputId, previewId, nameId, sizeId) {
+                const input = document.getElementById(inputId);
+                const preview = document.getElementById(previewId);
+                const dropzone = input.closest('.dropzone');
+                const removeButton = preview.querySelector('[data-remove-file]');
+
+                input.addEventListener('change', () => {
+                    if (input.files && input.files[0]) {
+                        handleFileSelection(input.files[0], preview, dropzone, nameId, sizeId);
+                    }
+                });
+
+                ['dragenter', 'dragover'].forEach((eventName) => {
+                    dropzone.addEventListener(eventName, (event) => {
+                        event.preventDefault();
+                        dropzone.classList.add('dragover');
+                    });
+                });
+
+                ['dragleave', 'drop'].forEach((eventName) => {
+                    dropzone.addEventListener(eventName, (event) => {
+                        event.preventDefault();
+                        dropzone.classList.remove('dragover');
+                    });
+                });
+
+                dropzone.addEventListener('drop', (event) => {
+                    const file = event.dataTransfer.files[0];
+                    if (file) {
+                        handleFileSelection(file, preview, dropzone, nameId, sizeId);
+                    }
+                });
+
+                removeButton.addEventListener('click', () => {
+                    state.file = null;
+                    input.value = '';
+                    preview.classList.remove('visible');
+                    dropzone.style.display = '';
+                });
+            }
+
+            function handleFileSelection(file, preview, dropzone, nameId, sizeId) {
+                if (!['application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'application/vnd.ms-excel'].includes(file.type) && !/\.(xlsx|xls)$/i.test(file.name)) {
+                    flash('Le fichier doit être un Excel `.xlsx` ou `.xls`.', 'error');
+                    return;
+                }
+
+                if (file.size > 10 * 1024 * 1024) {
+                    flash('Le fichier dépasse la limite de 10 Mo.', 'error');
+                    return;
+                }
+
+                state.file = file;
+                document.getElementById(nameId).textContent = file.name;
+                document.getElementById(sizeId).textContent = formatFileSize(file.size);
+                preview.classList.add('visible');
+                dropzone.style.display = 'none';
+                flash(`Fichier chargé : ${file.name}`, 'success');
+            }
+
+            function validateStepTwo() {
+                clearErrors();
+
+                if (!state.dealType) {
+                    flash('Sélectionnez d’abord le type de deal.', 'warning');
+                    return false;
+                }
+
+                const currentCommercialSelect = document.getElementById(state.dealType === 'nouveau' ? 'commercial-nouveau' : 'commercial-existant');
+                state.selectedCommercialId = currentCommercialSelect.value.trim();
+                state.selectedCommercialName = currentCommercialSelect.options[currentCommercialSelect.selectedIndex]?.text || '';
+                state.dealId = document.getElementById('deal-id').value.trim();
+                state.enterpriseId = document.getElementById('enterprise-id').value.trim();
+
+                let isValid = true;
+
+                if (!state.selectedCommercialId) {
+                    showFieldError('commercial', 'Le commercial est obligatoire.');
+                    currentCommercialSelect.classList.add('error');
+                    isValid = false;
+                }
+
+                if (state.dealType === 'nouveau') {
+                    const enterpriseInput = document.getElementById('enterprise-id');
+                    if (!/^\d+$/.test(state.enterpriseId)) {
+                        showFieldError('enterpriseId', 'L identifiant entreprise doit contenir uniquement des chiffres.');
+                        enterpriseInput.classList.add('error');
+                        isValid = false;
+                    }
+                }
+
+                if (state.dealType === 'existant') {
+                    const dealInput = document.getElementById('deal-id');
+                    if (!/^\d+$/.test(state.dealId)) {
+                        showFieldError('dealId', 'Le deal ID doit contenir uniquement des chiffres.');
+                        dealInput.classList.add('error');
+                        isValid = false;
+                    }
+                }
+
+                if (!state.file) {
+                    showFieldError('uploadedFile', 'Le fichier est obligatoire.');
+                    activeDropzone().classList.add('error');
+                    isValid = false;
+                }
+
+                if (!isValid) {
+                    flash('Le formulaire contient des champs invalides.', 'error');
+                }
+
+                return isValid;
+            }
+
+            function buildRecap() {
+                document.getElementById('recap-type').innerHTML = `<span class="recap-badge ${state.dealType === 'nouveau' ? 'badge-nouveau' : 'badge-existant'}">${state.dealType === 'nouveau' ? 'Nouveau deal' : 'Deal existant'}</span>`;
+
+                const entries = [
+                    { label: 'Commercial', value: state.selectedCommercialName },
+                    state.dealType === 'nouveau'
+                        ? { label: 'Identifiant entreprise', value: state.enterpriseId }
+                        : { label: 'Deal ID', value: state.dealId },
+                ];
+
+                document.getElementById('recap-grid').innerHTML = entries.map((entry) => `
+                    <article class="recap-item">
+                        <div class="recap-label">${entry.label}</div>
+                        <div class="recap-value">${entry.value}</div>
+                    </article>
+                `).join('');
+
+                document.getElementById('recap-filename').textContent = state.file ? state.file.name : '';
+                document.getElementById('recap-filesize').textContent = state.file ? formatFileSize(state.file.size) : '';
+            }
+
+            function buildSuccess(reference) {
+                setSubmitting(false);
+                document.getElementById('success-reference').textContent = reference;
+                document.getElementById('success-cards').innerHTML = [
+                    { label: 'Référence', value: reference },
+                    { label: 'Type', value: state.dealType === 'nouveau' ? 'Nouveau deal' : 'Deal existant' },
+                    { label: 'Commercial', value: state.selectedCommercialName },
+                    { label: state.dealType === 'nouveau' ? 'Entreprise' : 'Deal ID', value: state.dealType === 'nouveau' ? state.enterpriseId : state.dealId },
+                ].map((entry) => `
+                    <article class="success-card">
+                        <div class="success-card-label">${entry.label}</div>
+                        <div class="success-card-value">${entry.value}</div>
+                    </article>
+                `).join('');
+
+                setTimeout(() => {
+                    document.getElementById('check-circle').classList.add('done');
+                    document.getElementById('check-mark').classList.add('done');
+                }, 120);
+            }
+
+            function activeDropzone() {
+                return document.querySelector(state.dealType === 'nouveau' ? '#panel-2a .dropzone' : '#panel-2b .dropzone');
+            }
+
+            function applyServerErrors(errors) {
+                if (!errors.length) {
+                    flash('La soumission a échoué sans détail de validation.', 'error');
+                    return;
+                }
+
+                errors.forEach((error) => {
+                    const field = error.field === 'uploadedFile' ? 'uploadedFile' : error.field;
+                    showFieldError(field, error.message);
+
+                    if (field === 'commercial') {
+                        document.getElementById(state.dealType === 'nouveau' ? 'commercial-nouveau' : 'commercial-existant').classList.add('error');
+                    }
+
+                    if (field === 'dealId') {
+                        document.getElementById('deal-id').classList.add('error');
+                    }
+
+                    if (field === 'enterpriseId') {
+                        document.getElementById('enterprise-id').classList.add('error');
+                    }
+                });
+
+                flash(errors[0].message, 'error');
+            }
+
+            function showFieldError(field, message) {
+                document.querySelectorAll(`[data-error-for="${field}"]`).forEach((element) => {
+                    if (!element.textContent) {
+                        element.textContent = message;
+                    }
+                    element.classList.add('visible');
+                });
+            }
+
+            function clearErrors() {
+                document.querySelectorAll('.field-error').forEach((element) => {
+                    element.textContent = '';
+                    element.classList.remove('visible');
+                });
+                document.querySelectorAll('.field-input, .field-select, .dropzone').forEach((element) => {
+                    element.classList.remove('error');
+                });
+            }
+
+            function setSubmitting(isSubmitting) {
+                submitButton.disabled = isSubmitting;
+                submitButton.classList.toggle('is-loading', isSubmitting);
+                const label = submitButton.querySelector('.btn-label');
+                if (label) {
+                    label.textContent = isSubmitting ? 'Envoi en cours…' : 'Soumettre';
+                }
+            }
+
+            function goTo(step, panelId) {
+                state.step = step;
+                panels.forEach((panel) => panel.classList.remove('active'));
+                document.getElementById(panelId).classList.add('active');
+                updateIndicator(step);
+                progressFill.style.width = `${[0, 25, 55, 78, 100][step]}%`;
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+            }
+
+            function updateIndicator(current) {
+                for (let i = 1; i <= 4; i++) {
+                    const num = document.getElementById(`si-${i}`);
+                    const label = document.getElementById(`sl-${i}`);
+                    if (i < current) {
+                        num.className = 'step-num done';
+                        label.className = 'step-label done';
+                        num.textContent = '✓';
+                    } else if (i === current) {
+                        num.className = 'step-num active';
+                        label.className = 'step-label active';
+                        num.textContent = i < 4 ? String(i) : '✓';
+                    } else {
+                        num.className = 'step-num inactive';
+                        label.className = 'step-label inactive';
+                        num.textContent = i < 4 ? String(i) : '✓';
+                    }
+                }
+
+                for (let i = 1; i <= 3; i++) {
+                    document.getElementById(`sc-${i}`).classList.toggle('filled', i < current);
+                }
+            }
+
+            function resetWizard() {
+                state.step = 1;
+                state.dealType = null;
+                state.selectedCommercialId = '';
+                state.selectedCommercialName = '';
+                state.dealId = '';
+                state.enterpriseId = '';
+                state.file = null;
+                state.reference = null;
+
+                form.reset();
+                document.querySelectorAll('.file-preview').forEach((preview) => preview.classList.remove('visible'));
+                document.querySelectorAll('.dropzone').forEach((dropzone) => {
+                    dropzone.style.display = '';
+                    dropzone.classList.remove('error');
+                });
+                document.getElementById('check-circle').classList.remove('done');
+                document.getElementById('check-mark').classList.remove('done');
+                clearErrors();
+                setSubmitting(false);
+                goTo(1, 'panel-1');
+                flash('Prêt pour un nouveau dépôt.', 'info');
+            }
+
+            function flash(message, type = 'info') {
+                const zone = document.getElementById('flash-zone');
+                const wrapper = document.createElement('div');
+                wrapper.className = `flash flash-${type}`;
+                wrapper.innerHTML = `<span>${message}</span><button type="button" class="flash-close" aria-label="Fermer">×</button>`;
+                wrapper.querySelector('.flash-close').addEventListener('click', () => wrapper.remove());
+                zone.appendChild(wrapper);
+                setTimeout(() => wrapper.remove(), 4500);
+            }
+
+            function normalizeFlashType(type) {
+                return ['success', 'error', 'warning', 'info'].includes(type) ? type : 'info';
+            }
+
+            function formatFileSize(size) {
+                if (size < 1024) {
+                    return `${size} B`;
+                }
+
+                if (size < 1024 * 1024) {
+                    return `${(size / 1024).toFixed(1)} KB`;
+                }
+
+                return `${(size / (1024 * 1024)).toFixed(1)} MB`;
+            }
+
+            function launchConfetti() {
+                const anchor = document.getElementById('confetti-anchor');
+                const canvas = document.createElement('canvas');
+                canvas.width = 500;
+                canvas.height = 220;
+                canvas.style.cssText = 'position:absolute;inset:0 auto auto 50%;transform:translateX(-50%);pointer-events:none;width:min(100%,500px);height:220px;';
+                anchor.appendChild(canvas);
+
+                const ctx = canvas.getContext('2d');
+                const colors = ['#00C2A8', '#ffffff', '#5eead4', '#99f6e4'];
+                const particles = Array.from({ length: 54 }, () => ({
+                    x: 250,
+                    y: 70,
+                    vx: (Math.random() - 0.5) * 10,
+                    vy: -Math.random() * 8 - 2,
+                    size: Math.random() * 5 + 2,
+                    life: 1,
+                    color: colors[Math.floor(Math.random() * colors.length)],
+                }));
+
+                const draw = () => {
+                    ctx.clearRect(0, 0, canvas.width, canvas.height);
+                    let alive = false;
+
+                    particles.forEach((particle) => {
+                        if (particle.life <= 0) {
+                            return;
+                        }
+
+                        alive = true;
+                        particle.x += particle.vx;
+                        particle.y += particle.vy;
+                        particle.vy += 0.23;
+                        particle.life -= 0.016;
+
+                        ctx.globalAlpha = Math.max(particle.life, 0);
+                        ctx.fillStyle = particle.color;
+                        ctx.fillRect(particle.x, particle.y, particle.size, particle.size * 0.55);
+                    });
+
+                    if (alive) {
+                        requestAnimationFrame(draw);
+                    } else {
+                        canvas.remove();
+                    }
+                };
+
+                requestAnimationFrame(draw);
+            }
+        })();
+    </script>
+{% endblock %}
