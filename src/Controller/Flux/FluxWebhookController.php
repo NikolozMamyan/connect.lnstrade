@@ -220,11 +220,11 @@ class FluxWebhookController extends AbstractController
             $subscriptionType = mb_strtolower(trim((string) ($event['subscriptionType'] ?? '')));
             $objectId = trim((string) ($event['objectId'] ?? ''));
 
-            if ($propertyName !== 'integrate_into_sage') {
+            if ($propertyName !== 'sage_integration') {
                 continue;
             }
 
-            if ($propertyValue !== 'yes') {
+            if (!$this->isTruthyWebhookValue($propertyValue)) {
                 continue;
             }
 
@@ -262,11 +262,11 @@ class FluxWebhookController extends AbstractController
             $subscriptionType = mb_strtolower(trim((string) ($event['subscriptionType'] ?? '')));
             $objectId = trim((string) ($event['objectId'] ?? ''));
 
-            if ($propertyName !== 'sage_integration') {
+            if ($propertyName !== 'integrate_into_sage') {
                 continue;
             }
 
-            if ($propertyValue !== 'yes') {
+            if (!$this->isTruthyWebhookValue($propertyValue)) {
                 continue;
             }
 
@@ -275,6 +275,7 @@ class FluxWebhookController extends AbstractController
             }
 
             $looksLikeDealEvent = $objectType === 'deal'
+                || $objectType === '0-3'
                 || str_contains($subscriptionType, 'deal.')
                 || str_contains($subscriptionType, 'deals.');
 
@@ -286,5 +287,10 @@ class FluxWebhookController extends AbstractController
         }
 
         return array_values($dealIds);
+    }
+
+    private function isTruthyWebhookValue(string $propertyValue): bool
+    {
+        return in_array($propertyValue, ['yes', 'true', '1', 'on'], true);
     }
 }

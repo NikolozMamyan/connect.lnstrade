@@ -131,8 +131,16 @@ class HubspotOrderFormDealSyncService
                 $errors[] = $this->error('enterpriseId', 'L identifiant entreprise HubSpot est invalide.');
             } else {
                 try {
-                    $company = $this->hubSpotClient->getObject('companies', $enterpriseId, ['properties' => ['name']]);
+                    $company = $this->hubSpotClient->getObject('companies', $enterpriseId, ['properties' => ['name', 'id_erp']]);
                     $companyName = trim((string) (($company['properties']['name'] ?? null) ?: ''));
+                    $companyErpId = trim((string) (($company['properties']['id_erp'] ?? null) ?: ''));
+
+                    if ($companyErpId === '') {
+                        $errors[] = $this->error(
+                            'enterpriseId',
+                            'Cette entreprise HubSpot n a pas de id_erp. La soumission du formulaire est refusee.'
+                        );
+                    }
                 } catch (\Throwable $exception) {
                     $errors[] = $this->error(
                         'enterpriseId',
@@ -150,8 +158,39 @@ class HubspotOrderFormDealSyncService
                 $errors[] = $this->error('dealId', 'Le deal HubSpot est invalide.');
             } else {
                 try {
-                    $response = $this->hubSpotClient->getObject('deals', $dealId, ['properties' => ['dealname']]);
+                    $response = $this->hubSpotClient->getObject('deals', $dealId, [
+                        'properties' => ['dealname'],
+                        'associations' => ['companies'],
+                    ]);
                     $hubspotDealId = (string) ($response['id'] ?? $dealId);
+
+                    $companyResults = $response['associations']['companies']['results'] ?? null;
+
+                    if (!is_array($companyResults) || $companyResults === []) {
+                        $errors[] = $this->error(
+                            'dealId',
+                            'Le deal HubSpot n est associe a aucune entreprise. La soumission du formulaire est refusee.'
+                        );
+                    } else {
+                        $companyId = trim((string) (($companyResults[0]['id'] ?? null) ?: ''));
+
+                        if ($companyId === '') {
+                            $errors[] = $this->error(
+                                'dealId',
+                                'Le deal HubSpot n est associe a aucune entreprise exploitable. La soumission du formulaire est refusee.'
+                            );
+                        } else {
+                            $company = $this->hubSpotClient->getObject('companies', $companyId, ['properties' => ['id_erp']]);
+                            $companyErpId = trim((string) (($company['properties']['id_erp'] ?? null) ?: ''));
+
+                            if ($companyErpId === '') {
+                                $errors[] = $this->error(
+                                    'dealId',
+                                    'L entreprise associee a ce deal HubSpot n a pas de id_erp. La soumission du formulaire est refusee.'
+                                );
+                            }
+                        }
+                    }
                 } catch (\Throwable $exception) {
                     $errors[] = $this->error(
                         'dealId',
