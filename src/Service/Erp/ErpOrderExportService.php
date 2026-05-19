@@ -3,9 +3,6 @@
 namespace App\Service\Erp;
 
 use App\Entity\Commercial;
-use App\Entity\Deal;
-use App\Entity\DealLineItem;
-use App\Repository\DealRepository;
 use App\Repository\HubspotCompanyRepository;
 use App\Service\HubSpot\HubSpotClient;
 use Psr\Log\LoggerInterface;
@@ -15,7 +12,6 @@ class ErpOrderExportService
     public function __construct(
         private readonly HubSpotClient $hubSpotClient,
         private readonly HubspotCompanyRepository $hubspotCompanyRepository,
-        private readonly DealRepository $dealRepository,
         private readonly SageClient $sageClient,
         private readonly LoggerInterface $logger,
     ) {
@@ -25,14 +21,8 @@ class ErpOrderExportService
     {
         $dealData = $this->hubSpotClient->getObject('deals', $hubspotDealId, [
             'properties' => ['dealname', 'dealstage', 'createdate', 'closedate', 'hubspot_owner_id'],
-            'associations' => ['companies'],
+            'associations' => ['companies', 'line_items'],
         ]);
-
-        $localDeal = $this->dealRepository->findOneByDealIdWithLineItems($hubspotDealId);
-
-        if (!$localDeal instanceof Deal) {
-            throw new \RuntimeException(sprintf('Aucun deal local n a ete trouve pour le deal HubSpot %s.', $hubspotDealId));
-        }
 
         $companyId = $this->extractFirstAssociatedCompanyId($dealData);
         $numClient = $this->resolveNumClient($companyId);
@@ -42,7 +32,7 @@ class ErpOrderExportService
         }
 
         $owner = $this->resolveOwnerData((string) (($dealData['properties']['hubspot_owner_id'] ?? null) ?: ''));
-        $order = $this->buildOrderPayload($dealData, $localDeal, $numClient, $owner);
+        $order = $this->buildOrderPayload($dealData, $numClient, $owner);
 
         $this->logger->info('ERP order payload prepared', [
             'dealHubspotId' => $hubspotDealId,
@@ -141,52 +131,59 @@ class ErpOrderExportService
      *
      * @return array<string, mixed>
      */
-    private function buildOrderPayload(array $dealData, Deal $localDeal, string $numClient, array $owner): array
+    private function buildOrderPayload(array $dealData, string $numClient, array $owner): array
     {
         $properties = isset($dealData['properties']) && is_array($dealData['properties']) ? $dealData['properties'] : [];
-        $commercial = $localDeal->getCommercial();
-        $dateCommande = $this->normalizeIsoDate($properties['createdate'] ?? null) ?? $localDeal->getSubmittedAt()?->format(DATE_ATOM) ?? (new \DateTimeImmutable())->format(DATE_ATOM);
+        $dateCommande = $this->normalizeIsoDate($properties['createdate'] ?? null) ?? (new \DateTimeImmutable())->format(DATE_ATOM);
         $dateLivraison = $this->normalizeIsoDate($properties['closedate'] ?? null) ?? $dateCommande;
-        $ownerFirstName = $owner['firstname'] !== '' ? $owner['firstname'] : $commercial?->getFirstName() ?? '';
-        $ownerName = $owner['lastname'] !== '' ? $owner['lastname'] : $commercial?->getLastName() ?? '';
+        $ownerFirstName = $owner['firstname'];
+        $ownerName = $owner['lastname'];
 
         return [
             'numClient' => $numClient,
             'dateCommande' => $dateCommande,
             'dateLivraison' => $dateLivraison,
-            'referenceCommande' => trim((string) (($properties['dealname'] ?? null) ?: $localDeal->getReferenceNumber() ?: $localDeal->getDealId() ?: '')),
-            'statut' => trim((string) (($properties['dealstage'] ?? null) ?: $localDeal->getStatus())),
+            'referenceCommande' => trim((string) (($properties['dealname'] ?? null) ?: '')),
+            'statut' => 'Saisi',
             'modeExpedition' => '',
             'ownerFirstName' => $ownerFirstName,
             'ownerName' => $ownerName,
             'instructionDeLivraison' => '',
-            'orderLines' => $this->buildOrderLines($localDeal),
+            'orderLines' => $this->buildOrderLines($dealData),
         ];
     }
 
     /**
      * @return array<int, array<string, mixed>>
      */
-    private function buildOrderLines(Deal $localDeal): array
+    private function buildOrderLines(array $dealData): array
     {
+        $lineItemIds = $this->extractAssociatedLineItemIds($dealData);
+
+        if ($lineItemIds === []) {
+            throw new \RuntimeException('Le deal HubSpot ne contient aucun line item associe.');
+        }
+
         $lines = [];
 
-        foreach ($localDeal->getLineItems() as $lineItem) {
-            if (!$lineItem instanceof DealLineItem) {
-                continue;
-            }
+        foreach ($lineItemIds as $lineItemId) {
+            $lineItem = $this->hubSpotClient->getObject('line_items', $lineItemId, [
+                'properties' => ['hs_sku', 'name', 'price', 'quantity'],
+            ]);
+            $properties = isset($lineItem['properties']) && is_array($lineItem['properties']) ? $lineItem['properties'] : [];
+            $quantity = (float) (($properties['quantity'] ?? null) ?: 0);
 
             $lines[] = [
-                'reference' => (string) ($lineItem->getArticleRef() ?? ''),
-                'designation' => $lineItem->getDescription() ?? (string) ($lineItem->getArticleRef() ?? ''),
-                'prixHT' => $lineItem->getUnitPrice(),
-                'quantite' => $lineItem->getQuantity(),
-                'quantitePreparee' => $lineItem->getQuantity(),
+                'reference' => trim((string) (($properties['hs_sku'] ?? null) ?: '')),
+                'designation' => trim((string) (($properties['name'] ?? null) ?: (($properties['hs_sku'] ?? null) ?: ''))),
+                'prixHT' => (float) (($properties['price'] ?? null) ?: 0),
+                'quantite' => $quantity,
+                'quantitePreparee' => $quantity,
             ];
         }
 
         if ($lines === []) {
-            throw new \RuntimeException(sprintf('Le deal local %s ne contient aucune ligne exploitable.', $localDeal->getDealId() ?? $localDeal->getReferenceNumber() ?? ''));
+            throw new \RuntimeException('Le deal HubSpot ne contient aucune ligne exploitable.');
         }
 
         return $lines;
@@ -203,5 +200,35 @@ class ErpOrderExportService
         } catch (\Throwable) {
             return null;
         }
+    }
+
+    /**
+     * @param array<string, mixed> $dealData
+     *
+     * @return array<int, string>
+     */
+    private function extractAssociatedLineItemIds(array $dealData): array
+    {
+        $results = $dealData['associations']['line_items']['results'] ?? null;
+
+        if (!is_array($results)) {
+            return [];
+        }
+
+        $lineItemIds = [];
+
+        foreach ($results as $result) {
+            if (!is_array($result)) {
+                continue;
+            }
+
+            $lineItemId = trim((string) ($result['id'] ?? ''));
+
+            if ($lineItemId !== '') {
+                $lineItemIds[] = $lineItemId;
+            }
+        }
+
+        return array_values(array_unique($lineItemIds));
     }
 }
