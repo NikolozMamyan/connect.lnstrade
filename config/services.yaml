@@ -12,7 +12,7 @@ parameters:
     base_uri_sage: '%env(SAGE_BASE_URI)%'
     sage_username: '%env(SAGE_USERNAME)%'
     sage_password: '%env(SAGE_PASSWORD)%'
-    mailer_from: 'no-reply@lnstrade.fr'
+    mailer_from: 'pro@ultrapop.com'
     erp_order_notification_recipients:
         - 'corentin.bury@lnstrade.fr'
         - 'nikoloz.mamyan@lnstrade.fr'
