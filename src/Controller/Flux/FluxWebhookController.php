@@ -216,8 +216,6 @@ class FluxWebhookController extends AbstractController
         foreach ($events as $event) {
             $propertyName = mb_strtolower(trim((string) ($event['propertyName'] ?? '')));
             $propertyValue = mb_strtolower(trim((string) ($event['propertyValue'] ?? '')));
-            $objectType = mb_strtolower(trim((string) ($event['objectType'] ?? '')));
-            $subscriptionType = mb_strtolower(trim((string) ($event['subscriptionType'] ?? '')));
             $objectId = trim((string) ($event['objectId'] ?? ''));
 
             if ($propertyName !== 'sage_integration') {
@@ -271,15 +269,6 @@ class FluxWebhookController extends AbstractController
             }
 
             if ($objectId === '') {
-                continue;
-            }
-
-            $looksLikeDealEvent = $objectType === 'deal'
-                || $objectType === '0-3'
-                || str_contains($subscriptionType, 'deal.')
-                || str_contains($subscriptionType, 'deals.');
-
-            if (!$looksLikeDealEvent) {
                 continue;
             }
 

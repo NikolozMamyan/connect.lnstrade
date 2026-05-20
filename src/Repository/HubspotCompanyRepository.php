@@ -34,6 +34,32 @@ class HubspotCompanyRepository extends ServiceEntityRepository
         }
     }
 
+    /**
+     * @return HubspotCompany[]
+     */
+    public function searchByTerm(string $term, int $limit = 50): array
+    {
+        return $this->createQueryBuilder('c')
+            ->distinct()
+            ->leftJoin('c.companyContacts', 'cc')
+            ->leftJoin('cc.contact', 'contact')
+            ->addSelect('cc', 'contact')
+            ->andWhere('
+                LOWER(c.name) LIKE :term
+                OR LOWER(c.city) LIKE :term
+                OR LOWER(c.idErp) LIKE :term
+                OR LOWER(c.hubspotId) LIKE :term
+                OR LOWER(contact.firstname) LIKE :term
+                OR LOWER(contact.lastname) LIKE :term
+                OR LOWER(contact.email) LIKE :term
+            ')
+            ->setParameter('term', '%' . mb_strtolower($term) . '%')
+            ->orderBy('c.name', 'ASC')
+            ->setMaxResults($limit)
+            ->getQuery()
+            ->getResult();
+    }
+
     public function remove(HubspotCompany $company, bool $flush = false): void
     {
         $this->getEntityManager()->remove($company);
@@ -69,7 +95,7 @@ class HubspotCompanyRepository extends ServiceEntityRepository
             ->getResult();
     }
 
-    public function findAllWithContacts(): array
+public function findAllWithContacts(): array
 {
     return $this->createQueryBuilder('c')
         ->leftJoin('c.companyContacts', 'cc')

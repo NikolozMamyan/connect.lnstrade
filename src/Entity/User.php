@@ -6,6 +6,7 @@ use App\Repository\UserRepository;
 use Doctrine\DBAL\Types\Types;
 use Doctrine\ORM\Mapping as ORM;
 use Symfony\Bridge\Doctrine\Validator\Constraints\UniqueEntity;
+use Symfony\Component\Validator\Constraints as Assert;
 use Symfony\Component\Security\Core\User\PasswordAuthenticatedUserInterface;
 use Symfony\Component\Security\Core\User\UserInterface;
 
@@ -21,7 +22,15 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
     private ?int $id = null;
 
     #[ORM\Column(length: 180, unique: true)]
+    #[Assert\NotBlank]
+    #[Assert\Email]
     private ?string $email = null;
+
+    #[ORM\Column(name: 'first_name', length: 100, nullable: true)]
+    private ?string $firstName = null;
+
+    #[ORM\Column(name: 'last_name', length: 100, nullable: true)]
+    private ?string $lastName = null;
 
     /**
      * @var list<string>
@@ -58,6 +67,33 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
     public function setEmail(string $email): static
     {
         $this->email = mb_strtolower(trim($email));
+        $this->updatedAt = new \DateTimeImmutable();
+
+        return $this;
+    }
+
+    public function getFirstName(): ?string
+    {
+        return $this->firstName;
+    }
+
+    public function setFirstName(?string $firstName): static
+    {
+        $this->firstName = $firstName !== null ? trim($firstName) : null;
+        $this->updatedAt = new \DateTimeImmutable();
+
+        return $this;
+    }
+
+    public function getLastName(): ?string
+    {
+        return $this->lastName;
+    }
+
+    public function setLastName(?string $lastName): static
+    {
+        $this->lastName = $lastName !== null ? trim($lastName) : null;
+        $this->updatedAt = new \DateTimeImmutable();
 
         return $this;
     }
@@ -65,6 +101,13 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
     public function getUserIdentifier(): string
     {
         return (string) $this->email;
+    }
+
+    public function getFullName(): string
+    {
+        $fullName = trim(sprintf('%s %s', (string) $this->firstName, (string) $this->lastName));
+
+        return $fullName !== '' ? $fullName : (string) $this->email;
     }
 
     /**
@@ -84,6 +127,7 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
     public function setRoles(array $roles): static
     {
         $this->roles = array_values(array_unique($roles));
+        $this->updatedAt = new \DateTimeImmutable();
 
         return $this;
     }

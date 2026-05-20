@@ -1,5 +1,5 @@
 {% set current_route = app.request.attributes.get('_route') %}
-{% set user_name = app.user ? app.user.userIdentifier : 'Utilisateur' %}
+{% set user_name = app.user ? app.user.fullName : 'Utilisateur' %}
 {% set user_initials = user_name|slice(0, 1)|upper %}
 
 <aside class="sidebar">
@@ -80,7 +80,16 @@
             {% endif %}
         </a>
 
-        <a href="" class="nav-item {{ current_route == 'statistiques' ? 'active' : '' }}">
+        <a href="{{ path('supervision_users_index') }}" class="nav-item {{ current_route starts with 'supervision_users' ? 'active' : '' }}">
+            <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+                <circle cx="9" cy="7" r="4"/>
+                <path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+            </svg>
+            Utilisateurs
+        </a>
+
+        <a href="{{ path('supervision_statistics_index') }}" class="nav-item {{ current_route starts with 'supervision_statistics' ? 'active' : '' }}">
             <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
             </svg>
@@ -89,7 +98,7 @@
 
         <span class="nav-section-label">Systeme</span>
 
-        <a href="" class="nav-item {{ current_route starts with 'parametres' ? 'active' : '' }}">
+        <a href="{{ path('supervision_settings_index') }}" class="nav-item {{ current_route starts with 'supervision_settings' ? 'active' : '' }}">
             <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <circle cx="12" cy="12" r="3"/>
                 <path d="M19.07 4.93a10 10 0 0 1 0 14.14M4.93 4.93a10 10 0 0 0 0 14.14"/>

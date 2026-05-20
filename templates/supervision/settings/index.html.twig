@@ -1,0 +1,178 @@
+{% extends 'layout/app.html.twig' %}
+
+{% block page_title %}Parametres{% endblock %}
+{% block page_subtitle %}Preferences personnelles de supervision. Les switchers sont decoratifs et n activent encore aucune logique metier.{% endblock %}
+
+{% block content %}
+    {% for label, messages in app.flashes %}
+        {% for message in messages %}
+            <div class="alert alert-{{ label == 'error' ? 'danger' : label }}" style="margin-bottom: 1rem;">
+                {{ message }}
+            </div>
+        {% endfor %}
+    {% endfor %}
+
+    <form method="post">
+        <input type="hidden" name="_token" value="{{ csrf_token('supervision_settings_preview') }}">
+
+        <section class="dashboard-kpis">
+            <article class="stat-card dashboard-kpi-card dashboard-kpi-card--logs">
+                <div class="stat-header">
+                    <span class="stat-label">Profil</span>
+                    <div class="stat-icon blue"><i class="fas fa-sliders"></i></div>
+                </div>
+                <div class="stat-value">Perso</div>
+                <div class="stat-delta">Session locale uniquement</div>
+            </article>
+        </section>
+
+        <section class="dashboard-main-grid">
+            <div class="dashboard-main-grid__primary">
+                <div class="card dashboard-table-card">
+                    <div class="card-header">
+                        <span class="card-title">Alertes</span>
+                        <span class="tag tag-warning">Decoratif</span>
+                    </div>
+                    <div class="card-body">
+                        <div class="settings-list">
+                            {{ _self.switchRow('email_alerts', 'Recevoir les alertes email', 'Active un flag visuel pour les notifications critiques.', settings.email_alerts) }}
+                            {{ _self.switchRow('critical_only', 'Limiter aux alertes critiques', 'Simulation d un mode de filtrage plus strict.', settings.critical_only) }}
+                            {{ _self.switchRow('daily_summary', 'Recevoir un resume quotidien', 'Option decorative pour un recap de supervision.', settings.daily_summary) }}
+                            {{ _self.switchRow('sound_alerts', 'Activer un son d alerte', 'Previsualisation d une option sonore de monitoring.', settings.sound_alerts) }}
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card dashboard-table-card">
+                    <div class="card-header">
+                        <span class="card-title">Interface</span>
+                        <span class="tag tag-info">Preview</span>
+                    </div>
+                    <div class="card-body">
+                        <div class="settings-list">
+                            {{ _self.switchRow('compact_dashboard', 'Tableau de bord compact', 'Apercu d une densite d affichage plus forte.', settings.compact_dashboard) }}
+                            {{ _self.switchRow('debug_widgets', 'Afficher les widgets debug', 'Active des blocs supplementaires en mode maquette.', settings.debug_widgets) }}
+                            {{ _self.switchRow('maintenance_banner', 'Afficher un bandeau maintenance', 'Permet de tester une future communication systeme.', settings.maintenance_banner) }}
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <aside class="dashboard-main-grid__aside">
+                <div class="card dashboard-side-card">
+                    <div class="card-header">
+                        <span class="card-title">Flux surveilles</span>
+                        <span class="tag tag-accent">Session</span>
+                    </div>
+                    <div class="card-body">
+                        <div class="settings-list">
+                            {{ _self.switchRow('webhook_watch', 'Surveiller les webhooks HubSpot', 'Interrupteur decoratif dedie aux evenements entrants.', settings.webhook_watch) }}
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card dashboard-side-card">
+                    <div class="card-header">
+                        <span class="card-title">Etat</span>
+                        <span class="tag tag-muted">Sans impact</span>
+                    </div>
+                    <div class="card-body">
+                        <p style="margin: 0; color: var(--text-muted); line-height: 1.7;">
+                            Ces reglages sont actuellement stockes en session uniquement pour previsualiser
+                            un futur parametrage personnel de supervision. Aucun flux HubSpot, Sage, webhook
+                            ou order form n est modifie par ces valeurs.
+                        </p>
+                    </div>
+                </div>
+            </aside>
+        </section>
+
+        <div style="display:flex; justify-content:flex-end; gap:.75rem; margin-top:1.25rem;">
+            <button type="submit" class="btn btn-primary btn-md">Enregistrer mes preferences</button>
+        </div>
+    </form>
+
+    <style>
+        .settings-list {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+        .settings-row {
+            display: flex;
+            justify-content: space-between;
+            gap: 1rem;
+            align-items: center;
+            padding: 1rem 1.1rem;
+            border: 1px solid rgba(15, 23, 42, 0.08);
+            border-radius: 16px;
+            background: rgba(255,255,255,0.72);
+        }
+        .settings-copy strong {
+            display: block;
+            color: var(--text-primary);
+        }
+        .settings-copy span {
+            display: block;
+            margin-top: .25rem;
+            color: var(--text-muted);
+            line-height: 1.55;
+        }
+        .switch {
+            position: relative;
+            width: 58px;
+            height: 32px;
+            flex: 0 0 auto;
+        }
+        .switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+        .switch-slider {
+            position: absolute;
+            inset: 0;
+            cursor: pointer;
+            border-radius: 999px;
+            background: rgba(148, 163, 184, 0.45);
+            transition: .2s ease;
+        }
+        .switch-slider::before {
+            content: '';
+            position: absolute;
+            width: 24px;
+            height: 24px;
+            left: 4px;
+            top: 4px;
+            border-radius: 999px;
+            background: #fff;
+            box-shadow: 0 4px 10px rgba(15, 23, 42, 0.18);
+            transition: .2s ease;
+        }
+        .switch input:checked + .switch-slider {
+            background: linear-gradient(135deg, var(--color-brand-primary), var(--color-brand-secondary));
+        }
+        .switch input:checked + .switch-slider::before {
+            transform: translateX(26px);
+        }
+        @media (max-width: 820px) {
+            .settings-row {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+        }
+    </style>
+{% endblock %}
+
+{% macro switchRow(name, title, description, checked) %}
+    <div class="settings-row">
+        <div class="settings-copy">
+            <strong>{{ title }}</strong>
+            <span>{{ description }}</span>
+        </div>
+        <label class="switch">
+            <input type="checkbox" name="{{ name }}" value="1" {{ checked ? 'checked' : '' }}>
+            <span class="switch-slider"></span>
+        </label>
+    </div>
+{% endmacro %}

@@ -9,6 +9,7 @@ use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputArgument;
 use Symfony\Component\Console\Input\InputInterface;
+use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\Style\SymfonyStyle;
 use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
@@ -32,7 +33,9 @@ class CreateUserCommand extends Command
         $this
             ->addArgument('email', InputArgument::REQUIRED, 'Email de connexion')
             ->addArgument('password', InputArgument::REQUIRED, 'Mot de passe en clair')
-            ->addArgument('roles', InputArgument::IS_ARRAY, 'Roles optionnels, ex: ROLE_ADMIN');
+            ->addArgument('roles', InputArgument::IS_ARRAY, 'Roles optionnels, ex: ROLE_ADMIN')
+            ->addOption('first-name', null, InputOption::VALUE_REQUIRED, 'Prenom')
+            ->addOption('last-name', null, InputOption::VALUE_REQUIRED, 'Nom');
     }
 
     protected function execute(InputInterface $input, OutputInterface $output): int
@@ -42,6 +45,8 @@ class CreateUserCommand extends Command
         $email = mb_strtolower(trim((string) $input->getArgument('email')));
         $plainPassword = (string) $input->getArgument('password');
         $roles = array_values(array_filter(array_map('trim', (array) $input->getArgument('roles'))));
+        $firstName = trim((string) $input->getOption('first-name'));
+        $lastName = trim((string) $input->getOption('last-name'));
 
         if ($email === '' || $plainPassword === '') {
             $io->error('Email et mot de passe obligatoires.');
@@ -56,6 +61,8 @@ class CreateUserCommand extends Command
         }
 
         $user = new User();
+        $user->setFirstName($firstName !== '' ? $firstName : null);
+        $user->setLastName($lastName !== '' ? $lastName : null);
         $user->setEmail($email);
         $user->setRoles($roles !== [] ? $roles : ['ROLE_USER']);
         $user->setPassword($this->passwordHasher->hashPassword($user, $plainPassword));

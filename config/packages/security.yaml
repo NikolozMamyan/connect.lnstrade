@@ -29,6 +29,8 @@ security:
         - { path: ^/order-form, roles: PUBLIC_ACCESS }
         - { path: ^/flux/webhook$, roles: PUBLIC_ACCESS }
         - { path: ^/flux, roles: ROLE_USER }
+        - { path: ^/supervision, roles: ROLE_USER }
+        - { path: ^/, roles: ROLE_USER }
 
 when@test:
     security:

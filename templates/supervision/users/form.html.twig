@@ -1,0 +1,59 @@
+{% extends 'layout/app.html.twig' %}
+
+{% block page_title %}{{ pageTitle }}{% endblock %}
+{% block page_subtitle %}{{ pageSubtitle }}{% endblock %}
+
+{% block page_actions %}
+    <a href="{{ path('supervision_users_index') }}" class="btn btn-secondary btn-md">
+        <i class="fas fa-arrow-left"></i>
+        Retour a la liste
+    </a>
+{% endblock %}
+
+{% block content %}
+    {% for label, messages in app.flashes %}
+        {% for message in messages %}
+            <div class="alert alert-{{ label == 'error' ? 'danger' : label }}" style="margin-bottom: 1rem;">
+                {{ message }}
+            </div>
+        {% endfor %}
+    {% endfor %}
+
+    <div class="card dashboard-table-card">
+        <div class="card-header">
+            <span class="card-title">{{ pageTitle }}</span>
+            {% if user.id %}
+                <span class="tag tag-muted">{{ user.email }}</span>
+            {% endif %}
+        </div>
+        <div class="card-body">
+            {{ form_start(form) }}
+                <div class="form-grid" style="display:grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem;">
+                    <div>
+                        {{ form_row(form.firstName) }}
+                    </div>
+                    <div>
+                        {{ form_row(form.lastName) }}
+                    </div>
+                    <div>
+                        {{ form_row(form.email) }}
+                    </div>
+                    <div>
+                        {{ form_row(form.role) }}
+                    </div>
+                    <div>
+                        {{ form_row(form.plainPassword.first) }}
+                    </div>
+                    <div>
+                        {{ form_row(form.plainPassword.second) }}
+                    </div>
+                </div>
+
+                <div style="margin-top: 1.25rem; display: flex; gap: .75rem; justify-content: flex-end;">
+                    <a href="{{ path('supervision_users_index') }}" class="btn btn-secondary btn-md">Annuler</a>
+                    <button type="submit" class="btn btn-primary btn-md">{{ submitLabel }}</button>
+                </div>
+            {{ form_end(form) }}
+        </div>
+    </div>
+{% endblock %}

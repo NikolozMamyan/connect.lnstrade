@@ -15,4 +15,31 @@ class DealLineItemRepository extends ServiceEntityRepository
     {
         parent::__construct($registry, DealLineItem::class);
     }
+
+    /**
+     * @return array<int, array{reference: string, lines: int, quantity: float}>
+     */
+    public function findTopReferences(int $limit = 10): array
+    {
+        $rows = $this->createQueryBuilder('li')
+            ->select('li.articleRef AS articleRef')
+            ->addSelect('COUNT(li.id) AS totalLines')
+            ->addSelect('COALESCE(SUM(li.quantity), 0) AS totalQuantity')
+            ->andWhere('li.articleRef IS NOT NULL')
+            ->andWhere("li.articleRef <> ''")
+            ->groupBy('li.articleRef')
+            ->orderBy('totalQuantity', 'DESC')
+            ->addOrderBy('totalLines', 'DESC')
+            ->setMaxResults($limit)
+            ->getQuery()
+            ->getArrayResult();
+
+        return array_map(static function (array $row): array {
+            return [
+                'reference' => (string) ($row['articleRef'] ?? ''),
+                'lines' => (int) ($row['totalLines'] ?? 0),
+                'quantity' => (float) ($row['totalQuantity'] ?? 0),
+            ];
+        }, $rows);
+    }
 }

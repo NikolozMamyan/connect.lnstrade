@@ -1,5 +1,7 @@
 twig:
     file_name_pattern: '*.twig'
+    globals:
+        topbar_context: '@App\Service\Ui\TopbarContextProvider'
 
 when@test:
     twig:

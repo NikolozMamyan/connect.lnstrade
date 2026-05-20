@@ -21,7 +21,7 @@ class ErpOrderExportService
     {
         $dealData = $this->hubSpotClient->getObject('deals', $hubspotDealId, [
             'properties' => ['dealname', 'dealstage', 'createdate', 'closedate', 'hubspot_owner_id'],
-            'associations' => ['companies', 'line_items'],
+            'associations' => ['companies', 'line_item'],
         ]);
 
         $companyId = $this->extractFirstAssociatedCompanyId($dealData);
@@ -40,9 +40,15 @@ class ErpOrderExportService
             'numClient' => $order['numClient'] ?? null,
         ]);
 
-        
-
-        $response = $this->sageClient->post('/order', $order);
+        try {
+            $response = $this->sageClient->post('/order', $order);
+        } catch (\Throwable $exception) {
+            throw new \RuntimeException(sprintf(
+                "%s\nERP order payload: %s",
+                $exception->getMessage(),
+                json_encode($order, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT)
+            ), 0, $exception);
+        }
 
         return [
             'skipped' => false,
@@ -134,7 +140,7 @@ class ErpOrderExportService
     private function buildOrderPayload(array $dealData, string $numClient, array $owner): array
     {
         $properties = isset($dealData['properties']) && is_array($dealData['properties']) ? $dealData['properties'] : [];
-        $dateCommande = $this->normalizeIsoDate($properties['createdate'] ?? null) ?? (new \DateTimeImmutable())->format(DATE_ATOM);
+        $dateCommande = $this->normalizeErpDate($properties['createdate'] ?? null) ?? (new \DateTimeImmutable())->format('Y-m-d');
         $dateLivraison = $this->normalizeIsoDate($properties['closedate'] ?? null) ?? $dateCommande;
         $ownerFirstName = $owner['firstname'];
         $ownerName = $owner['lastname'];
@@ -145,20 +151,20 @@ class ErpOrderExportService
             'dateLivraison' => $dateLivraison,
             'referenceCommande' => trim((string) (($properties['dealname'] ?? null) ?: '')),
             'statut' => 'Saisi',
-            'modeExpedition' => '',
+            'modeExpedition' => 'Standard',
             'ownerFirstName' => $ownerFirstName,
             'ownerName' => $ownerName,
             'instructionDeLivraison' => '',
-            'orderLines' => $this->buildOrderLines($dealData),
+            'orderLines' => $this->buildOrderLines($dealData, (string) ($dealData['id'] ?? '')),
         ];
     }
 
     /**
      * @return array<int, array<string, mixed>>
      */
-    private function buildOrderLines(array $dealData): array
+    private function buildOrderLines(array $dealData, string $hubspotDealId): array
     {
-        $lineItemIds = $this->extractAssociatedLineItemIds($dealData);
+        $lineItemIds = $this->extractAssociatedLineItemIds($dealData, $hubspotDealId);
 
         if ($lineItemIds === []) {
             throw new \RuntimeException('Le deal HubSpot ne contient aucun line item associe.');
@@ -196,7 +202,20 @@ class ErpOrderExportService
         }
 
         try {
-            return (new \DateTimeImmutable($value))->format(DATE_ATOM);
+            return (new \DateTimeImmutable($value))->format('Y-m-d');
+        } catch (\Throwable) {
+            return null;
+        }
+    }
+
+    private function normalizeErpDate(mixed $value): ?string
+    {
+        if (!is_string($value) || trim($value) === '') {
+            return null;
+        }
+
+        try {
+            return (new \DateTimeImmutable($value))->format('Y-m-d');
         } catch (\Throwable) {
             return null;
         }
@@ -207,12 +226,14 @@ class ErpOrderExportService
      *
      * @return array<int, string>
      */
-    private function extractAssociatedLineItemIds(array $dealData): array
+    private function extractAssociatedLineItemIds(array $dealData, string $hubspotDealId): array
     {
-        $results = $dealData['associations']['line_items']['results'] ?? null;
+        $results = $dealData['associations']['line_item']['results']
+            ?? $dealData['associations']['line_items']['results']
+            ?? null;
 
-        if (!is_array($results)) {
-            return [];
+        if (!is_array($results) || $results === []) {
+            $results = $this->fetchDealLineItemAssociations($hubspotDealId);
         }
 
         $lineItemIds = [];
@@ -230,5 +251,39 @@ class ErpOrderExportService
         }
 
         return array_values(array_unique($lineItemIds));
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    private function fetchDealLineItemAssociations(string $hubspotDealId): array
+    {
+        if (trim($hubspotDealId) === '') {
+            return [];
+        }
+
+        $paths = [
+            sprintf('/crm/v3/objects/deals/%s/associations/line_items', $hubspotDealId),
+            sprintf('/crm/v3/objects/deals/%s/associations/line_item', $hubspotDealId),
+        ];
+
+        foreach ($paths as $path) {
+            try {
+                $response = $this->hubSpotClient->get($path);
+                $results = $response['results'] ?? null;
+
+                if (is_array($results) && $results !== []) {
+                    return array_values(array_filter($results, 'is_array'));
+                }
+            } catch (\Throwable $exception) {
+                $this->logger->warning('HubSpot deal line item association lookup failed', [
+                    'dealHubspotId' => $hubspotDealId,
+                    'path' => $path,
+                    'message' => $exception->getMessage(),
+                ]);
+            }
+        }
+
+        return [];
     }
 }

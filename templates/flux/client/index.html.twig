@@ -5,227 +5,208 @@
 
 {% block content %}
 <style>
-    /* ─── Notifications (utilise les classes de variables.css) ─────────────────────────────── */
-    .sync-notification {
-        padding: var(--space-4) var(--space-6);
-        border-radius: var(--border-radius-md);
-        margin-bottom: var(--space-6);
+    /* ── Notification ──────────────────────────────────────────── */
+    .flash-notif {
         display: flex;
         align-items: center;
         gap: var(--space-3);
+        padding: var(--space-3) var(--space-4);
+        border-radius: var(--border-radius-md);
+        margin-bottom: var(--space-5);
         font-size: var(--text-sm);
-        box-shadow: var(--shadow-sm);
-        animation: slideInDown 0.3s ease-out;
+        animation: slideInDown 0.25s ease-out;
     }
-
-    .sync-notification i {
-        font-size: var(--text-lg);
-        flex-shrink: 0;
-    }
-
-    .sync-notification--success {
+    .flash-notif--success {
         background: var(--color-success-bg);
         color: var(--color-success);
-        border-left: 4px solid var(--color-success);
+        border-left: 3px solid var(--color-success);
     }
-
-    .sync-notification--error {
+    .flash-notif--error {
         background: var(--color-error-bg);
         color: var(--color-error);
-        border-left: 4px solid var(--color-error);
+        border-left: 3px solid var(--color-error);
     }
+    .flash-notif i { font-size: var(--text-base); flex-shrink: 0; }
 
-    /* ─── Page Header (simplifié) ───────────────────────────────── */
-    .sync-header {
-        margin-bottom: var(--space-8);
-    }
-
-    .sync-header__title {
-        font-size: var(--text-3xl);
-        font-weight: var(--font-bold);
-        color: var(--text-primary);
-        margin: 0 0 var(--space-3) 0;
+    /* ── Header ────────────────────────────────────────────────── */
+    .page-header {
         display: flex;
-        align-items: center;
-        gap: var(--space-4);
-    }
-
-    .sync-header__title i {
-        color: var(--color-brand-accent);
-        font-size: var(--text-2xl);
-    }
-
-    .sync-header__actions {
-        margin-top: var(--space-6);
-    }
-
-    /* ─── Search Bar (réutilise les styles existants) ────────────────────────────────── */
-    .search-bar {
-        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
         gap: var(--space-4);
         margin-bottom: var(--space-6);
         flex-wrap: wrap;
     }
-
-    .search-input {
-        flex: 1;
-        min-width: 280px;
-        position: relative;
+    .page-header__title {
+        font-size: var(--text-xl);
+        font-weight: var(--font-semibold);
+        color: var(--text-primary);
+        margin: 0 0 var(--space-1) 0;
+        display: flex;
+        align-items: center;
+        gap: var(--space-3);
+    }
+    .page-header__title i {
+        color: var(--color-brand-accent);
+        font-size: var(--text-lg);
+    }
+    .page-header__sub {
+        font-size: var(--text-xs);
+        color: var(--text-muted);
+        margin: 0;
     }
 
-    .search-input i {
+    /* ── Stats bar ─────────────────────────────────────────────── */
+    .stats-bar {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+        gap: var(--space-2);
+        margin-bottom: var(--space-5);
+    }
+    .stat-card {
+        background: var(--bg-base);
+        border-radius: var(--border-radius-md);
+        padding: var(--space-3) var(--space-4);
+    }
+    .stat-card__label {
+        font-size: var(--text-xs);
+        color: var(--text-muted);
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        margin-bottom: var(--space-1);
+    }
+    .stat-card__value {
+        font-size: var(--text-2xl);
+        font-weight: var(--font-semibold);
+        color: var(--text-primary);
+    }
+    .stat-card__value--accent { color: var(--color-brand-accent); }
+    .stat-card__value--success { color: var(--color-success); }
+    .stat-card__value--warning { color: var(--color-warning, #f59e0b); }
+
+    /* ── Search row ────────────────────────────────────────────── */
+    .search-row {
+        display: flex;
+        align-items: center;
+        gap: var(--space-3);
+        margin-bottom: var(--space-4);
+        flex-wrap: wrap;
+    }
+    .search-wrap {
+        position: relative;
+        flex: 1;
+        min-width: 220px;
+    }
+    .search-wrap i {
         position: absolute;
-        left: var(--space-4);
+        left: var(--space-3);
         top: 50%;
         transform: translateY(-50%);
+        font-size: var(--text-sm);
         color: var(--text-muted);
-        font-size: var(--text-base);
+        pointer-events: none;
     }
-
-    .search-input input {
+    .search-wrap input {
         width: 100%;
-        padding: var(--space-3) var(--space-4) var(--space-3) var(--space-10);
+        padding: var(--space-2) var(--space-3) var(--space-2) var(--space-9);
         border: var(--border-width) solid var(--border-color);
         border-radius: var(--border-radius-md);
         font-size: var(--text-sm);
         color: var(--text-primary);
         background: var(--bg-surface);
-        transition: all var(--transition-fast);
+        transition: border-color var(--transition-fast);
     }
-
-    .search-input input:focus {
+    .search-wrap input:focus {
         outline: none;
         border-color: var(--color-brand-accent);
         box-shadow: 0 0 0 3px var(--color-brand-accent-light);
     }
-
-    .search-input input::placeholder {
-        color: var(--text-muted);
-    }
-
-    .results-count {
-        display: flex;
-        align-items: center;
-        gap: var(--space-2);
-        padding: var(--space-3) var(--space-4);
+    .search-wrap input::placeholder { color: var(--text-muted); }
+    .result-pill {
+        white-space: nowrap;
+        font-size: var(--text-xs);
+        color: var(--text-secondary);
+        padding: var(--space-2) var(--space-3);
         background: var(--bg-base);
         border-radius: var(--border-radius-md);
-        font-size: var(--text-sm);
-        color: var(--text-secondary);
-        white-space: nowrap;
     }
-
-    .results-count__number {
+    .result-pill__count {
         font-weight: var(--font-semibold);
         color: var(--color-brand-accent);
     }
 
-    /* ─── Empty State (réutilise utilities.css) ───────────────────────────────── */
-    .sync-empty-state {
+    /* ── Empty state ───────────────────────────────────────────── */
+    .empty-state {
         text-align: center;
         padding: var(--space-12) var(--space-6);
         background: var(--bg-surface);
         border-radius: var(--border-radius-lg);
         border: 2px dashed var(--border-color);
     }
+    .empty-state i { font-size: 48px; color: var(--text-muted); display: block; margin-bottom: var(--space-3); }
+    .empty-state p { font-size: var(--text-base); color: var(--text-secondary); margin: 0; }
 
-    .sync-empty-state__icon {
-        font-size: 64px;
-        color: var(--text-muted);
-        margin-bottom: var(--space-4);
-    }
-
-    .sync-empty-state__text {
-        font-size: var(--text-lg);
-        color: var(--text-secondary);
-        margin: 0;
-    }
-
-    /* ─── Table Container (réutilise components.css + variables) ───────────────────────────────── */
+    /* ── Table container ───────────────────────────────────────── */
     .table-container {
         background: var(--bg-surface);
-        border-radius: var(--border-radius-lg);
         border: var(--border-width) solid var(--border-color);
+        border-radius: var(--border-radius-lg);
         overflow: hidden;
         box-shadow: var(--shadow-sm);
     }
+    .table-wrapper { overflow-x: auto; }
 
-    .table-wrapper {
-        overflow-x: auto;
-    }
-
-    /* ─── Companies Table (adapté de table dans components.css) ─────────────────────────────────── */
+    /* ── Companies table ───────────────────────────────────────── */
     .companies-table {
         width: 100%;
         border-collapse: collapse;
         font-size: var(--text-sm);
+        table-layout: fixed;
     }
-
     .companies-table thead {
         background: var(--bg-base);
         border-bottom: var(--border-width) solid var(--border-color);
     }
-
     .companies-table th {
-        padding: var(--space-4) var(--space-4);
+        padding: var(--space-3) var(--space-4);
         text-align: left;
+        font-size: var(--text-xs);
         font-weight: var(--font-semibold);
         color: var(--text-secondary);
-        font-size: var(--text-xs);
         text-transform: uppercase;
         letter-spacing: 0.5px;
         white-space: nowrap;
     }
-
-    .companies-table th:first-child {
-        padding-left: var(--space-6);
-    }
-
-    .companies-table th:last-child {
-        padding-right: var(--space-6);
-    }
+    .companies-table th:first-child { padding-left: var(--space-5); width: 28%; }
+    .companies-table th:nth-child(2) { width: 22%; }
+    .companies-table th:nth-child(3) { width: 14%; }
+    .companies-table th:nth-child(4) { width: 18%; }
+    .companies-table th:nth-child(5) { width: 12%; }
+    .companies-table th:last-child   { width: 6%; }
 
     .companies-table tbody tr {
         border-bottom: var(--border-width) solid var(--border-color);
+        cursor: pointer;
         transition: background var(--transition-fast);
     }
-
-    .companies-table tbody tr:last-child {
-        border-bottom: none;
-    }
-
-    .companies-table tbody tr:hover {
-        background: var(--bg-surface-hover);
-    }
-
-    .companies-table tbody tr.expandable {
-        cursor: pointer;
-    }
+    .companies-table tbody tr:last-child { border-bottom: none; }
+    .companies-table tbody tr:hover:not(.expanded-row) { background: var(--bg-surface-hover); }
 
     .companies-table td {
-        padding: var(--space-4) var(--space-4);
+        padding: var(--space-3) var(--space-4);
         color: var(--text-primary);
         vertical-align: middle;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
     }
+    .companies-table td:first-child { padding-left: var(--space-5); }
 
-    .companies-table td:first-child {
-        padding-left: var(--space-6);
-    }
-
-    .companies-table td:last-child {
-        padding-right: var(--space-6);
-    }
-
-    /* ─── Company Name Cell ─────────────────────────── */
-    .company-name-cell {
-        display: flex;
-        align-items: center;
-        gap: var(--space-3);
-    }
-
-    .company-icon {
-        width: 40px;
-        height: 40px;
+    /* ── Company name cell ─────────────────────────────────────── */
+    .co-cell { display: flex; align-items: center; gap: var(--space-3); }
+    .co-icon {
+        width: 32px;
+        height: 32px;
         background: var(--color-brand-accent-light);
         border-radius: var(--border-radius-md);
         display: flex;
@@ -233,369 +214,232 @@
         justify-content: center;
         flex-shrink: 0;
     }
-
-    .company-icon i {
-        color: var(--color-brand-accent);
-        font-size: var(--text-base);
-    }
-
-    .company-name {
+    .co-icon i { color: var(--color-brand-accent); font-size: var(--text-sm); }
+    .co-name {
         font-weight: var(--font-semibold);
-        color: var(--text-primary);
-        max-width: 250px;
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
     }
 
-    /* ─── Contact Info Cell ─────────────────────────── */
-    .contact-info {
+    /* ── Meta (icon + text) ────────────────────────────────────── */
+    .meta {
         display: flex;
         align-items: center;
         gap: var(--space-2);
-    }
-
-    .contact-info i {
-        color: var(--text-muted);
         font-size: var(--text-xs);
-    }
-
-    .contact-info__text {
-        max-width: 200px;
+        color: var(--text-secondary);
         overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
     }
+    .meta i { font-size: var(--text-xs); color: var(--text-muted); flex-shrink: 0; }
+    .meta span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .meta--empty { font-style: italic; color: var(--text-muted); font-size: var(--text-xs); }
 
-    .contact-info__text--empty {
-        color: var(--text-muted);
-        font-style: italic;
-    }
-
-    /* ─── Location Cell ─────────────────────────────── */
-    .location-cell {
-        display: flex;
-        flex-direction: column;
-        gap: var(--space-1);
-    }
-
-    .location-city {
-        font-weight: var(--font-medium);
-    }
-
-    .location-country {
-        color: var(--text-muted);
-        font-size: var(--text-xs);
-    }
-
-    /* ─── Contacts Badge (adapté de tag dans components.css) ────────────────────────────── */
+    /* ── Contact badge ─────────────────────────────────────────── */
     .contacts-badge {
         display: inline-flex;
         align-items: center;
-        gap: var(--space-2);
-        padding: var(--space-1) var(--space-3);
+        gap: var(--space-1);
+        padding: var(--space-1) var(--space-2);
+        border-radius: var(--border-radius-full);
+        font-size: var(--text-xs);
+        font-weight: var(--font-medium);
+    }
+    .contacts-badge--has {
         background: var(--color-info-bg);
         color: var(--color-info);
-        border-radius: var(--border-radius-full);
-        font-weight: var(--font-medium);
-        font-size: var(--text-xs);
     }
-
     .contacts-badge--empty {
         background: var(--bg-base);
         color: var(--text-muted);
     }
 
-    /* ─── Expand Button (adapté de btn-ghost) ─────────────────────────────── */
-    .expand-btn {
-        background: none;
-        border: none;
-        padding: var(--space-2);
-        cursor: pointer;
+    /* ── Expand chevron ────────────────────────────────────────── */
+    .chev {
         color: var(--text-muted);
-        transition: all var(--transition-fast);
-        border-radius: var(--border-radius-sm);
-    }
-
-    .expand-btn:hover {
-        background: var(--bg-base);
-        color: var(--color-brand-accent);
-    }
-
-    .expand-btn i {
+        font-size: var(--text-sm);
+        display: block;
+        text-align: center;
         transition: transform var(--transition-fast);
     }
+    .chev.open { transform: rotate(180deg); }
 
-    .expand-btn.expanded i {
-        transform: rotate(180deg);
+    /* ── Expanded row ──────────────────────────────────────────── */
+    .expanded-row { display: none; }
+    .expanded-row.show { display: table-row; }
+    .expanded-row > td {
+        background: var(--bg-base) !important;
+        padding: 0 !important;
+        border-bottom: var(--border-width) solid var(--border-color) !important;
     }
+    .expanded-inner { padding: var(--space-4) var(--space-5) var(--space-5); }
 
-    /* ─── Expanded Row ──────────────────────────────── */
-    .expanded-row {
-        display: none;
-        background: var(--bg-base);
-    }
-
-    .expanded-row.show {
-        display: table-row;
-    }
-
-    .expanded-content {
-        padding: var(--space-6);
-    }
-
-    .expanded-content__title {
-        font-size: var(--text-sm);
+    .expanded-title {
+        font-size: var(--text-xs);
         font-weight: var(--font-semibold);
-        color: var(--text-primary);
-        margin: 0 0 var(--space-4) 0;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        color: var(--text-secondary);
+        margin: 0 0 var(--space-3) 0;
         display: flex;
         align-items: center;
         gap: var(--space-2);
     }
-
-    .expanded-content__title i {
-        color: var(--color-brand-accent);
-    }
+    .expanded-title i { color: var(--color-brand-accent); }
 
     .contacts-grid {
         display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-        gap: var(--space-3);
+        grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+        gap: var(--space-2);
     }
 
-    /* ─── Contact Card (adapté de card dans components.css) ──────────────────────────────── */
+    /* ── Contact card ──────────────────────────────────────────── */
     .contact-card {
         display: flex;
         align-items: center;
         gap: var(--space-3);
         padding: var(--space-3);
         background: var(--bg-surface);
-        border-radius: var(--border-radius-md);
         border: var(--border-width) solid var(--border-color);
-        transition: all var(--transition-fast);
+        border-radius: var(--border-radius-md);
+        transition: border-color var(--transition-fast);
     }
-
-    .contact-card:hover {
-        border-color: var(--color-brand-accent);
-        box-shadow: var(--shadow-sm);
-    }
-
+    .contact-card:hover { border-color: var(--color-brand-accent); }
     .contact-avatar {
-        width: 36px;
-        height: 36px;
-        background: var(--color-brand-accent);
+        width: 32px;
+        height: 32px;
         border-radius: var(--border-radius-full);
+        background: var(--color-brand-accent);
         display: flex;
         align-items: center;
         justify-content: center;
-        font-weight: var(--font-semibold);
-        color: white;
         font-size: var(--text-xs);
+        font-weight: var(--font-semibold);
+        color: #fff;
         flex-shrink: 0;
     }
-
-    .contact-info-details {
-        flex: 1;
-        min-width: 0;
-    }
-
+    .contact-info { flex: 1; min-width: 0; }
     .contact-name {
-        font-weight: var(--font-medium);
-        color: var(--text-primary);
         font-size: var(--text-sm);
+        font-weight: var(--font-medium);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
         margin: 0 0 2px 0;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
     }
-
     .contact-email {
-        color: var(--text-muted);
         font-size: var(--text-xs);
-        margin: 0;
+        color: var(--text-muted);
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
+        margin: 0;
     }
+    .no-contacts { font-size: var(--text-sm); color: var(--text-muted); font-style: italic; }
 
-    .contact-type {
-        background: var(--color-info-bg);
-        color: var(--color-info);
-        padding: var(--space-1) var(--space-2);
-        border-radius: var(--border-radius-sm);
-        font-size: 10px;
-        font-weight: var(--font-medium);
-        white-space: nowrap;
-    }
-
-    .no-contacts {
-        padding: var(--space-4);
-        text-align: center;
-        color: var(--text-muted);
-        font-size: var(--text-sm);
-        font-style: italic;
-    }
-
-    /* ─── Animations ────────────────────────────────── */
+    /* ── Animations ────────────────────────────────────────────── */
     @keyframes slideInDown {
-        from {
-            opacity: 0;
-            transform: translateY(-10px);
-        }
-        to {
-            opacity: 1;
-            transform: translateY(0);
-        }
+        from { opacity: 0; transform: translateY(-8px); }
+        to   { opacity: 1; transform: translateY(0); }
     }
 
-    /* ─── Responsive ────────────────────────────────── */
+    /* ── Responsive ────────────────────────────────────────────── */
     @media (max-width: 1024px) {
-        .companies-table th:nth-child(3),
-        .companies-table td:nth-child(3),
         .companies-table th:nth-child(4),
-        .companies-table td:nth-child(4) {
-            display: none;
-        }
-
-        .contacts-grid {
-            grid-template-columns: 1fr;
-        }
+        .companies-table td:nth-child(4) { display: none; }
     }
-
     @media (max-width: 768px) {
-        .search-bar {
-            flex-direction: column;
-        }
-
-        .search-input {
-            min-width: 100%;
-        }
-
-        .results-count {
-            width: 100%;
-            justify-content: center;
-        }
-
-        .sync-header__title {
-            font-size: var(--text-2xl);
-            flex-direction: column;
-            align-items: flex-start;
-        }
-
-        .table-container {
-            border-radius: var(--border-radius-md);
-        }
-
-        .companies-table {
-            font-size: var(--text-xs);
-        }
-
-        .companies-table th,
-        .companies-table td {
-            padding: var(--space-2) var(--space-2);
-        }
-
-        .companies-table th:first-child,
-        .companies-table td:first-child {
-            padding-left: var(--space-3);
-        }
-
-        .companies-table th:last-child,
-        .companies-table td:last-child {
-            padding-right: var(--space-3);
-        }
-
-        /* Masquer plus de colonnes sur mobile */
-        .companies-table th:nth-child(2),
-        .companies-table td:nth-child(2),
-        .companies-table th:nth-child(5),
-        .companies-table td:nth-child(5) {
-            display: none;
-        }
-
-        .company-icon {
-            width: 32px;
-            height: 32px;
-        }
-
-        .company-name {
-            font-size: var(--text-sm);
-            max-width: 150px;
-        }
-
-        .expanded-content {
-            padding: var(--space-4);
-        }
-
-        .contact-card {
-            flex-direction: column;
-            align-items: flex-start;
-        }
-
-        .contact-type {
-            align-self: flex-end;
-        }
+        .page-header { flex-direction: column; }
+        .stats-bar { grid-template-columns: repeat(2, 1fr); }
+        .companies-table th:nth-child(3),
+        .companies-table td:nth-child(3) { display: none; }
+        .contacts-grid { grid-template-columns: 1fr; }
     }
-
 </style>
 
-<!-- Notifications -->
+{# ── Flash messages ────────────────────────────────────────────── #}
 {% for message in app.flashes('success') %}
-    <div class="sync-notification sync-notification--success">
+    <div class="flash-notif flash-notif--success">
         <i class="fas fa-check-circle"></i>
-        <div>{{ message }}</div>
+        <span>{{ message }}</span>
     </div>
 {% endfor %}
-
 {% for message in app.flashes('error') %}
-    <div class="sync-notification sync-notification--error">
+    <div class="flash-notif flash-notif--error">
         <i class="fas fa-exclamation-circle"></i>
-        <div>{{ message }}</div>
+        <span>{{ message }}</span>
     </div>
 {% endfor %}
- {% include 'partials/flux_tabs.html.twig' with { flux: 'client' } %}
-<!-- Page Header -->
-<div class="sync-header">
-    <h1 class="sync-header__title">
 
-        Flux Client - Logs
-    </h1>
-    
-    <div class="sync-header__actions">
-       <form method="post" action="{{ path('flux_client_sync') }}" onsubmit="this.querySelector('button[type=submit]').disabled = true;">
-            {{ include('ui/button.html.twig', {
-                label: 'Lancer la synchronisation',
-                variant: 'primary',
-                type: 'submit',
-                icon: '<i class="fas fa-sync-alt"></i>'
-            }) }}
-        </form>
+{# ── Tabs ──────────────────────────────────────────────────────── #}
+{% include 'partials/flux_tabs.html.twig' with { flux: 'client' } %}
+
+{# ── Header ────────────────────────────────────────────────────── #}
+<div class="page-header">
+    <div>
+        <h1 class="page-header__title">
+            <i class="fas fa-exchange-alt"></i>
+            Flux Client — Logs
+        </h1>
+        <p class="page-header__sub">{{ companies|length }} entreprise{{ companies|length != 1 ? 's' : '' }} synchronisée{{ companies|length != 1 ? 's' : '' }}</p>
+    </div>
+    <form method="post" action="{{ path('flux_client_sync') }}"
+          onsubmit="this.querySelector('button[type=submit]').disabled = true;">
+        {{ include('ui/button.html.twig', {
+            label: 'Lancer la synchronisation',
+            variant: 'primary',
+            type: 'submit',
+            icon: '<i class="fas fa-sync-alt"></i>'
+        }) }}
+    </form>
+</div>
+
+{# ── Stats bar ─────────────────────────────────────────────────── #}
+{% if companies is not empty %}
+{% set total_contacts = 0 %}
+{% set with_contacts = 0 %}
+{% for company in companies %}
+    {% set cnt = company.companyContacts|length %}
+    {% set total_contacts = total_contacts + cnt %}
+    {% if cnt > 0 %}{% set with_contacts = with_contacts + 1 %}{% endif %}
+{% endfor %}
+<div class="stats-bar">
+    <div class="stat-card">
+        <div class="stat-card__label">Entreprises</div>
+        <div class="stat-card__value stat-card__value--accent">{{ companies|length }}</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-card__label">Avec contacts</div>
+        <div class="stat-card__value stat-card__value--success">{{ with_contacts }}</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-card__label">Sans contacts</div>
+        <div class="stat-card__value stat-card__value--warning">{{ companies|length - with_contacts }}</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-card__label">Total contacts</div>
+        <div class="stat-card__value">{{ total_contacts }}</div>
     </div>
 </div>
 
-<!-- Search Bar -->
-{% if companies is not empty %}
-<div class="search-bar">
-    <div class="search-input">
+{# ── Search ────────────────────────────────────────────────────── #}
+<div class="search-row">
+    <div class="search-wrap">
         <i class="fas fa-search"></i>
-        <input type="text" id="searchTable" placeholder="Rechercher une company, email, ville...">
+        <input type="text" id="searchTable" placeholder="Rechercher une entreprise, email, ville…">
     </div>
-    <div class="results-count">
-        <i class="fas fa-building"></i>
-        <span id="resultCount" class="results-count__number">{{ companies|length }}</span>
-        <span>companies</span>
+    <div class="result-pill">
+        <span class="result-pill__count" id="resultCount">{{ companies|length }}</span>
+        résultat{{ companies|length != 1 ? 's' : '' }}
     </div>
 </div>
 {% endif %}
- 
-<!-- Companies Table -->
+
+{# ── Table / Empty state ───────────────────────────────────────── #}
 {% if companies is empty %}
-    <div class="sync-empty-state">
-        <div class="sync-empty-state__icon">
-            <i class="fas fa-building"></i>
-        </div>
-        <p class="sync-empty-state__text">Aucune company synchronisée</p>
+    <div class="empty-state">
+        <i class="fas fa-building"></i>
+        <p>Aucune entreprise synchronisée</p>
     </div>
 {% else %}
     <div class="table-container">
@@ -605,100 +449,74 @@
                     <tr>
                         <th>Entreprise</th>
                         <th>Email</th>
-                        <th>Téléphone</th>
-                        <th>Website</th>
-                        <th>Localisation</th>
+                        <th>Ville</th>
+                        <th>Site web</th>
                         <th>Contacts</th>
                         <th></th>
                     </tr>
                 </thead>
                 <tbody id="companiesTableBody">
                     {% for company in companies %}
-                        <tr class="expandable" data-company-id="{{ loop.index }}">
+                        {# Main row #}
+                        <tr data-id="{{ loop.index }}" onclick="toggleRow({{ loop.index }})">
                             <td>
-                                <div class="company-name-cell">
-                                    <div class="company-icon">
-                                        <i class="fas fa-building"></i>
-                                    </div>
-                                    <span class="company-name" title="{{ company.name }}">{{ company.name }}</span>
+                                <div class="co-cell">
+                                    <div class="co-icon"><i class="fas fa-building"></i></div>
+                                    <span class="co-name" title="{{ company.name }}">{{ company.name }}</span>
                                 </div>
                             </td>
                             <td>
-                                <div class="contact-info">
-                                    {% if company.email %}
+                                {% if company.email %}
+                                    <div class="meta">
                                         <i class="fas fa-envelope"></i>
-                                        <span class="contact-info__text" title="{{ company.email }}">{{ company.email }}</span>
-                                    {% else %}
-                                        <span class="contact-info__text contact-info__text--empty">Non renseigné</span>
-                                    {% endif %}
-                                </div>
-                            </td>
-                            <td>
-                                <div class="contact-info">
-                                    {% if company.phone %}
-                                        <i class="fas fa-phone"></i>
-                                        <span class="contact-info__text">{{ company.phone }}</span>
-                                    {% else %}
-                                        <span class="contact-info__text contact-info__text--empty">Non renseigné</span>
-                                    {% endif %}
-                                </div>
-                            </td>
-                            <td>
-                                <div class="contact-info">
-                                    {% if company.website %}
-                                        <i class="fas fa-globe"></i>
-                                        <span class="contact-info__text" title="{{ company.website }}">{{ company.website }}</span>
-                                    {% else %}
-                                        <span class="contact-info__text contact-info__text--empty">Non renseigné</span>
-                                    {% endif %}
-                                </div>
-                            </td>
-                            <td>
-                                <div class="location-cell">
-                                    {% if company.city or company.country %}
-                                        {% if company.city %}
-                                            <span class="location-city">{{ company.city }}</span>
-                                        {% endif %}
-                                        {% if company.country %}
-                                            <span class="location-country">{{ company.country }}</span>
-                                        {% endif %}
-                                    {% else %}
-                                        <span class="contact-info__text contact-info__text--empty">Non renseignée</span>
-                                    {% endif %}
-                                </div>
-                            </td>
-                            <td>
-                                {% if company.companyContacts|length > 0 %}
-                                    <span class="contacts-badge">
-                                        <i class="fas fa-users"></i>
-                                        {{ company.companyContacts|length }}
-                                    </span>
+                                        <span title="{{ company.email }}">{{ company.email }}</span>
+                                    </div>
                                 {% else %}
-                                    <span class="contacts-badge contacts-badge--empty">
-                                        <i class="fas fa-user-slash"></i>
-                                        0
-                                    </span>
+                                    <span class="meta--empty">Non renseigné</span>
                                 {% endif %}
                             </td>
                             <td>
-                                <button class="expand-btn" data-company-id="{{ loop.index }}">
-                                    <i class="fas fa-chevron-down"></i>
-                                </button>
+                                {% if company.city %}
+                                    <div class="meta">
+                                        <i class="fas fa-map-marker-alt"></i>
+                                        <span>{{ company.city }}{% if company.country %}, {{ company.country }}{% endif %}</span>
+                                    </div>
+                                {% else %}
+                                    <span class="meta--empty">Non renseignée</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if company.website %}
+                                    <div class="meta">
+                                        <i class="fas fa-globe"></i>
+                                        <span title="{{ company.website }}">{{ company.website }}</span>
+                                    </div>
+                                {% else %}
+                                    <span class="meta--empty">Non renseigné</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% set cnt = company.companyContacts|length %}
+                                <span class="contacts-badge {% if cnt > 0 %}contacts-badge--has{% else %}contacts-badge--empty{% endif %}">
+                                    <i class="fas {% if cnt > 0 %}fa-users{% else %}fa-user-slash{% endif %}"></i>
+                                    {{ cnt }}
+                                </span>
+                            </td>
+                            <td>
+                                <i class="fas fa-chevron-down chev" id="chev-{{ loop.index }}"></i>
                             </td>
                         </tr>
-                        <!-- Expanded Row -->
-                        <tr class="expanded-row" id="expanded-{{ loop.index }}">
-                            <td colspan="7">
-                                <div class="expanded-content">
-                                    <h3 class="expanded-content__title">
+
+                        {# Expanded contacts row #}
+                        <tr class="expanded-row" id="exp-{{ loop.index }}">
+                            <td colspan="6">
+                                <div class="expanded-inner">
+                                    <h3 class="expanded-title">
                                         <i class="fas fa-users"></i>
                                         Contacts associés
                                     </h3>
-                                    
                                     {% if company.companyContacts is empty %}
-                                        <div class="no-contacts">
-                                            <i class="fas fa-info-circle"></i> Aucun contact associé à cette entreprise
-                                        </div>
+                                        <p class="no-contacts">Aucun contact associé à cette entreprise.</p>
                                     {% else %}
                                         <div class="contacts-grid">
                                             {% for relation in company.companyContacts %}
@@ -706,7 +524,7 @@
                                                     <div class="contact-avatar">
                                                         {{ relation.contact.firstname|first|upper }}{{ relation.contact.lastname|first|upper }}
                                                     </div>
-                                                    <div class="contact-info-details">
+                                                    <div class="contact-info">
                                                         <p class="contact-name">
                                                             {{ relation.contact.firstname }} {{ relation.contact.lastname }}
                                                         </p>
@@ -716,9 +534,6 @@
                                                             </p>
                                                         {% endif %}
                                                     </div>
-                                                    {# <span class="contact-type">
-                                                        {{ relation.associationType }}
-                                                    </span> #}
                                                 </div>
                                             {% endfor %}
                                         </div>
@@ -733,53 +548,43 @@
     </div>
 
     <script>
-        // Fonction de recherche dans le tableau
-        document.getElementById('searchTable')?.addEventListener('input', function(e) {
-            const searchTerm = e.target.value.toLowerCase();
+        // Toggle un seul panneau à la fois
+        function toggleRow(id) {
+            const expRow = document.getElementById('exp-' + id);
+            const chev   = document.getElementById('chev-' + id);
+            const isOpen = expRow.classList.contains('show');
+
+            // Ferme tout
+            document.querySelectorAll('.expanded-row').forEach(r => r.classList.remove('show'));
+            document.querySelectorAll('.chev').forEach(c => c.classList.remove('open'));
+
+            // Ouvre si c'était fermé
+            if (!isOpen) {
+                expRow.classList.add('show');
+                chev.classList.add('open');
+            }
+        }
+
+        // Recherche en direct
+        document.getElementById('searchTable')?.addEventListener('input', function () {
+            const term = this.value.toLowerCase();
             const rows = document.querySelectorAll('#companiesTableBody tr:not(.expanded-row)');
-            let visibleCount = 0;
-            
+            let count = 0;
+
             rows.forEach(row => {
-                const text = row.textContent.toLowerCase();
-                const isVisible = text.includes(searchTerm);
-                row.style.display = isVisible ? '' : 'none';
-                
-                // Masquer aussi la ligne expandable associée
-                const companyId = row.dataset.companyId;
-                const expandedRow = document.getElementById(`expanded-${companyId}`);
-                if (expandedRow && !isVisible) {
-                    expandedRow.classList.remove('show');
-                    const btn = row.querySelector('.expand-btn');
-                    if (btn) btn.classList.remove('expanded');
-                }
-                
-                if (isVisible) visibleCount++;
-            });
-            
-            document.getElementById('resultCount').textContent = visibleCount;
-        });
+                const visible = row.textContent.toLowerCase().includes(term);
+                row.style.display = visible ? '' : 'none';
 
-        // Fonction d'expansion des lignes
-        document.querySelectorAll('.expand-btn').forEach(btn => {
-            btn.addEventListener('click', function(e) {
-                e.stopPropagation();
-                const companyId = this.dataset.companyId;
-                const expandedRow = document.getElementById(`expanded-${companyId}`);
-                
-                if (expandedRow) {
-                    expandedRow.classList.toggle('show');
-                    this.classList.toggle('expanded');
+                const id = row.dataset.id;
+                const exp = document.getElementById('exp-' + id);
+                if (exp && !visible) {
+                    exp.classList.remove('show');
+                    document.getElementById('chev-' + id)?.classList.remove('open');
                 }
+                if (visible) count++;
             });
-        });
 
-        // Clic sur toute la ligne pour expand
-        document.querySelectorAll('.expandable').forEach(row => {
-            row.addEventListener('click', function() {
-                const companyId = this.dataset.companyId;
-                const btn = this.querySelector('.expand-btn');
-                if (btn) btn.click();
-            });
+            document.getElementById('resultCount').textContent = count;
         });
     </script>
 {% endif %}

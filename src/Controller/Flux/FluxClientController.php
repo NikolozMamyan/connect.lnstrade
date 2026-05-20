@@ -2,11 +2,14 @@
 
 namespace App\Controller\Flux;
 
+use App\Entity\Notification;
 use App\Message\SyncClientMessage;
 use App\Repository\HubspotCompanyRepository;
 use App\Repository\SyncLogRepository;
 use App\Service\Log\SyncLogService;
+use App\Service\Ui\NotificationManager;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
+use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Messenger\MessageBusInterface;
 use Symfony\Component\Routing\Attribute\Route;
@@ -15,10 +18,13 @@ use Symfony\Component\Routing\Attribute\Route;
 class FluxClientController extends AbstractController
 {
     #[Route('/', name: 'index')]
-    public function index(HubspotCompanyRepository $hubspotCompanyRepository): Response
+    public function index(Request $request, HubspotCompanyRepository $hubspotCompanyRepository): Response
     {
+        $query = trim((string) $request->query->get('q', ''));
+
         return $this->render('flux/client/index.html.twig', [
-            'companies' => $hubspotCompanyRepository->findAllWithContacts(),
+            'companies' => $query !== '' ? $hubspotCompanyRepository->searchByTerm($query) : $hubspotCompanyRepository->findAllWithContacts(),
+            'searchQuery' => $query,
         ]);
     }
 
@@ -31,8 +37,11 @@ class FluxClientController extends AbstractController
     }
 
     #[Route('/sync', name: 'sync', methods: ['POST'])]
-    public function sync(MessageBusInterface $bus, SyncLogService $syncLogService): Response
-    {
+    public function sync(
+        MessageBusInterface $bus,
+        SyncLogService $syncLogService,
+        NotificationManager $notificationManager,
+    ): Response {
         $bus->dispatch(new SyncClientMessage());
 
         $syncLogService->info(
@@ -41,7 +50,14 @@ class FluxClientController extends AbstractController
             'Le message Messenger a ete envoye pour lancer la synchronisation client.'
         );
 
-        $this->addFlash('success', 'Synchronisation lancée en arrière-plan.');
+        $notificationManager->notify(
+            'Synchronisation clients lancee',
+            'Le flux clients a ete ajoute a la file de traitement.',
+            Notification::LEVEL_INFO,
+            'flux_client_logs'
+        );
+
+        $this->addFlash('success', 'Synchronisation lancee en arriere-plan.');
 
         return $this->redirectToRoute('flux_client_index');
     }

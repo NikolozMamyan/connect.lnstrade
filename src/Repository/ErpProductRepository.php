@@ -28,6 +28,25 @@ class ErpProductRepository extends ServiceEntityRepository
     /**
      * @return ErpProduct[]
      */
+    public function searchByTerm(string $term, int $limit = 50): array
+    {
+        return $this->createQueryBuilder('p')
+            ->andWhere('
+                LOWER(p.reference) LIKE :term
+                OR LOWER(p.designation) LIKE :term
+                OR LOWER(p.codeBarre) LIKE :term
+                OR LOWER(p.hubspotObjectId) LIKE :term
+            ')
+            ->setParameter('term', '%' . mb_strtolower($term) . '%')
+            ->orderBy('p.reference', 'ASC')
+            ->setMaxResults($limit)
+            ->getQuery()
+            ->getResult();
+    }
+
+    /**
+     * @return ErpProduct[]
+     */
     public function findActiveProductsForSync(): array
     {
         return $this->createQueryBuilder('p')

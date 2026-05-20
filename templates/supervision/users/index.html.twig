@@ -1,0 +1,88 @@
+{% extends 'layout/app.html.twig' %}
+
+{% block page_title %}Utilisateurs{% endblock %}
+{% block page_subtitle %}Supervision des acces a la plateforme, creation et mise a jour des comptes applicatifs.{% endblock %}
+
+{% block page_actions %}
+    <a href="{{ path('supervision_users_new') }}" class="btn btn-primary btn-md">
+        <i class="fas fa-user-plus"></i>
+        Nouvel utilisateur
+    </a>
+{% endblock %}
+
+{% block content %}
+    {% for label, messages in app.flashes %}
+        {% for message in messages %}
+            <div class="alert alert-{{ label == 'error' ? 'danger' : label }}" style="margin-bottom: 1rem;">
+                {{ message }}
+            </div>
+        {% endfor %}
+    {% endfor %}
+
+    <section class="dashboard-kpis">
+        <article class="stat-card dashboard-kpi-card dashboard-kpi-card--logs">
+            <div class="stat-header">
+                <span class="stat-label">Comptes actifs</span>
+                <div class="stat-icon blue"><i class="fas fa-users"></i></div>
+            </div>
+            <div class="stat-value">{{ users|length }}</div>
+        </article>
+    </section>
+
+    <div class="card dashboard-table-card">
+        <div class="card-header">
+            <span class="card-title">Liste des utilisateurs</span>
+            <span class="tag tag-info">{{ users|length }} compte(s)</span>
+        </div>
+        <div class="card-body" style="padding: 0;">
+            <div class="table-responsive">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Nom</th>
+                            <th>Email</th>
+                            <th>Role</th>
+                            <th>Cree le</th>
+                            <th>Maj le</th>
+                            <th style="text-align: right;">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for user in users %}
+                            <tr>
+                                <td>
+                                    <strong>{{ user.fullName }}</strong>
+                                </td>
+                                <td>{{ user.email }}</td>
+                                <td>
+                                    <span class="tag {{ 'ROLE_ADMIN' in user.roles ? 'tag-warning' : 'tag-muted' }}">
+                                        {{ ('ROLE_ADMIN' in user.roles ? 'Administrateur' : 'Utilisateur') }}
+                                    </span>
+                                </td>
+                                <td>{{ user.createdAt ? user.createdAt|date('d/m/Y H:i') : '-' }}</td>
+                                <td>{{ user.updatedAt ? user.updatedAt|date('d/m/Y H:i') : '-' }}</td>
+                                <td style="text-align: right;">
+                                    <div style="display: inline-flex; gap: .5rem;">
+                                        <a href="{{ path('supervision_users_edit', {id: user.id}) }}" class="btn btn-secondary btn-sm">
+                                            Modifier
+                                        </a>
+                                        <form method="post" action="{{ path('supervision_users_delete', {id: user.id}) }}" onsubmit="return confirm('Supprimer cet utilisateur ?');">
+                                            <input type="hidden" name="_token" value="{{ csrf_token('delete_user_' ~ user.id) }}">
+                                            <button type="submit" class="btn btn-danger btn-sm">Supprimer</button>
+                                        </form>
+                                    </div>
+                                </td>
+                            </tr>
+                        {% else %}
+                            <tr>
+                                <td colspan="6" style="text-align: center; padding: 2rem;">
+                                    Aucun utilisateur enregistre.
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+{% endblock %}

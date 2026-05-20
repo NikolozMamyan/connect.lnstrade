@@ -1,7 +1,9 @@
-{% set user_name = app.user ? app.user.userIdentifier : 'Utilisateur' %}
+{% set user_name = app.user ? app.user.fullName : 'Utilisateur' %}
 {% set user_initials = user_name|slice(0, 1)|upper %}
+{% set unread_notifications = topbar_context.unreadNotificationCount %}
+{% set latest_notifications = topbar_context.latestNotifications %}
 
-<header class="topbar">
+<header class="topbar" data-search-url="{{ path('app_global_search') }}">
     {% include 'partials/breadcrumb.html.twig' %}
 
     <div class="topbar-spacer"></div>
@@ -12,20 +14,56 @@
         </svg>
         <input type="text" id="topbar-search-input" placeholder="Rechercher..." autocomplete="off"/>
         <kbd class="search-kbd">Ctrl K</kbd>
+
+        <div class="topbar-search-panel" id="topbar-search-panel" hidden>
+            <div class="topbar-search-state" data-search-state="idle">Tapez au moins 2 caracteres pour lancer une recherche.</div>
+            <div class="topbar-search-results" data-search-results></div>
+        </div>
     </div>
 
     <div class="topbar-actions">
-        <button class="icon-btn" title="Notifications" id="btn-notifications" aria-label="Voir les notifications">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
-                <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
-            </svg>
-            {% if nb_notifications is defined and nb_notifications > 0 %}
-                <span class="notif-dot"></span>
-            {% endif %}
-        </button>
+        <div class="topbar-notification-wrap">
+            <button class="icon-btn" title="Notifications" id="btn-notifications" aria-label="Voir les notifications" aria-expanded="false" aria-controls="topbar-notifications-panel" type="button">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+                    <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+                </svg>
+                {% if unread_notifications > 0 %}
+                    <span class="notif-dot"></span>
+                {% endif %}
+            </button>
 
-        <a href="" class="icon-btn" title="Aide" aria-label="Aide">
+            <div class="topbar-popover" id="topbar-notifications-panel" hidden>
+                <div class="topbar-popover__header">
+                    <div>
+                        <strong>Notifications</strong>
+                        <div class="topbar-popover__meta">{{ unread_notifications }} non lue(s)</div>
+                    </div>
+                    <form method="post" action="{{ path('app_notifications_read_all') }}">
+                        <input type="hidden" name="_token" value="{{ csrf_token('notifications_read_all') }}">
+                        <button type="submit" class="topbar-link-btn">Tout lire</button>
+                    </form>
+                </div>
+                <div class="topbar-popover__body">
+                    {% for notification in latest_notifications %}
+                        <a href="{{ path('app_notifications_open', {id: notification.id}) }}" class="notification-item notification-item--{{ notification.level }} {{ not notification.isRead ? 'is-unread' : '' }}">
+                            <span class="notification-item__pill"></span>
+                            <span class="notification-item__content">
+                                <span class="notification-item__title">{{ notification.title }}</span>
+                                {% if notification.message %}
+                                    <span class="notification-item__message">{{ notification.message }}</span>
+                                {% endif %}
+                                <span class="notification-item__date">{{ notification.createdAt ? notification.createdAt|date('d/m/Y H:i') : '' }}</span>
+                            </span>
+                        </a>
+                    {% else %}
+                        <div class="topbar-empty-state">Aucune notification pour le moment.</div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+
+        <a href="{{ path('supervision_settings_index') }}" class="icon-btn" title="Aide" aria-label="Aide">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <circle cx="12" cy="12" r="10"/>
                 <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/>
