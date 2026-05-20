@@ -12,6 +12,10 @@ parameters:
     base_uri_sage: '%env(SAGE_BASE_URI)%'
     sage_username: '%env(SAGE_USERNAME)%'
     sage_password: '%env(SAGE_PASSWORD)%'
+    mailer_from: 'no-reply@lnstrade.fr'
+    erp_order_notification_recipients:
+        - 'corentin.bury@lnstrade.fr'
+        - 'nikoloz.mamyan@lnstrade.fr'
     order_form_upload_dir: '%kernel.project_dir%/var/uploads/order_forms'
     # sage_client_id: '%env(default::SAGE_CLIENT_ID)%'
     # sage_client_secret: '%env(default::SAGE_CLIENT_SECRET)%'    
@@ -27,3 +31,8 @@ services:
             - '../src/DependencyInjection/'
             - '../src/Entity/'
             - '../src/Kernel.php'
+
+    App\Service\Mailer\SimpleMailerService:
+        arguments:
+            $defaultFrom: '%mailer_from%'
+            $defaultRecipients: '%erp_order_notification_recipients%'

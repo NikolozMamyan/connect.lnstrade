@@ -7,6 +7,7 @@ use App\Service\Erp\ErpCompanyExportService;
 use App\Service\Erp\ErpOrderExportService;
 use App\Service\HubSpot\HubspotCompanySyncService;
 use App\Service\Log\SyncLogService;
+use App\Service\Mailer\SimpleMailerService;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
@@ -23,6 +24,7 @@ class FluxWebhookController extends AbstractController
         ErpCompanyExportService $erpCompanyExportService,
         ErpOrderExportService $erpOrderExportService,
         SyncLogService $syncLogService,
+        SimpleMailerService $simpleMailerService,
     ): JsonResponse {
         try {
             $payload = $request->toArray();
@@ -142,6 +144,14 @@ class FluxWebhookController extends AbstractController
                         'numClient' => $erpResult['payload']['numClient'] ?? null,
                     ]
                 );
+
+                $this->sendDealWebhookMail(
+                    $simpleMailerService,
+                    true,
+                    $dealId,
+                    $erpResult['payload'] ?? [],
+                    null
+                );
             } catch (\Throwable $e) {
                 $errors[] = [
                     'dealHubspotId' => $dealId,
@@ -156,6 +166,14 @@ class FluxWebhookController extends AbstractController
                         'dealHubspotId' => $dealId,
                         'error' => $e->getMessage(),
                     ]
+                );
+
+                $this->sendDealWebhookMail(
+                    $simpleMailerService,
+                    false,
+                    $dealId,
+                    [],
+                    $e->getMessage()
                 );
             }
         }
@@ -281,5 +299,49 @@ class FluxWebhookController extends AbstractController
     private function isTruthyWebhookValue(string $propertyValue): bool
     {
         return in_array($propertyValue, ['yes', 'true', '1', 'on'], true);
+    }
+
+    /**
+     * @param array<string, mixed> $payload
+     */
+    private function sendDealWebhookMail(
+        SimpleMailerService $simpleMailerService,
+        bool $success,
+        string $dealId,
+        array $payload,
+        ?string $errorMessage,
+    ): void {
+        $subject = $success
+            ? sprintf('[LNS Connecteur] Bon de commande cree pour le deal %s', $dealId)
+            : sprintf('[LNS Connecteur] Echec creation bon de commande pour le deal %s', $dealId);
+
+        $lines = [
+            $success
+                ? 'Le webhook deal HubSpot a cree le bon de commande ERP avec succes.'
+                : 'Le webhook deal HubSpot a echoue lors de la creation du bon de commande ERP.',
+            '',
+            sprintf('Deal HubSpot: %s', $dealId),
+        ];
+
+        if ($success && $payload !== []) {
+            $lines[] = sprintf('Reference commande: %s', (string) ($payload['referenceCommande'] ?? ''));
+            $lines[] = sprintf('Client ERP: %s', (string) ($payload['numClient'] ?? ''));
+            $lines[] = sprintf('Nombre de lignes: %d', is_array($payload['orderLines'] ?? null) ? count($payload['orderLines']) : 0);
+            $lines[] = '';
+            $lines[] = 'Payload ERP:';
+            $lines[] = json_encode($payload, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: '{}';
+        }
+
+        if (!$success) {
+            $lines[] = '';
+            $lines[] = 'Erreur:';
+            $lines[] = $errorMessage ?? 'Erreur inconnue.';
+        }
+
+        try {
+            $simpleMailerService->sendTextMessage($subject, implode("\n", $lines));
+        } catch (\Throwable) {
+            // Le mail informatif ne doit pas faire echouer le webhook lui-meme.
+        }
     }
 }
