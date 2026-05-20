@@ -7,6 +7,7 @@ use App\Entity\DealLineItem;
 use App\Entity\OrderForm;
 use App\Repository\OrderFormRepository;
 use App\Service\HubSpot\HubspotOrderFormDealSyncService;
+use App\Service\Mailer\SimpleMailerService;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Symfony\Component\HttpFoundation\File\UploadedFile;
@@ -19,7 +20,10 @@ class OrderFormSubmissionService
         private readonly OrderFormRepository $orderFormRepository,
         private readonly OrderFormSpreadsheetParser $spreadsheetParser,
         private readonly HubspotOrderFormDealSyncService $hubspotOrderFormDealSyncService,
+        private readonly SimpleMailerService $simpleMailerService,
         private readonly SluggerInterface $slugger,
+        #[Autowire('%hubspot_portal_id%')]
+        private readonly string $hubspotPortalId,
         #[Autowire('%order_form_upload_dir%')]
         private readonly string $orderFormUploadDir,
     ) {
@@ -65,6 +69,11 @@ class OrderFormSubmissionService
                 $parseResult['errors'] ?? [],
                 $parseResult['failedRows'] ?? [],
             );
+            $this->notifyCommercialFailure(
+                $orderForm,
+                $this->normalizeErrors($parseResult),
+                $parseResult['failedRows'] ?? [],
+            );
 
             return [
                 'success' => false,
@@ -85,6 +94,7 @@ class OrderFormSubmissionService
             ]];
 
             $this->markOrderFormAsFailed($orderForm, $hubspotErrors, []);
+            $this->notifyCommercialFailure($orderForm, $hubspotErrors, []);
 
             return [
                 'success' => false,
@@ -98,6 +108,7 @@ class OrderFormSubmissionService
             $hubspotErrors = $hubspotResult['errors'] ?? [];
 
             $this->markOrderFormAsFailed($orderForm, $hubspotErrors, []);
+            $this->notifyCommercialFailure($orderForm, $hubspotErrors, []);
 
             return [
                 'success' => false,
@@ -123,6 +134,7 @@ class OrderFormSubmissionService
         $this->entityManager->persist($orderForm);
         $this->entityManager->persist($deal);
         $this->entityManager->flush();
+        $this->notifyCommercialSuccess($orderForm, $deal);
 
         return [
             'success' => true,
@@ -235,5 +247,97 @@ class OrderFormSubmissionService
         }
 
         return $errors;
+    }
+
+    private function notifyCommercialSuccess(OrderForm $orderForm, Deal $deal): void
+    {
+        $recipient = trim((string) $orderForm->getCommercial()?->getEmail());
+
+        if ($recipient === '') {
+            return;
+        }
+
+        $subject = sprintf('[LNS Connecteur] Order form %s valide', (string) $orderForm->getReferenceNumber());
+        $text = implode("\n", [
+            sprintf('Bonjour %s,', $orderForm->getCommercial()?->getFullName() ?? 'commercial'),
+            '',
+            'Votre order form a bien ete valide et envoye vers HubSpot.',
+            sprintf('Reference: %s', (string) $orderForm->getReferenceNumber()),
+            sprintf('Type de deal: %s', (string) $orderForm->getDealType()),
+            sprintf('Deal HubSpot: %s', (string) ($deal->getDealId() ?? $orderForm->getDealId() ?? 'cree avec succes')),
+            sprintf('Montant total: %.2f EUR', $deal->getTotalAmount()),
+        ]);
+
+        try {
+            $this->simpleMailerService->sendTemplateMessage(
+                $subject,
+                'mailer/order_form_validated.html.twig',
+                [
+                    'subject' => $subject,
+                    'commercialName' => $orderForm->getCommercial()?->getFullName() ?? 'commercial',
+                    'orderForm' => $orderForm,
+                    'deal' => $deal,
+                    'dealUrl' => $this->buildHubspotDealUrl($deal->getDealId()),
+                ],
+                $text,
+                [$recipient]
+            );
+        } catch (\Throwable) {
+        }
+    }
+
+    private function buildHubspotDealUrl(?string $dealId): ?string
+    {
+        $portalId = trim($this->hubspotPortalId);
+        $dealId = trim((string) $dealId);
+
+        if ($portalId === '' || $dealId === '') {
+            return null;
+        }
+
+        return sprintf('https://app-eu1.hubspot.com/contacts/%s/record/0-3/%s', $portalId, $dealId);
+    }
+
+    /**
+     * @param array<int, array<string, mixed>> $errors
+     * @param array<int, array<string, mixed>> $retryRows
+     */
+    private function notifyCommercialFailure(OrderForm $orderForm, array $errors, array $retryRows): void
+    {
+        $recipient = trim((string) $orderForm->getCommercial()?->getEmail());
+
+        if ($recipient === '') {
+            return;
+        }
+
+        $subject = sprintf('[LNS Connecteur] Order form %s en echec', (string) $orderForm->getReferenceNumber());
+        $textLines = [
+            sprintf('Bonjour %s,', $orderForm->getCommercial()?->getFullName() ?? 'commercial'),
+            '',
+            'Votre order form n a pas pu etre valide.',
+            sprintf('Reference: %s', (string) $orderForm->getReferenceNumber()),
+            'Erreurs:',
+        ];
+
+        foreach ($errors as $error) {
+            $textLines[] = sprintf('- %s: %s', (string) ($error['field'] ?? 'validation'), (string) ($error['message'] ?? 'Erreur inconnue.'));
+        }
+
+        try {
+            $this->simpleMailerService->sendTemplateMessage(
+                $subject,
+                'mailer/order_form_failed.html.twig',
+                [
+                    'subject' => $subject,
+                    'commercialName' => $orderForm->getCommercial()?->getFullName() ?? 'commercial',
+                    'orderForm' => $orderForm,
+                    'errors' => $errors,
+                    'retryRows' => $retryRows,
+                ],
+                implode("\n", $textLines),
+                [$recipient]
+            );
+        } catch (\Throwable) {
+        }
     }
 }

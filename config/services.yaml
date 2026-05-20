@@ -1,5 +1,6 @@
 parameters:
     base_uri_hubspot: 'https://api.hubapi.com'
+    hubspot_portal_id: '143807682'
     hubspot_access: '%env(HUBSPOT_ACCESS_TOKEN)%'
     hubspot_order_form_pipeline_label: 'Pipeline sales'
     hubspot_order_form_pipeline_value: 'default'

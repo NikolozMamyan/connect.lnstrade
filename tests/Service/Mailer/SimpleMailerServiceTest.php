@@ -7,6 +7,8 @@ use PHPUnit\Framework\TestCase;
 use Symfony\Component\Mailer\MailerInterface;
 use Symfony\Component\Mime\Email;
 use Symfony\Component\Mime\Part\DataPart;
+use Twig\Environment;
+use Twig\Loader\ArrayLoader;
 
 class SimpleMailerServiceTest extends TestCase
 {
@@ -24,6 +26,7 @@ class SimpleMailerServiceTest extends TestCase
 
         $service = new SimpleMailerService(
             $mailer,
+            new Environment(new ArrayLoader()),
             'no-reply@lnstrade.fr',
             ['corentin.bury@lnstrade.fr']
         );

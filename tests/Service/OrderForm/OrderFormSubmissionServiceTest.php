@@ -6,6 +6,7 @@ use App\Entity\Commercial;
 use App\Entity\OrderForm;
 use App\Repository\OrderFormRepository;
 use App\Service\HubSpot\HubspotOrderFormDealSyncService;
+use App\Service\Mailer\SimpleMailerService;
 use App\Service\OrderForm\OrderFormSpreadsheetParser;
 use App\Service\OrderForm\OrderFormSubmissionService;
 use Doctrine\ORM\EntityManagerInterface;
@@ -81,7 +82,9 @@ class OrderFormSubmissionServiceTest extends TestCase
             $orderFormRepository,
             $parser,
             $hubspotSync,
+            $this->createStub(SimpleMailerService::class),
             new AsciiSlugger(),
+            '143807682',
             $this->createUploadDirectory(),
         );
 
@@ -131,7 +134,9 @@ class OrderFormSubmissionServiceTest extends TestCase
             $orderFormRepository,
             $parser,
             $hubspotSync,
+            $this->createStub(SimpleMailerService::class),
             new AsciiSlugger(),
+            '143807682',
             $this->createUploadDirectory(),
         );
 

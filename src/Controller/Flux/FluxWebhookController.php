@@ -339,7 +339,31 @@ class FluxWebhookController extends AbstractController
         }
 
         try {
-            $simpleMailerService->sendTextMessage($subject, implode("\n", $lines));
+            if ($success) {
+                $simpleMailerService->sendTemplateMessage(
+                    $subject,
+                    'mailer/order_webhook_success.html.twig',
+                    [
+                        'subject' => $subject,
+                        'dealId' => $dealId,
+                        'payload' => $payload,
+                    ],
+                    implode("\n", $lines)
+                );
+
+                return;
+            }
+
+            $simpleMailerService->sendTemplateMessage(
+                $subject,
+                'mailer/order_webhook_failure.html.twig',
+                [
+                    'subject' => $subject,
+                    'dealId' => $dealId,
+                    'errorMessage' => $errorMessage ?? 'Erreur inconnue.',
+                ],
+                implode("\n", $lines)
+            );
         } catch (\Throwable) {
             // Le mail informatif ne doit pas faire echouer le webhook lui-meme.
         }

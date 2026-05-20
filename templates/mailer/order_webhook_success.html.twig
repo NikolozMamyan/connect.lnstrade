@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>{{ subject }}</title>
+</head>
+<body style="margin:0;padding:0;background:#f3f7fb;font-family:'DM Sans',Arial,sans-serif;color:#172033;">
+    <div style="max-width:760px;margin:0 auto;padding:32px 20px;">
+        <div style="background:linear-gradient(135deg,#0f172a 0%,#1d4ed8 58%,#00c2a8 100%);border-radius:28px;padding:32px 34px;color:#ffffff;box-shadow:0 24px 60px rgba(15,23,42,0.18);">
+            <div style="display:inline-block;background:rgba(255,255,255,0.16);padding:8px 14px;border-radius:999px;font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;">LNS Connecteur</div>
+            <h1 style="margin:18px 0 10px;font-size:30px;line-height:1.15;">Bon de commande cree avec succes</h1>
+            <p style="margin:0;font-size:15px;line-height:1.7;color:rgba(255,255,255,0.9);">
+                Le webhook HubSpot a bien cree le bon de commande ERP pour le deal <strong>#{{ dealId }}</strong>.
+            </p>
+        </div>
+
+        <div style="margin-top:-18px;background:#ffffff;border:1px solid rgba(15,23,42,0.08);border-radius:24px;padding:28px 28px 22px;box-shadow:0 16px 48px rgba(15,23,42,0.08);">
+            <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;margin-bottom:18px;">
+                <tr>
+                    <td width="50%" style="padding:0 12px 14px 0;vertical-align:top;">
+                        <div style="font-size:12px;font-weight:700;color:#6b7280;letter-spacing:.06em;text-transform:uppercase;">Reference commande</div>
+                        <div style="margin-top:6px;font-size:18px;font-weight:700;color:#172033;">{{ payload.referenceCommande ?: 'N/A' }}</div>
+                    </td>
+                    <td width="50%" style="padding:0 0 14px 12px;vertical-align:top;">
+                        <div style="font-size:12px;font-weight:700;color:#6b7280;letter-spacing:.06em;text-transform:uppercase;">Client ERP</div>
+                        <div style="margin-top:6px;font-size:18px;font-weight:700;color:#172033;">{{ payload.numClient ?: 'N/A' }}</div>
+                    </td>
+                </tr>
+                <tr>
+                    <td width="50%" style="padding:0 12px 0 0;vertical-align:top;">
+                        <div style="font-size:12px;font-weight:700;color:#6b7280;letter-spacing:.06em;text-transform:uppercase;">Statut</div>
+                        <div style="margin-top:6px;">
+                            <span style="display:inline-block;background:#e8fbf7;color:#007c68;padding:7px 12px;border-radius:999px;font-size:12px;font-weight:700;">{{ payload.statut ?: 'Saisi' }}</span>
+                        </div>
+                    </td>
+                    <td width="50%" style="padding:0 0 0 12px;vertical-align:top;">
+                        <div style="font-size:12px;font-weight:700;color:#6b7280;letter-spacing:.06em;text-transform:uppercase;">Commercial</div>
+                        <div style="margin-top:6px;font-size:16px;font-weight:600;color:#172033;">{{ payload.ownerFirstName ?: '' }} {{ payload.ownerName ?: '' }}</div>
+                    </td>
+                </tr>
+            </table>
+
+            <div style="margin-top:18px;border-top:1px solid rgba(15,23,42,0.08);padding-top:22px;">
+                <h2 style="margin:0 0 14px;font-size:18px;color:#172033;">Lignes de commande</h2>
+                <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:separate;border-spacing:0;overflow:hidden;border:1px solid rgba(15,23,42,0.08);border-radius:18px;">
+                    <thead>
+                        <tr style="background:#f8fafc;">
+                            <th align="left" style="padding:14px 16px;font-size:12px;color:#6b7280;text-transform:uppercase;letter-spacing:.06em;">Reference</th>
+                            <th align="left" style="padding:14px 16px;font-size:12px;color:#6b7280;text-transform:uppercase;letter-spacing:.06em;">Designation</th>
+                            <th align="right" style="padding:14px 16px;font-size:12px;color:#6b7280;text-transform:uppercase;letter-spacing:.06em;">Qté</th>
+                            <th align="right" style="padding:14px 16px;font-size:12px;color:#6b7280;text-transform:uppercase;letter-spacing:.06em;">Prix HT</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for line in payload.orderLines ?? [] %}
+                            <tr>
+                                <td style="padding:14px 16px;border-top:1px solid rgba(15,23,42,0.08);font-size:14px;font-weight:700;color:#172033;">{{ line.reference ?: 'N/A' }}</td>
+                                <td style="padding:14px 16px;border-top:1px solid rgba(15,23,42,0.08);font-size:14px;color:#334155;">{{ line.designation ?: 'Sans designation' }}</td>
+                                <td align="right" style="padding:14px 16px;border-top:1px solid rgba(15,23,42,0.08);font-size:14px;color:#172033;">{{ line.quantite|default(0)|number_format(0, ',', ' ') }}</td>
+                                <td align="right" style="padding:14px 16px;border-top:1px solid rgba(15,23,42,0.08);font-size:14px;color:#172033;">{{ line.prixHT|default(0)|number_format(2, ',', ' ') }} €</td>
+                            </tr>
+                        {% else %}
+                            <tr>
+                                <td colspan="4" style="padding:18px 16px;border-top:1px solid rgba(15,23,42,0.08);font-size:14px;color:#6b7280;text-align:center;">Aucune ligne de commande.</td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+
+            <div style="margin-top:20px;padding:16px 18px;background:#f8fafc;border-radius:18px;color:#475569;font-size:13px;line-height:1.7;">
+                Date commande: <strong style="color:#172033;">{{ payload.dateCommande ?: 'N/A' }}</strong><br>
+                Date livraison: <strong style="color:#172033;">{{ payload.dateLivraison ?: 'N/A' }}</strong><br>
+                Mode expedition: <strong style="color:#172033;">{{ payload.modeExpedition ?: 'N/A' }}</strong>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

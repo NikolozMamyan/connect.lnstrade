@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>{{ subject }}</title>
+</head>
+<body style="margin:0;padding:0;background:#fff9ef;font-family:'DM Sans',Arial,sans-serif;color:#172033;">
+    <div style="max-width:760px;margin:0 auto;padding:32px 20px;">
+        <div style="background:linear-gradient(135deg,#7c4a03 0%,#d97706 58%,#f4b740 100%);border-radius:28px;padding:32px 34px;color:#ffffff;box-shadow:0 24px 60px rgba(124,74,3,0.18);">
+            <div style="display:inline-block;background:rgba(255,255,255,0.16);padding:8px 14px;border-radius:999px;font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;">Order Form</div>
+            <h1 style="margin:18px 0 10px;font-size:30px;line-height:1.15;">Votre depot demande une reprise</h1>
+            <p style="margin:0;font-size:15px;line-height:1.7;color:rgba(255,255,255,0.92);">
+                Bonjour {{ commercialName }}, votre order form n a pas pu etre valide completement. Vous trouverez ci-dessous les points a verifier.
+            </p>
+        </div>
+
+        <div style="margin-top:-18px;background:#ffffff;border:1px solid rgba(217,119,6,0.14);border-radius:24px;padding:28px;box-shadow:0 16px 48px rgba(124,74,3,0.08);">
+            <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;margin-bottom:18px;">
+                <tr>
+                    <td width="50%" style="padding:0 12px 14px 0;vertical-align:top;">
+                        <div style="font-size:12px;font-weight:700;color:#6b7280;letter-spacing:.06em;text-transform:uppercase;">Reference order form</div>
+                        <div style="margin-top:6px;font-size:18px;font-weight:700;color:#172033;">{{ orderForm.referenceNumber ?: 'N/A' }}</div>
+                    </td>
+                    <td width="50%" style="padding:0 0 14px 12px;vertical-align:top;">
+                        <div style="font-size:12px;font-weight:700;color:#6b7280;letter-spacing:.06em;text-transform:uppercase;">Fichier</div>
+                        <div style="margin-top:6px;font-size:16px;font-weight:600;color:#172033;">{{ orderForm.originalFileName ?: 'N/A' }}</div>
+                    </td>
+                </tr>
+            </table>
+
+            <div style="font-size:12px;font-weight:700;color:#b45309;letter-spacing:.08em;text-transform:uppercase;">Erreurs detectees</div>
+            <div style="margin-top:12px;display:flex;flex-direction:column;gap:10px;">
+                {% for error in errors %}
+                    <div style="padding:16px 18px;background:#fffaf0;border:1px solid rgba(217,119,6,0.16);border-radius:18px;color:#92400e;font-size:14px;line-height:1.7;">
+                        <strong style="display:block;color:#7c2d12;margin-bottom:4px;">{{ error.field ?? 'Validation' }}</strong>
+                        <span>{{ error.message ?? 'Erreur de validation.' }}</span>
+                        {% if error.details is defined and error.details %}
+                            <div style="margin-top:8px;color:#6b7280;white-space:pre-wrap;">{{ error.details }}</div>
+                        {% endif %}
+                    </div>
+                {% else %}
+                    <div style="padding:16px 18px;background:#fffaf0;border:1px solid rgba(217,119,6,0.16);border-radius:18px;color:#92400e;font-size:14px;line-height:1.7;">
+                        Aucune erreur detaillee n a ete retournee.
+                    </div>
+                {% endfor %}
+            </div>
+
+            {% if retryRows is not empty %}
+                <div style="margin-top:20px;padding:16px 18px;background:#f8fafc;border-radius:18px;color:#475569;font-size:13px;line-height:1.7;">
+                    Lignes a reprendre: <strong style="color:#172033;">{{ retryRows|length }}</strong>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+</body>
+</html>

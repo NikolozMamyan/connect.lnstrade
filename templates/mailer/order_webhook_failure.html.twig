@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>{{ subject }}</title>
+</head>
+<body style="margin:0;padding:0;background:#fff9ef;font-family:'DM Sans',Arial,sans-serif;color:#172033;">
+    <div style="max-width:760px;margin:0 auto;padding:32px 20px;">
+        <div style="background:linear-gradient(135deg,#7c4a03 0%,#d97706 58%,#f4b740 100%);border-radius:28px;padding:32px 34px;color:#ffffff;box-shadow:0 24px 60px rgba(124,74,3,0.18);">
+            <div style="display:inline-block;background:rgba(255,255,255,0.16);padding:8px 14px;border-radius:999px;font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;">LNS Connecteur</div>
+            <h1 style="margin:18px 0 10px;font-size:30px;line-height:1.15;">Alerte sur la creation du bon de commande</h1>
+            <p style="margin:0;font-size:15px;line-height:1.7;color:rgba(255,255,255,0.92);">
+                Le webhook HubSpot n a pas pu finaliser la creation ERP pour le deal <strong>#{{ dealId }}</strong>.
+            </p>
+        </div>
+
+        <div style="margin-top:-18px;background:#ffffff;border:1px solid rgba(217,119,6,0.14);border-radius:24px;padding:28px;box-shadow:0 16px 48px rgba(124,74,3,0.08);">
+            <div style="font-size:12px;font-weight:700;color:#b45309;letter-spacing:.08em;text-transform:uppercase;">Diagnostic</div>
+            <h2 style="margin:10px 0 14px;font-size:20px;color:#172033;">Erreur retournee</h2>
+
+            <div style="padding:18px 20px;background:#fffaf0;border:1px solid rgba(217,119,6,0.16);border-radius:18px;color:#92400e;font-size:14px;line-height:1.75;white-space:pre-wrap;">{{ errorMessage ?: 'Erreur inconnue.' }}</div>
+
+            <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;margin-top:20px;">
+                <tr>
+                    <td width="50%" style="padding:0 12px 0 0;vertical-align:top;">
+                        <div style="font-size:12px;font-weight:700;color:#6b7280;letter-spacing:.06em;text-transform:uppercase;">Deal HubSpot</div>
+                        <div style="margin-top:6px;font-size:18px;font-weight:700;color:#172033;">{{ dealId }}</div>
+                    </td>
+                    <td width="50%" style="padding:0 0 0 12px;vertical-align:top;">
+                        <div style="font-size:12px;font-weight:700;color:#6b7280;letter-spacing:.06em;text-transform:uppercase;">Action attendue</div>
+                        <div style="margin-top:6px;font-size:16px;font-weight:600;color:#172033;">Creation du bon de commande ERP</div>
+                    </td>
+                </tr>
+            </table>
+
+            <div style="margin-top:22px;padding:16px 18px;background:#f8fafc;border-radius:18px;color:#475569;font-size:13px;line-height:1.7;">
+                Controle a effectuer:
+                <ul style="margin:10px 0 0 18px;padding:0;">
+                    <li>Verifier le deal HubSpot et ses line items.</li>
+                    <li>Verifier la presence du client ERP et des references produit.</li>
+                    <li>Verifier la reponse de l API ERP dans les logs webhook.</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
