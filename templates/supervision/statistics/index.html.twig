@@ -1,7 +1,7 @@
 {% extends 'layout/app.html.twig' %}
 
-{% block page_title %}Statistiques{% endblock %}
-{% block page_subtitle %}Pilotage des flux internes et lecture KPI des commandes Sage par periode, commercial et chiffre d affaires.{% endblock %}
+{% block page_title %}Statistiques Sage{% endblock %}
+{% block page_subtitle %}Lecture KPI des commandes Sage par periode, commercial et chiffre d affaires.{% endblock %}
 
 {% block stylesheets %}
     {{ parent() }}
@@ -375,7 +375,7 @@
                     <select id="representant" name="representant">
                         <option value="">Tous les commerciaux</option>
                         {% for representant in sage.representants %}
-                            <option value="{{ representant }}" {{ sage.filters.representant == representant ? 'selected' : '' }}>{{ representant }}</option>
+                            <option value="{{ representant.value }}" {{ sage.filters.representant == representant.value ? 'selected' : '' }}>{{ representant.label }}</option>
                         {% endfor %}
                     </select>
                 </div>
@@ -631,201 +631,6 @@
         {% endif %}
     </section>
 
-    <h2 class="erp-subsection-title">Statistiques plateforme et connecteur</h2>
-
-    <section class="dashboard-kpis">
-        <article class="stat-card dashboard-kpi-card dashboard-kpi-card--logs">
-            <div class="stat-header">
-                <span class="stat-label">Utilisateurs</span>
-                <div class="stat-icon blue"><i class="fas fa-users"></i></div>
-            </div>
-            <div class="stat-value">{{ stats.users }}</div>
-        </article>
-
-        <article class="stat-card dashboard-kpi-card dashboard-kpi-card--contacts">
-            <div class="stat-header">
-                <span class="stat-label">Logs 24h</span>
-                <div class="stat-icon green"><i class="fas fa-wave-square"></i></div>
-            </div>
-            <div class="stat-value">{{ stats.logs24h }}</div>
-        </article>
-
-        <article class="stat-card dashboard-kpi-card dashboard-kpi-card--products">
-            <div class="stat-header">
-                <span class="stat-label">Order forms</span>
-                <div class="stat-icon orange"><i class="fas fa-file-lines"></i></div>
-            </div>
-            <div class="stat-value">{{ stats.orderForms }}</div>
-        </article>
-
-        <article class="stat-card dashboard-kpi-card dashboard-kpi-card--clients">
-            <div class="stat-header">
-                <span class="stat-label">Deals</span>
-                <div class="stat-icon purple"><i class="fas fa-briefcase"></i></div>
-            </div>
-            <div class="stat-value">{{ stats.deals }}</div>
-            <div class="stat-delta">{{ stats.dealAmount|number_format(2, ',', ' ') }} EUR</div>
-        </article>
-    </section>
-
-    <section class="dashboard-main-grid">
-        <div class="dashboard-main-grid__primary">
-            <div class="card dashboard-table-card">
-                <div class="card-header">
-                    <span class="card-title">Order forms par statut</span>
-                    <span class="tag tag-info">Global</span>
-                </div>
-                <div class="card-body">
-                    <div class="dashboard-schedule">
-                        {% for status, total in orderFormStatusCounts %}
-                            <div class="dashboard-schedule__row">
-                                <div>
-                                    <strong>{{ status|replace({'_': ' '})|title }}</strong>
-                                    <span>Volume total en base</span>
-                                </div>
-                                <code>{{ total }}</code>
-                            </div>
-                        {% endfor %}
-                    </div>
-                </div>
-            </div>
-
-            <div class="card dashboard-table-card">
-                <div class="card-header">
-                    <span class="card-title">Activite order forms sur 7 jours</span>
-                    <span class="tag tag-accent">Hebdo</span>
-                </div>
-                <div class="card-body">
-                    <div class="dashboard-schedule">
-                        {% for day, total in orderFormDailyCounts %}
-                            <div class="dashboard-schedule__row">
-                                <div>
-                                    <strong>{{ day|date('d/m/Y') }}</strong>
-                                    <span>Soumissions detectees</span>
-                                </div>
-                                <code>{{ total }}</code>
-                            </div>
-                        {% endfor %}
-                    </div>
-                </div>
-            </div>
-
-            <div class="card dashboard-table-card">
-                <div class="card-header">
-                    <span class="card-title">Top commerciaux internes</span>
-                    <span class="tag tag-warning">Deals</span>
-                </div>
-                <div class="card-body" style="padding: 0;">
-                    <div class="table-responsive">
-                        <table class="table">
-                            <thead>
-                                <tr>
-                                    <th>Commercial</th>
-                                    <th>Deals</th>
-                                    <th>Montant</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {% for item in topCommercials %}
-                                    <tr>
-                                        <td><strong>{{ item.name }}</strong></td>
-                                        <td>{{ item.deals }}</td>
-                                        <td>{{ item.amount|number_format(2, ',', ' ') }} EUR</td>
-                                    </tr>
-                                {% else %}
-                                    <tr>
-                                        <td colspan="3" style="text-align:center; padding: 2rem;">Aucune donnee disponible.</td>
-                                    </tr>
-                                {% endfor %}
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <aside class="dashboard-main-grid__aside">
-            <div class="card dashboard-side-card">
-                <div class="card-header">
-                    <span class="card-title">Roles utilisateurs</span>
-                    <span class="tag tag-info">{{ roleCounts|length }}</span>
-                </div>
-                <div class="card-body">
-                    <div class="dashboard-schedule">
-                        {% for role, total in roleCounts %}
-                            <div class="dashboard-schedule__row">
-                                <div>
-                                    <strong>{{ role|replace({'ROLE_': '', '_': ' '})|title }}</strong>
-                                    <span>Repartition des acces</span>
-                                </div>
-                                <code>{{ total }}</code>
-                            </div>
-                        {% endfor %}
-                    </div>
-                </div>
-            </div>
-
-            <div class="card dashboard-side-card">
-                <div class="card-header">
-                    <span class="card-title">Logs par niveau</span>
-                    <span class="tag tag-accent">24h</span>
-                </div>
-                <div class="card-body">
-                    <div class="dashboard-schedule">
-                        {% for level, total in levelCounts %}
-                            <div class="dashboard-schedule__row">
-                                <div>
-                                    <strong>{{ level|title }}</strong>
-                                    <span>Volume recemment enregistre</span>
-                                </div>
-                                <code>{{ total }}</code>
-                            </div>
-                        {% endfor %}
-                    </div>
-                </div>
-            </div>
-
-            <div class="card dashboard-side-card">
-                <div class="card-header">
-                    <span class="card-title">Activite par flux</span>
-                    <span class="tag tag-warning">24h</span>
-                </div>
-                <div class="card-body">
-                    <div class="dashboard-schedule">
-                        {% for fluxKey, total in fluxCounts %}
-                            <div class="dashboard-schedule__row">
-                                <div>
-                                    <strong>{{ fluxKey|replace({'_': ' '})|title }}</strong>
-                                    <span>Evenements traces</span>
-                                </div>
-                                <code>{{ total }}</code>
-                            </div>
-                        {% else %}
-                            <div class="dashboard-alert-empty">Aucune activite recente.</div>
-                        {% endfor %}
-                    </div>
-                </div>
-            </div>
-
-            <div class="card dashboard-side-card">
-                <div class="card-header">
-                    <span class="card-title">Qualite de donnees</span>
-                    <span class="tag tag-danger">A surveiller</span>
-                </div>
-                <div class="card-body">
-                    <div class="dashboard-schedule">
-                        <div class="dashboard-schedule__row">
-                            <div>
-                                <strong>Companies sans id_erp</strong>
-                                <span>Bloquant pour certains flux ERP</span>
-                            </div>
-                            <code>{{ stats.companiesWithoutErpId }}</code>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </aside>
-    </section>
 {% endblock %}
 
 {% block javascripts %}

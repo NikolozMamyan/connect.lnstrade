@@ -4,6 +4,21 @@ namespace App\Service\Erp;
 
 final class SageOrderAnalyticsService
 {
+    /**
+     * @var list<array{hubspotId: string, firstName: string, lastName: string, email: string}>
+     */
+    private const ALLOWED_COMMERCIALS = [
+        ['hubspotId' => '78020060', 'firstName' => 'Quentin', 'lastName' => 'Strasser', 'email' => 'quentin.strasser@lnstrade.fr'],
+        ['hubspotId' => '65156164', 'firstName' => 'Douglas', 'lastName' => 'Woods', 'email' => 'douglas.woods@lnstrade.fr'],
+        ['hubspotId' => '65155850', 'firstName' => 'Cyril', 'lastName' => 'Motz', 'email' => 'cyril.motz@lnstrade.fr'],
+        ['hubspotId' => '65524033', 'firstName' => 'Savinien', 'lastName' => 'Saint Paul', 'email' => 'savinien.saint-paul@lnstrade.fr'],
+        ['hubspotId' => '65157022', 'firstName' => 'Corentin', 'lastName' => 'BURY', 'email' => 'corentin.bury@lnstrade.fr'],
+        ['hubspotId' => '77839925', 'firstName' => 'Enzo', 'lastName' => 'Houdé', 'email' => 'enzo.houde@lnstrade.fr'],
+        ['hubspotId' => '78818212', 'firstName' => 'Jerome', 'lastName' => 'Degreve', 'email' => 'jerome.degreve@lnstrade.fr'],
+        ['hubspotId' => '29391503', 'firstName' => 'Vincent', 'lastName' => 'TOUATI', 'email' => 'vincent.touati@lnstrade.fr'],
+        ['hubspotId' => '65669769', 'firstName' => 'Anthony', 'lastName' => 'Chaoui', 'email' => 'anthony.chaoui@lnstrade.fr'],
+    ];
+
     public function __construct(
         private readonly SageClient $sageClient,
     ) {
@@ -53,7 +68,6 @@ final class SageOrderAnalyticsService
         $statusCounts = [];
         $commercialRevenue = [];
         $commercialOrders = [];
-        $representants = [];
         $revenueSeries = [];
         $orderSeries = [];
 
@@ -68,13 +82,8 @@ final class SageOrderAnalyticsService
             $statusLabel = $order['statut'] !== '' ? $order['statut'] : 'Non renseigne';
             $statusCounts[$statusLabel] = ($statusCounts[$statusLabel] ?? 0) + 1;
 
-            $commercialLabel = $order['representant'] !== '' ? $order['representant'] : 'Non attribue';
-            $commercialRevenue[$commercialLabel] = ($commercialRevenue[$commercialLabel] ?? 0.0) + $order['montantTTC'];
-            $commercialOrders[$commercialLabel] = ($commercialOrders[$commercialLabel] ?? 0) + 1;
-
-            if ($order['representant'] !== '') {
-                $representants[$order['representant']] = $order['representant'];
-            }
+            $commercialRevenue[$order['representant']] = ($commercialRevenue[$order['representant']] ?? 0.0) + $order['montantTTC'];
+            $commercialOrders[$order['representant']] = ($commercialOrders[$order['representant']] ?? 0) + 1;
 
             $bucket = $this->buildPeriodBucket($order['date'], $groupBy);
             $revenueSeries[$bucket['key']] = [
@@ -91,7 +100,6 @@ final class SageOrderAnalyticsService
         arsort($statusCounts);
         ksort($revenueSeries);
         ksort($orderSeries);
-        sort($representants);
 
         $topCommercials = [];
         foreach (array_slice($commercialRevenue, 0, 8, true) as $name => $amount) {
@@ -133,7 +141,7 @@ final class SageOrderAnalyticsService
                 ],
             ],
             'topCommercials' => $topCommercials,
-            'representants' => array_values($representants),
+            'representants' => $this->buildRepresentantOptions($orders),
             'recentOrders' => array_slice($orders, 0, max(1, $tableLimit)),
             'allOrders' => $orders,
         ];
@@ -229,6 +237,13 @@ final class SageOrderAnalyticsService
             return null;
         }
 
+        $rawRepresentant = trim((string) ($header['representant'] ?? ''));
+        $representant = $this->resolveCommercialDisplayName($rawRepresentant);
+
+        if ($representant === null) {
+            return null;
+        }
+
         $date = $this->createDate($header['date'] ?? $header['dateBC'] ?? $header['dateCreation'] ?? null);
         $freeFields = isset($header['champsLibres']) && is_array($header['champsLibres']) ? $header['champsLibres'] : [];
 
@@ -240,7 +255,8 @@ final class SageOrderAnalyticsService
             'date_label' => $date?->format('d/m/Y') ?? '-',
             'tiers' => trim((string) ($header['tiers'] ?? $header['numClient'] ?? '')),
             'company_name' => trim((string) ($freeFields['nomtiers'] ?? $header['nomEntreprise'] ?? '')),
-            'representant' => trim((string) ($header['representant'] ?? '')),
+            'representant' => $representant,
+            'representant_raw' => $rawRepresentant,
             'expediteur' => trim((string) ($header['expediteur'] ?? $header['modeExpedition'] ?? '')),
             'statut' => trim((string) ($header['statut'] ?? $header['statutBC'] ?? '')),
             'estValide' => (bool) ($header['estValide'] ?? $header['estvalide'] ?? false),
@@ -313,5 +329,74 @@ final class SageOrderAnalyticsService
             'key' => $date->format('Y-m'),
             'label' => $date->format('m/Y'),
         ];
+    }
+
+    private function buildRepresentantOptions(array $orders): array
+    {
+        $present = [];
+
+        foreach ($orders as $order) {
+            $present[$order['representant']] = true;
+        }
+
+        $options = [];
+
+        foreach (self::ALLOWED_COMMERCIALS as $commercial) {
+            $label = $this->buildCommercialDisplayName($commercial);
+
+            if (!isset($present[$label])) {
+                continue;
+            }
+
+            $options[] = [
+                'value' => $this->buildSageCommercialValue($commercial),
+                'label' => $label,
+            ];
+        }
+
+        return $options;
+    }
+
+    private function resolveCommercialDisplayName(string $rawRepresentant): ?string
+    {
+        if ($rawRepresentant === '') {
+            return null;
+        }
+
+        $normalizedRaw = $this->normalizeCommercialToken($rawRepresentant);
+
+        foreach (self::ALLOWED_COMMERCIALS as $commercial) {
+            $tokens = [
+                $this->normalizeCommercialToken($this->buildCommercialDisplayName($commercial)),
+                $this->normalizeCommercialToken($commercial['lastName'].' '.$commercial['firstName']),
+                $this->normalizeCommercialToken($this->buildSageCommercialValue($commercial)),
+            ];
+
+            if (in_array($normalizedRaw, $tokens, true)) {
+                return $this->buildCommercialDisplayName($commercial);
+            }
+        }
+
+        return null;
+    }
+
+    private function buildCommercialDisplayName(array $commercial): string
+    {
+        return trim($commercial['firstName'].' '.$commercial['lastName']);
+    }
+
+    private function buildSageCommercialValue(array $commercial): string
+    {
+        return mb_strtoupper($commercial['lastName']).' '.$commercial['firstName'];
+    }
+
+    private function normalizeCommercialToken(string $value): string
+    {
+        $value = trim($value);
+        $value = iconv('UTF-8', 'ASCII//TRANSLIT//IGNORE', $value) ?: $value;
+        $value = mb_strtoupper($value);
+        $value = preg_replace('/[^A-Z0-9]+/', ' ', $value);
+
+        return trim((string) $value);
     }
 }
