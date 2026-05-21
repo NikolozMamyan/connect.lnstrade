@@ -1,9 +1,638 @@
 {% extends 'layout/app.html.twig' %}
 
 {% block page_title %}Statistiques{% endblock %}
-{% block page_subtitle %}Vue consolidee de l activite plateforme, du connecteur et des flux order form / deals.{% endblock %}
+{% block page_subtitle %}Pilotage des flux internes et lecture KPI des commandes Sage par periode, commercial et chiffre d affaires.{% endblock %}
+
+{% block stylesheets %}
+    {{ parent() }}
+    <style>
+        .erp-section {
+            display: grid;
+            gap: 24px;
+            margin-bottom: 32px;
+        }
+
+        .erp-hero {
+            position: relative;
+            overflow: hidden;
+            border-radius: 28px;
+            padding: 28px;
+            background:
+                radial-gradient(circle at top right, rgba(255, 255, 255, 0.28), transparent 28%),
+                linear-gradient(135deg, #0f3d5e 0%, #146c94 48%, #71c4ef 100%);
+            color: #fff;
+            box-shadow: 0 24px 60px rgba(15, 61, 94, 0.26);
+        }
+
+        .erp-hero__grid {
+            display: grid;
+            grid-template-columns: minmax(0, 1.7fr) minmax(320px, 1fr);
+            gap: 20px;
+            align-items: end;
+        }
+
+        .erp-hero__eyebrow {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 14px;
+            border-radius: 999px;
+            background: rgba(255, 255, 255, 0.14);
+            font-size: 12px;
+            font-weight: 700;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+        }
+
+        .erp-hero h2 {
+            margin: 16px 0 10px;
+            font-size: clamp(28px, 4vw, 40px);
+            line-height: 1.05;
+        }
+
+        .erp-hero p {
+            max-width: 760px;
+            margin: 0;
+            color: rgba(255, 255, 255, 0.84);
+        }
+
+        .erp-hero__meta {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 14px;
+        }
+
+        .erp-hero__meta-card {
+            padding: 16px 18px;
+            border-radius: 20px;
+            background: rgba(7, 25, 39, 0.22);
+            backdrop-filter: blur(14px);
+        }
+
+        .erp-hero__meta-card span {
+            display: block;
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            color: rgba(255, 255, 255, 0.72);
+        }
+
+        .erp-hero__meta-card strong {
+            display: block;
+            margin-top: 6px;
+            font-size: 22px;
+        }
+
+        .erp-filter-card {
+            border-radius: 26px;
+            padding: 22px;
+            border: 1px solid rgba(15, 61, 94, 0.08);
+            background: linear-gradient(180deg, #ffffff 0%, #f7fbfd 100%);
+            box-shadow: 0 18px 45px rgba(20, 108, 148, 0.08);
+        }
+
+        .erp-filter-grid {
+            display: grid;
+            grid-template-columns: repeat(6, minmax(0, 1fr));
+            gap: 14px;
+        }
+
+        .erp-filter-grid .field {
+            display: grid;
+            gap: 8px;
+        }
+
+        .erp-filter-grid label {
+            font-size: 12px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: #4f6472;
+        }
+
+        .erp-filter-grid input,
+        .erp-filter-grid select {
+            width: 100%;
+            min-height: 46px;
+            padding: 0 14px;
+            border: 1px solid #d5e2ea;
+            border-radius: 14px;
+            background: #fff;
+            color: #183646;
+        }
+
+        .erp-filter-actions {
+            display: flex;
+            gap: 10px;
+            align-items: end;
+        }
+
+        .erp-kpis {
+            display: grid;
+            grid-template-columns: repeat(5, minmax(0, 1fr));
+            gap: 18px;
+        }
+
+        .erp-kpi {
+            position: relative;
+            overflow: hidden;
+            border-radius: 24px;
+            padding: 20px;
+            color: #fff;
+            min-height: 154px;
+            box-shadow: 0 22px 46px rgba(20, 108, 148, 0.18);
+        }
+
+        .erp-kpi:nth-child(1) { background: linear-gradient(135deg, #0f3d5e 0%, #146c94 100%); }
+        .erp-kpi:nth-child(2) { background: linear-gradient(135deg, #0b6e4f 0%, #2bb673 100%); }
+        .erp-kpi:nth-child(3) { background: linear-gradient(135deg, #8f4d00 0%, #f59e0b 100%); }
+        .erp-kpi:nth-child(4) { background: linear-gradient(135deg, #5b2d86 0%, #9b5de5 100%); }
+        .erp-kpi:nth-child(5) { background: linear-gradient(135deg, #6f1d1b 0%, #d8572a 100%); }
+
+        .erp-kpi__label {
+            font-size: 12px;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            color: rgba(255, 255, 255, 0.76);
+        }
+
+        .erp-kpi__value {
+            margin-top: 10px;
+            font-size: clamp(28px, 2.4vw, 38px);
+            line-height: 1;
+            font-weight: 700;
+        }
+
+        .erp-kpi__meta {
+            margin-top: 12px;
+            color: rgba(255, 255, 255, 0.82);
+            font-size: 14px;
+        }
+
+        .erp-chart-grid {
+            display: grid;
+            grid-template-columns: 2fr 1fr;
+            gap: 18px;
+        }
+
+        .erp-chart-stack {
+            display: grid;
+            gap: 18px;
+        }
+
+        .erp-chart-card,
+        .erp-table-card,
+        .erp-detail-card {
+            border-radius: 24px;
+            background: #fff;
+            border: 1px solid rgba(18, 52, 72, 0.08);
+            box-shadow: 0 18px 45px rgba(15, 61, 94, 0.08);
+        }
+
+        .erp-chart-card .card-header,
+        .erp-table-card .card-header,
+        .erp-detail-card .card-header {
+            padding: 18px 20px 0;
+        }
+
+        .erp-chart-card .card-body,
+        .erp-table-card .card-body,
+        .erp-detail-card .card-body {
+            padding: 18px 20px 20px;
+        }
+
+        .erp-chart-canvas {
+            position: relative;
+            min-height: 320px;
+        }
+
+        .erp-chart-canvas--sm {
+            min-height: 260px;
+        }
+
+        .erp-table-grid {
+            display: grid;
+            grid-template-columns: minmax(0, 1.6fr) minmax(340px, 1fr);
+            gap: 18px;
+        }
+
+        .erp-orders-table tbody tr.is-selected {
+            background: rgba(113, 196, 239, 0.16);
+        }
+
+        .erp-orders-table .btn-linkish {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 0;
+            border: 0;
+            background: none;
+            color: #146c94;
+            font-weight: 700;
+            text-decoration: none;
+        }
+
+        .erp-detail-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 14px;
+            margin-bottom: 18px;
+        }
+
+        .erp-detail-metric {
+            padding: 14px 16px;
+            border-radius: 18px;
+            background: #f7fbfd;
+            border: 1px solid rgba(20, 108, 148, 0.08);
+        }
+
+        .erp-detail-metric span {
+            display: block;
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: #607887;
+        }
+
+        .erp-detail-metric strong {
+            display: block;
+            margin-top: 6px;
+            color: #17384a;
+        }
+
+        .erp-alert {
+            padding: 16px 18px;
+            border-radius: 18px;
+            border: 1px solid rgba(184, 63, 54, 0.15);
+            background: rgba(184, 63, 54, 0.06);
+            color: #8f2d25;
+        }
+
+        .erp-subsection-title {
+            margin: 6px 0 0;
+            font-size: 22px;
+            color: #17384a;
+        }
+
+        @media (max-width: 1440px) {
+            .erp-kpis,
+            .erp-filter-grid {
+                grid-template-columns: repeat(3, minmax(0, 1fr));
+            }
+        }
+
+        @media (max-width: 1120px) {
+            .erp-hero__grid,
+            .erp-chart-grid,
+            .erp-table-grid,
+            .erp-detail-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        @media (max-width: 860px) {
+            .erp-kpis,
+            .erp-filter-grid,
+            .erp-hero__meta {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+{% endblock %}
 
 {% block content %}
+    {% set sage = sageStatistics %}
+
+    <section class="erp-section">
+        <div class="erp-hero">
+            <div class="erp-hero__grid">
+                <div>
+                    <span class="erp-hero__eyebrow">
+                        <i class="fas fa-chart-line"></i>
+                        ERP Sage analytics
+                    </span>
+                    <h2 style="color:white;">Lecture business des commandes Sage</h2>
+                    <p>
+                        Vue finance et commerciale unifiee sur document/header et document/line :
+                        chiffre d affaires, panier moyen, top commerciaux, statuts et detail des commandes.
+                    </p>
+                </div>
+                <div class="erp-hero__meta">
+                    <div class="erp-hero__meta-card">
+                        <span>Periode</span>
+                        <strong>{{ sage ? sage.filters.date_debut ~ ' -> ' ~ sage.filters.date_fin : 'Indisponible' }}</strong>
+                    </div>
+                    <div class="erp-hero__meta-card">
+                        <span>Granularite</span>
+                        <strong>{{ sage ? (sage.filters.group_by == 'year' ? 'Annee' : 'Mois') : 'N/A' }}</strong>
+                    </div>
+                    <div class="erp-hero__meta-card">
+                        <span>Source</span>
+                        <strong>Document header / line</strong>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        {% if sageError %}
+            <div class="erp-alert">
+                <strong>Lecture Sage indisponible.</strong>
+                <div>{{ sageError }}</div>
+            </div>
+        {% endif %}
+
+        <div class="erp-filter-card">
+            <div class="card-header" style="padding: 0 0 18px;">
+                <span class="card-title">Filtres KPI Sage</span>
+            </div>
+            <form method="get" class="erp-filter-grid">
+                <div class="field">
+                    <label for="period">Periode</label>
+                    <select id="period" name="period">
+                        <option value="current_month" {{ sage and sage.filters.period == 'current_month' ? 'selected' : '' }}>Mois en cours</option>
+                        <option value="current_year" {{ sage and sage.filters.period == 'current_year' ? 'selected' : '' }}>Annee en cours</option>
+                        <option value="last_12_months" {{ sage and sage.filters.period == 'last_12_months' ? 'selected' : '' }}>12 derniers mois</option>
+                        <option value="custom" {{ sage and sage.filters.period == 'custom' ? 'selected' : '' }}>Periode libre</option>
+                    </select>
+                </div>
+                <div class="field">
+                    <label for="group_by">Vue</label>
+                    <select id="group_by" name="group_by">
+                        <option value="month" {{ sage and sage.filters.group_by == 'month' ? 'selected' : '' }}>Par mois</option>
+                        <option value="year" {{ sage and sage.filters.group_by == 'year' ? 'selected' : '' }}>Par annee</option>
+                    </select>
+                </div>
+                <div class="field">
+                    <label for="date_debut">Date debut</label>
+                    <input id="date_debut" type="date" name="date_debut" value="{{ sage ? sage.filters.date_debut : '' }}">
+                </div>
+                <div class="field">
+                    <label for="date_fin">Date fin</label>
+                    <input id="date_fin" type="date" name="date_fin" value="{{ sage ? sage.filters.date_fin : '' }}">
+                </div>
+                <div class="field">
+                    <label for="representant">Commercial</label>
+                    <select id="representant" name="representant">
+                        <option value="">Tous les commerciaux</option>
+                        {% for representant in sage.representants %}
+                            <option value="{{ representant }}" {{ sage.filters.representant == representant ? 'selected' : '' }}>{{ representant }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="field">
+                    <label for="piece">Piece</label>
+                    <input id="piece" type="text" name="piece" value="{{ sage ? sage.filters.piece : '' }}" placeholder="BC002137">
+                </div>
+                <input type="hidden" name="table_limit" value="15">
+                <div class="erp-filter-actions">
+                    <button class="btn btn-primary btn-md" type="submit">Analyser</button>
+                    <a class="btn btn-secondary btn-md" href="{{ path('supervision_statistics_index') }}">Reset</a>
+                </div>
+            </form>
+        </div>
+
+        {% if sage %}
+            <section class="erp-kpis">
+                <article class="erp-kpi">
+                    <div class="erp-kpi__label">Chiffre d affaires</div>
+                    <div class="erp-kpi__value">{{ sage.summary.revenue_total|number_format(2, ',', ' ') }} EUR</div>
+                    <div class="erp-kpi__meta">{{ sage.summary.order_count }} commandes sur la periode</div>
+                </article>
+                <article class="erp-kpi">
+                    <div class="erp-kpi__label">CA valide</div>
+                    <div class="erp-kpi__value">{{ sage.summary.validated_revenue|number_format(2, ',', ' ') }} EUR</div>
+                    <div class="erp-kpi__meta">Commandes confirmees dans Sage</div>
+                </article>
+                <article class="erp-kpi">
+                    <div class="erp-kpi__label">Panier moyen</div>
+                    <div class="erp-kpi__value">{{ sage.summary.average_basket|number_format(2, ',', ' ') }} EUR</div>
+                    <div class="erp-kpi__meta">Montant moyen par commande</div>
+                </article>
+                <article class="erp-kpi">
+                    <div class="erp-kpi__label">Top commercial</div>
+                    <div class="erp-kpi__value">{{ sage.summary.best_commercial.name }}</div>
+                    <div class="erp-kpi__meta">{{ sage.summary.best_commercial.amount|number_format(2, ',', ' ') }} EUR sur {{ sage.summary.best_commercial.orders }} commandes</div>
+                </article>
+                <article class="erp-kpi">
+                    <div class="erp-kpi__label">Reste a payer</div>
+                    <div class="erp-kpi__value">{{ sage.summary.unpaid_total|number_format(2, ',', ' ') }} EUR</div>
+                    <div class="erp-kpi__meta">Encours theorique sur la selection</div>
+                </article>
+            </section>
+
+            <section class="erp-chart-grid">
+                <div class="erp-chart-card">
+                    <div class="card-header">
+                        <span class="card-title">Evolution du chiffre d affaires</span>
+                    </div>
+                    <div class="card-body">
+                        <div class="erp-chart-canvas">
+                            <canvas id="erpRevenueChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+                <div class="erp-chart-stack">
+                    <div class="erp-chart-card">
+                        <div class="card-header">
+                            <span class="card-title">CA par commercial</span>
+                        </div>
+                        <div class="card-body">
+                            <div class="erp-chart-canvas erp-chart-canvas--sm">
+                                <canvas id="erpCommercialChart"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="erp-chart-card">
+                        <div class="card-header">
+                            <span class="card-title">Repartition des statuts</span>
+                        </div>
+                        <div class="card-body">
+                            <div class="erp-chart-canvas erp-chart-canvas--sm">
+                                <canvas id="erpStatusChart"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section class="erp-chart-grid">
+                <div class="erp-chart-card">
+                    <div class="card-header">
+                        <span class="card-title">Volume de commandes</span>
+                    </div>
+                    <div class="card-body">
+                        <div class="erp-chart-canvas erp-chart-canvas--sm">
+                            <canvas id="erpOrdersChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+                <div class="erp-table-card">
+                    <div class="card-header">
+                        <span class="card-title">Top commerciaux</span>
+                    </div>
+                    <div class="card-body" style="padding: 0;">
+                        <div class="table-responsive">
+                            <table class="table">
+                                <thead>
+                                    <tr>
+                                        <th>Commercial</th>
+                                        <th>Commandes</th>
+                                        <th>CA</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for item in sage.topCommercials %}
+                                        <tr>
+                                            <td><strong>{{ item.name }}</strong></td>
+                                            <td>{{ item.orders }}</td>
+                                            <td>{{ item.amount|number_format(2, ',', ' ') }} EUR</td>
+                                        </tr>
+                                    {% else %}
+                                        <tr>
+                                            <td colspan="3" style="text-align:center; padding: 2rem;">Aucune donnee commerciale.</td>
+                                        </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section class="erp-table-grid">
+                <div class="erp-table-card">
+                    <div class="card-header">
+                        <span class="card-title">Dernieres commandes Sage</span>
+                    </div>
+                    <div class="card-body" style="padding: 0;">
+                        <div class="table-responsive">
+                            <table class="table erp-orders-table">
+                                <thead>
+                                    <tr>
+                                        <th>Piece</th>
+                                        <th>Date</th>
+                                        <th>Client</th>
+                                        <th>Commercial</th>
+                                        <th>Statut</th>
+                                        <th>Montant TTC</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for order in sage.recentOrders %}
+                                        <tr class="{{ sage.filters.selected_piece == order.piece ? 'is-selected' : '' }}">
+                                            <td>
+                                                <a class="btn-linkish" href="{{ path('supervision_statistics_index', {
+                                                    period: sage.filters.period,
+                                                    group_by: sage.filters.group_by,
+                                                    date_debut: sage.filters.date_debut,
+                                                    date_fin: sage.filters.date_fin,
+                                                    representant: sage.filters.representant,
+                                                    tiers: sage.filters.tiers,
+                                                    piece: sage.filters.piece,
+                                                    statut: sage.filters.statut,
+                                                    estvalide: sage.filters.estvalide,
+                                                    table_limit: sage.filters.table_limit,
+                                                    domaine: sage.filters.domaine,
+                                                    type: sage.filters.type,
+                                                    selected_piece: order.piece
+                                                }) }}">
+                                                    {{ order.piece }}
+                                                </a>
+                                            </td>
+                                            <td>{{ order.date_label }}</td>
+                                            <td>
+                                                <strong>{{ order.company_name != '' ? order.company_name : order.tiers }}</strong>
+                                                <div style="font-size: 12px; color: #6c8491;">{{ order.tiers }}</div>
+                                            </td>
+                                            <td>{{ order.representant != '' ? order.representant : 'Non attribue' }}</td>
+                                            <td>{{ order.statut != '' ? order.statut : 'Non renseigne' }}</td>
+                                            <td>{{ order.montantTTC|number_format(2, ',', ' ') }} EUR</td>
+                                        </tr>
+                                    {% else %}
+                                        <tr>
+                                            <td colspan="6" style="text-align:center; padding: 2rem;">Aucune commande remontee par Sage sur ce filtre.</td>
+                                        </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="erp-detail-card">
+                    <div class="card-header">
+                        <span class="card-title">Detail commande</span>
+                    </div>
+                    <div class="card-body">
+                        {% if sage.selectedOrder %}
+                            <div class="erp-detail-grid">
+                                <div class="erp-detail-metric">
+                                    <span>Piece</span>
+                                    <strong>{{ sage.selectedOrder.piece }}</strong>
+                                </div>
+                                <div class="erp-detail-metric">
+                                    <span>Date</span>
+                                    <strong>{{ sage.selectedOrder.date_label }}</strong>
+                                </div>
+                                <div class="erp-detail-metric">
+                                    <span>Commercial</span>
+                                    <strong>{{ sage.selectedOrder.representant != '' ? sage.selectedOrder.representant : 'Non attribue' }}</strong>
+                                </div>
+                                <div class="erp-detail-metric">
+                                    <span>Montant TTC</span>
+                                    <strong>{{ sage.selectedOrder.montantTTC|number_format(2, ',', ' ') }} EUR</strong>
+                                </div>
+                                <div class="erp-detail-metric">
+                                    <span>Client</span>
+                                    <strong>{{ sage.selectedOrder.company_name != '' ? sage.selectedOrder.company_name : sage.selectedOrder.tiers }}</strong>
+                                </div>
+                                <div class="erp-detail-metric">
+                                    <span>Reste a payer</span>
+                                    <strong>{{ sage.selectedOrder.resteAPayer|number_format(2, ',', ' ') }} EUR</strong>
+                                </div>
+                            </div>
+
+                            <div class="table-responsive">
+                                <table class="table">
+                                    <thead>
+                                        <tr>
+                                            <th>Reference</th>
+                                            <th>Designation</th>
+                                            <th>Qte</th>
+                                            <th>PU TTC</th>
+                                            <th>Montant</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for line in sage.selectedLines %}
+                                            <tr>
+                                                <td><strong>{{ line.referenceArticle }}</strong></td>
+                                                <td>{{ line.designationArticle }}</td>
+                                                <td>{{ line.qteArticle|number_format(0, ',', ' ') }} {{ line.uniteArticle }}</td>
+                                                <td>{{ line.prixTTCArticle|number_format(2, ',', ' ') }} EUR</td>
+                                                <td>{{ line.montantArticle|number_format(2, ',', ' ') }} EUR</td>
+                                            </tr>
+                                        {% else %}
+                                            <tr>
+                                                <td colspan="5" style="text-align:center; padding: 1.5rem;">Aucune ligne retournee pour cette piece.</td>
+                                            </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                        {% else %}
+                            <div class="dashboard-alert-empty">
+                                Selectionne une piece dans la table de gauche pour afficher document/line.
+                            </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </section>
+        {% endif %}
+    </section>
+
+    <h2 class="erp-subsection-title">Statistiques plateforme et connecteur</h2>
+
     <section class="dashboard-kpis">
         <article class="stat-card dashboard-kpi-card dashboard-kpi-card--logs">
             <div class="stat-header">
@@ -35,7 +664,7 @@
                 <div class="stat-icon purple"><i class="fas fa-briefcase"></i></div>
             </div>
             <div class="stat-value">{{ stats.deals }}</div>
-            <div class="stat-delta">{{ stats.dealAmount|number_format(2, ',', ' ') }} €</div>
+            <div class="stat-delta">{{ stats.dealAmount|number_format(2, ',', ' ') }} EUR</div>
         </article>
     </section>
 
@@ -83,8 +712,8 @@
 
             <div class="card dashboard-table-card">
                 <div class="card-header">
-                    <span class="card-title">Top commerciaux</span>
-                    <span class="tag tag-warning">Montant total</span>
+                    <span class="card-title">Top commerciaux internes</span>
+                    <span class="tag tag-warning">Deals</span>
                 </div>
                 <div class="card-body" style="padding: 0;">
                     <div class="table-responsive">
@@ -101,40 +730,7 @@
                                     <tr>
                                         <td><strong>{{ item.name }}</strong></td>
                                         <td>{{ item.deals }}</td>
-                                        <td>{{ item.amount|number_format(2, ',', ' ') }} €</td>
-                                    </tr>
-                                {% else %}
-                                    <tr>
-                                        <td colspan="3" style="text-align:center; padding: 2rem;">Aucune donnee disponible.</td>
-                                    </tr>
-                                {% endfor %}
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
-
-            <div class="card dashboard-table-card">
-                <div class="card-header">
-                    <span class="card-title">Top references produit</span>
-                    <span class="tag tag-muted">Lignes de deal</span>
-                </div>
-                <div class="card-body" style="padding: 0;">
-                    <div class="table-responsive">
-                        <table class="table">
-                            <thead>
-                                <tr>
-                                    <th>Reference</th>
-                                    <th>Lignes</th>
-                                    <th>Quantite totale</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {% for item in topReferences %}
-                                    <tr>
-                                        <td><strong>{{ item.reference }}</strong></td>
-                                        <td>{{ item.lines }}</td>
-                                        <td>{{ item.quantity|number_format(0, ',', ' ') }}</td>
+                                        <td>{{ item.amount|number_format(2, ',', ' ') }} EUR</td>
                                     </tr>
                                 {% else %}
                                     <tr>
@@ -230,4 +826,182 @@
             </div>
         </aside>
     </section>
+{% endblock %}
+
+{% block javascripts %}
+    {{ parent() }}
+    {% if sageStatistics %}
+        <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+        <script>
+            (() => {
+                const chartPalette = ['#146C94', '#2BB673', '#F59E0B', '#9B5DE5', '#D8572A', '#0F3D5E', '#71C4EF', '#7C9A3D'];
+                const revenueData = {{ sageStatistics.charts.revenue|json_encode(constant('JSON_UNESCAPED_UNICODE'))|raw }};
+                const orderData = {{ sageStatistics.charts.orders|json_encode(constant('JSON_UNESCAPED_UNICODE'))|raw }};
+                const commercialData = {{ sageStatistics.charts.commercials|json_encode(constant('JSON_UNESCAPED_UNICODE'))|raw }};
+                const statusData = {{ sageStatistics.charts.statuses|json_encode(constant('JSON_UNESCAPED_UNICODE'))|raw }};
+
+                window.erpSageCharts = window.erpSageCharts || {};
+
+                const buildCurrency = (value) => new Intl.NumberFormat('fr-FR', {
+                    style: 'currency',
+                    currency: 'EUR',
+                    maximumFractionDigits: 0
+                }).format(value);
+
+                const resetChart = (key) => {
+                    if (window.erpSageCharts[key]) {
+                        window.erpSageCharts[key].destroy();
+                        delete window.erpSageCharts[key];
+                    }
+                };
+
+                const renderCharts = () => {
+                    if (typeof Chart === 'undefined') {
+                        return;
+                    }
+
+                    const revenueCanvas = document.getElementById('erpRevenueChart');
+                    const orderCanvas = document.getElementById('erpOrdersChart');
+                    const commercialCanvas = document.getElementById('erpCommercialChart');
+                    const statusCanvas = document.getElementById('erpStatusChart');
+
+                    resetChart('revenue');
+                    resetChart('orders');
+                    resetChart('commercials');
+                    resetChart('statuses');
+
+                    if (revenueCanvas) {
+                        window.erpSageCharts.revenue = new Chart(revenueCanvas, {
+                            type: 'line',
+                            data: {
+                                labels: revenueData.labels,
+                                datasets: [{
+                                    label: 'CA',
+                                    data: revenueData.data,
+                                    borderColor: '#146C94',
+                                    backgroundColor: 'rgba(20,108,148,0.14)',
+                                    fill: true,
+                                    tension: 0.35,
+                                    pointRadius: 4,
+                                    pointHoverRadius: 6
+                                }]
+                            },
+                            options: {
+                                responsive: true,
+                                maintainAspectRatio: false,
+                                plugins: {
+                                    legend: { display: false },
+                                    tooltip: {
+                                        callbacks: {
+                                            label: (context) => buildCurrency(context.parsed.y || 0)
+                                        }
+                                    }
+                                },
+                                scales: {
+                                    y: {
+                                        ticks: {
+                                            callback: (value) => buildCurrency(value)
+                                        }
+                                    }
+                                }
+                            }
+                        });
+                    }
+
+                    if (orderCanvas) {
+                        window.erpSageCharts.orders = new Chart(orderCanvas, {
+                            type: 'bar',
+                            data: {
+                                labels: orderData.labels,
+                                datasets: [{
+                                    label: 'Commandes',
+                                    data: orderData.data,
+                                    backgroundColor: '#71C4EF',
+                                    borderRadius: 10
+                                }]
+                            },
+                            options: {
+                                responsive: true,
+                                maintainAspectRatio: false,
+                                plugins: {
+                                    legend: { display: false }
+                                }
+                            }
+                        });
+                    }
+
+                    if (commercialCanvas) {
+                        window.erpSageCharts.commercials = new Chart(commercialCanvas, {
+                            type: 'bar',
+                            data: {
+                                labels: commercialData.labels,
+                                datasets: [{
+                                    label: 'CA',
+                                    data: commercialData.data,
+                                    backgroundColor: chartPalette,
+                                    borderRadius: 10
+                                }]
+                            },
+                            options: {
+                                indexAxis: 'y',
+                                responsive: true,
+                                maintainAspectRatio: false,
+                                plugins: {
+                                    legend: { display: false },
+                                    tooltip: {
+                                        callbacks: {
+                                            label: (context) => buildCurrency(context.parsed.x || 0)
+                                        }
+                                    }
+                                },
+                                scales: {
+                                    x: {
+                                        ticks: {
+                                            callback: (value) => buildCurrency(value)
+                                        }
+                                    }
+                                }
+                            }
+                        });
+                    }
+
+                    if (statusCanvas) {
+                        window.erpSageCharts.statuses = new Chart(statusCanvas, {
+                            type: 'doughnut',
+                            data: {
+                                labels: statusData.labels,
+                                datasets: [{
+                                    data: statusData.data,
+                                    backgroundColor: chartPalette,
+                                    borderWidth: 0
+                                }]
+                            },
+                            options: {
+                                responsive: true,
+                                maintainAspectRatio: false,
+                                plugins: {
+                                    legend: {
+                                        position: 'bottom'
+                                    }
+                                }
+                            }
+                        });
+                    }
+                };
+
+                document.addEventListener('turbo:before-cache', () => {
+                    resetChart('revenue');
+                    resetChart('orders');
+                    resetChart('commercials');
+                    resetChart('statuses');
+                }, { once: true });
+
+                if (document.readyState === 'loading') {
+                    document.addEventListener('DOMContentLoaded', renderCharts, { once: true });
+                } else {
+                    renderCharts();
+                }
+            })();
+        </script>
+    {% endif %}
 {% endblock %}

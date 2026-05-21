@@ -8,6 +8,8 @@ use App\Repository\HubspotCompanyRepository;
 use App\Repository\OrderFormRepository;
 use App\Repository\SyncLogRepository;
 use App\Repository\UserRepository;
+use App\Service\Erp\SageOrderAnalyticsService;
+use Symfony\Component\HttpFoundation\Request;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Attribute\Route;
@@ -17,21 +19,31 @@ class StatisticsController extends AbstractController
 {
     #[Route('', name: 'index', methods: ['GET'])]
     public function index(
+        Request $request,
         UserRepository $userRepository,
         SyncLogRepository $syncLogRepository,
         OrderFormRepository $orderFormRepository,
         DealRepository $dealRepository,
         DealLineItemRepository $dealLineItemRepository,
         HubspotCompanyRepository $hubspotCompanyRepository,
+        SageOrderAnalyticsService $sageOrderAnalyticsService,
     ): Response {
         $since24h = new \DateTimeImmutable('-24 hours');
         $companies = $hubspotCompanyRepository->findAll();
         $companiesWithoutErpId = 0;
+        $sageError = null;
+        $sageStatistics = null;
 
         foreach ($companies as $company) {
             if (trim((string) $company->getIdErp()) === '') {
                 ++$companiesWithoutErpId;
             }
+        }
+
+        try {
+            $sageStatistics = $sageOrderAnalyticsService->getStatistics($request->query->all());
+        } catch (\Throwable $exception) {
+            $sageError = $exception->getMessage();
         }
 
         return $this->render('supervision/statistics/index.html.twig', [
@@ -60,6 +72,8 @@ class StatisticsController extends AbstractController
             'orderFormDailyCounts' => $orderFormRepository->countLastDays(7),
             'topCommercials' => $dealRepository->findTopCommercials(5),
             'topReferences' => $dealLineItemRepository->findTopReferences(10),
+            'sageStatistics' => $sageStatistics,
+            'sageError' => $sageError,
         ]);
     }
 }
