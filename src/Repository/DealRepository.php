@@ -2,6 +2,7 @@
 
 namespace App\Repository;
 
+use App\Entity\Commercial;
 use App\Entity\Deal;
 use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
 use Doctrine\Persistence\ManagerRegistry;
@@ -37,6 +38,16 @@ class DealRepository extends ServiceEntityRepository
     {
         return (int) $this->createQueryBuilder('d')
             ->select('COUNT(d.id)')
+            ->getQuery()
+            ->getSingleScalarResult();
+    }
+
+    public function countByCommercial(Commercial $commercial): int
+    {
+        return (int) $this->createQueryBuilder('d')
+            ->select('COUNT(d.id)')
+            ->andWhere('d.commercial = :commercial')
+            ->setParameter('commercial', $commercial)
             ->getQuery()
             ->getSingleScalarResult();
     }
@@ -88,6 +99,16 @@ class DealRepository extends ServiceEntityRepository
             ->getSingleScalarResult();
     }
 
+    public function sumTotalAmountByCommercial(Commercial $commercial): float
+    {
+        return (float) $this->createQueryBuilder('d')
+            ->select('COALESCE(SUM(d.totalAmount), 0)')
+            ->andWhere('d.commercial = :commercial')
+            ->setParameter('commercial', $commercial)
+            ->getQuery()
+            ->getSingleScalarResult();
+    }
+
     /**
      * @return array<int, array{name: string, deals: int, amount: float}>
      */
@@ -114,5 +135,23 @@ class DealRepository extends ServiceEntityRepository
                 'amount' => (float) ($row['totalAmount'] ?? 0),
             ];
         }, $rows);
+    }
+
+    /**
+     * @return Deal[]
+     */
+    public function findLatestForCommercial(Commercial $commercial, int $limit = 8): array
+    {
+        return $this->createQueryBuilder('d')
+            ->leftJoin('d.commercial', 'c')
+            ->addSelect('c')
+            ->leftJoin('d.orderForm', 'o')
+            ->addSelect('o')
+            ->andWhere('d.commercial = :commercial')
+            ->setParameter('commercial', $commercial)
+            ->orderBy('d.submittedAt', 'DESC')
+            ->setMaxResults($limit)
+            ->getQuery()
+            ->getResult();
     }
 }

@@ -2,6 +2,7 @@
 
 namespace App\Controller;
 
+use App\Entity\User;
 use App\Repository\DealLineItemRepository;
 use App\Repository\DealRepository;
 use App\Repository\HubspotCompanyRepository;
@@ -9,6 +10,7 @@ use App\Repository\OrderFormRepository;
 use App\Repository\SyncLogRepository;
 use App\Repository\UserRepository;
 use App\Service\Erp\SageOrderAnalyticsService;
+use App\Service\Security\CommercialAccessService;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -21,12 +23,28 @@ class StatisticsController extends AbstractController
     public function index(
         Request $request,
         SageOrderAnalyticsService $sageOrderAnalyticsService,
+        CommercialAccessService $commercialAccessService,
     ): Response {
         $sageError = null;
         $sageStatistics = null;
+        /** @var User|null $user */
+        $user = $this->getUser();
+        $commercial = $commercialAccessService->resolveCommercial($user);
+        $isCommercialScope = $commercialAccessService->isCommercialUser($user);
+        $filters = $request->query->all();
 
         try {
-            $sageStatistics = $sageOrderAnalyticsService->getStatistics($request->query->all());
+            if ($isCommercialScope) {
+                $representant = $sageOrderAnalyticsService->resolveRepresentantValueByEmail((string) $user?->getEmail());
+
+                if ($representant === null) {
+                    throw new \RuntimeException('Aucun commercial Sage actif n est associe a votre compte.');
+                }
+
+                $filters['representant'] = $representant;
+            }
+
+            $sageStatistics = $sageOrderAnalyticsService->getStatistics($filters);
         } catch (\Throwable $exception) {
             $sageError = $exception->getMessage();
         }
@@ -34,6 +52,8 @@ class StatisticsController extends AbstractController
         return $this->render('supervision/statistics/index.html.twig', [
             'sageStatistics' => $sageStatistics,
             'sageError' => $sageError,
+            'isCommercialScope' => $isCommercialScope,
+            'commercialScopeName' => $commercial?->getFullName(),
         ]);
     }
 
@@ -45,43 +65,60 @@ class StatisticsController extends AbstractController
         DealRepository $dealRepository,
         DealLineItemRepository $dealLineItemRepository,
         HubspotCompanyRepository $hubspotCompanyRepository,
+        CommercialAccessService $commercialAccessService,
     ): Response {
         $since24h = new \DateTimeImmutable('-24 hours');
-        $companies = $hubspotCompanyRepository->findAll();
+        /** @var User|null $user */
+        $user = $this->getUser();
+        $commercial = $commercialAccessService->resolveCommercial($user);
+        $isCommercialScope = $commercialAccessService->isCommercialUser($user);
+
         $companiesWithoutErpId = 0;
 
-        foreach ($companies as $company) {
-            if (trim((string) $company->getIdErp()) === '') {
-                ++$companiesWithoutErpId;
+        if (!$isCommercialScope) {
+            $companies = $hubspotCompanyRepository->findAll();
+
+            foreach ($companies as $company) {
+                if (trim((string) $company->getIdErp()) === '') {
+                    ++$companiesWithoutErpId;
+                }
             }
         }
 
         return $this->render('supervision/statistics/orderform.html.twig', [
             'stats' => [
-                'users' => $userRepository->countAll(),
-                'logs24h' => $syncLogRepository->countSince($since24h),
-                'orderForms' => $orderFormRepository->countAll(),
-                'deals' => $dealRepository->countAll(),
-                'dealAmount' => $dealRepository->sumTotalAmount(),
+                'users' => $isCommercialScope ? 0 : $userRepository->countAll(),
+                'logs24h' => $isCommercialScope ? 0 : $syncLogRepository->countSince($since24h),
+                'orderForms' => $isCommercialScope ? ($commercial ? $orderFormRepository->countByCommercial($commercial) : 0) : $orderFormRepository->countAll(),
+                'deals' => $isCommercialScope ? ($commercial ? $dealRepository->countByCommercial($commercial) : 0) : $dealRepository->countAll(),
+                'dealAmount' => $isCommercialScope ? ($commercial ? $dealRepository->sumTotalAmountByCommercial($commercial) : 0.0) : $dealRepository->sumTotalAmount(),
                 'companiesWithoutErpId' => $companiesWithoutErpId,
             ],
-            'roleCounts' => $userRepository->countByPrimaryRole(),
-            'levelCounts' => array_replace(
+            'roleCounts' => $isCommercialScope ? [] : $userRepository->countByPrimaryRole(),
+            'levelCounts' => $isCommercialScope ? [] : array_replace(
                 ['success' => 0, 'info' => 0, 'warning' => 0, 'error' => 0],
                 $syncLogRepository->countByLevelSince($since24h)
             ),
-            'fluxCounts' => $syncLogRepository->countByFluxSince($since24h),
+            'fluxCounts' => $isCommercialScope ? [] : $syncLogRepository->countByFluxSince($since24h),
             'orderFormStatusCounts' => array_replace(
                 [
                     OrderFormRepository::STATUS_PENDING => 0,
                     OrderFormRepository::STATUS_VALIDATED => 0,
                     OrderFormRepository::STATUS_FAILED => 0,
                 ],
-                $orderFormRepository->countByStatus()
+                $isCommercialScope
+                    ? ($commercial ? $orderFormRepository->countByStatusForCommercial($commercial) : [])
+                    : $orderFormRepository->countByStatus()
             ),
-            'orderFormDailyCounts' => $orderFormRepository->countLastDays(7),
-            'topCommercials' => $dealRepository->findTopCommercials(5),
-            'topReferences' => $dealLineItemRepository->findTopReferences(10),
+            'orderFormDailyCounts' => $isCommercialScope
+                ? ($commercial ? $orderFormRepository->countLastDaysForCommercial($commercial, 7) : [])
+                : $orderFormRepository->countLastDays(7),
+            'topCommercials' => $isCommercialScope ? [] : $dealRepository->findTopCommercials(5),
+            'topReferences' => $isCommercialScope
+                ? ($commercial ? $dealLineItemRepository->findTopReferencesForCommercial($commercial, 10) : [])
+                : $dealLineItemRepository->findTopReferences(10),
+            'isCommercialScope' => $isCommercialScope,
+            'commercialScopeName' => $commercial?->getFullName(),
         ]);
     }
 }

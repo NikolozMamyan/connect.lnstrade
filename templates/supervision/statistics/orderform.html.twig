@@ -4,26 +4,36 @@
 {% block page_subtitle %}Vue consolidee de l activite plateforme, du connecteur et des flux order form / deals.{% endblock %}
 
 {% block content %}
-    <section class="dashboard-kpis">
-        <article class="stat-card dashboard-kpi-card dashboard-kpi-card--logs">
-            <div class="stat-header">
-                <span class="stat-label">Utilisateurs</span>
-                <div class="stat-icon blue"><i class="fas fa-users"></i></div>
-            </div>
-            <div class="stat-value">{{ stats.users }}</div>
-        </article>
+    {% set isCommercialScope = isCommercialScope ?? false %}
 
-        <article class="stat-card dashboard-kpi-card dashboard-kpi-card--contacts">
-            <div class="stat-header">
-                <span class="stat-label">Logs 24h</span>
-                <div class="stat-icon green"><i class="fas fa-wave-square"></i></div>
-            </div>
-            <div class="stat-value">{{ stats.logs24h }}</div>
-        </article>
+    {% if isCommercialScope %}
+        <div class="alert alert-info" style="margin-bottom: 1rem;">
+            Vue restreinte a votre perimetre commercial{% if commercialScopeName %} : <strong>{{ commercialScopeName }}</strong>{% endif %}.
+        </div>
+    {% endif %}
+
+    <section class="dashboard-kpis">
+        {% if not isCommercialScope %}
+            <article class="stat-card dashboard-kpi-card dashboard-kpi-card--logs">
+                <div class="stat-header">
+                    <span class="stat-label">Utilisateurs</span>
+                    <div class="stat-icon blue"><i class="fas fa-users"></i></div>
+                </div>
+                <div class="stat-value">{{ stats.users }}</div>
+            </article>
+
+            <article class="stat-card dashboard-kpi-card dashboard-kpi-card--contacts">
+                <div class="stat-header">
+                    <span class="stat-label">Logs 24h</span>
+                    <div class="stat-icon green"><i class="fas fa-wave-square"></i></div>
+                </div>
+                <div class="stat-value">{{ stats.logs24h }}</div>
+            </article>
+        {% endif %}
 
         <article class="stat-card dashboard-kpi-card dashboard-kpi-card--products">
             <div class="stat-header">
-                <span class="stat-label">Order forms</span>
+                <span class="stat-label">{{ isCommercialScope ? 'Mes order forms' : 'Order forms' }}</span>
                 <div class="stat-icon orange"><i class="fas fa-file-lines"></i></div>
             </div>
             <div class="stat-value">{{ stats.orderForms }}</div>
@@ -31,7 +41,7 @@
 
         <article class="stat-card dashboard-kpi-card dashboard-kpi-card--clients">
             <div class="stat-header">
-                <span class="stat-label">Deals</span>
+                <span class="stat-label">{{ isCommercialScope ? 'Mes deals' : 'Deals' }}</span>
                 <div class="stat-icon purple"><i class="fas fa-briefcase"></i></div>
             </div>
             <div class="stat-value">{{ stats.deals }}</div>
@@ -44,7 +54,7 @@
             <div class="card dashboard-table-card">
                 <div class="card-header">
                     <span class="card-title">Order forms par statut</span>
-                    <span class="tag tag-info">Global</span>
+                    <span class="tag tag-info">{{ isCommercialScope ? 'Mon scope' : 'Global' }}</span>
                 </div>
                 <div class="card-body">
                     <div class="dashboard-schedule">
@@ -81,38 +91,40 @@
                 </div>
             </div>
 
-            <div class="card dashboard-table-card">
-                <div class="card-header">
-                    <span class="card-title">Top commerciaux internes</span>
-                    <span class="tag tag-warning">Deals</span>
-                </div>
-                <div class="card-body" style="padding: 0;">
-                    <div class="table-responsive">
-                        <table class="table">
-                            <thead>
-                                <tr>
-                                    <th>Commercial</th>
-                                    <th>Deals</th>
-                                    <th>Montant</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {% for item in topCommercials %}
+            {% if not isCommercialScope %}
+                <div class="card dashboard-table-card">
+                    <div class="card-header">
+                        <span class="card-title">Top commerciaux internes</span>
+                        <span class="tag tag-warning">Deals</span>
+                    </div>
+                    <div class="card-body" style="padding: 0;">
+                        <div class="table-responsive">
+                            <table class="table">
+                                <thead>
                                     <tr>
-                                        <td><strong>{{ item.name }}</strong></td>
-                                        <td>{{ item.deals }}</td>
-                                        <td>{{ item.amount|number_format(2, ',', ' ') }} EUR</td>
+                                        <th>Commercial</th>
+                                        <th>Deals</th>
+                                        <th>Montant</th>
                                     </tr>
-                                {% else %}
-                                    <tr>
-                                        <td colspan="3" style="text-align:center; padding: 2rem;">Aucune donnee disponible.</td>
-                                    </tr>
-                                {% endfor %}
-                            </tbody>
-                        </table>
+                                </thead>
+                                <tbody>
+                                    {% for item in topCommercials %}
+                                        <tr>
+                                            <td><strong>{{ item.name }}</strong></td>
+                                            <td>{{ item.deals }}</td>
+                                            <td>{{ item.amount|number_format(2, ',', ' ') }} EUR</td>
+                                        </tr>
+                                    {% else %}
+                                        <tr>
+                                            <td colspan="3" style="text-align:center; padding: 2rem;">Aucune donnee disponible.</td>
+                                        </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
                 </div>
-            </div>
+            {% endif %}
 
             <div class="card dashboard-table-card">
                 <div class="card-header">
@@ -149,85 +161,87 @@
         </div>
 
         <aside class="dashboard-main-grid__aside">
-            <div class="card dashboard-side-card">
-                <div class="card-header">
-                    <span class="card-title">Roles utilisateurs</span>
-                    <span class="tag tag-info">{{ roleCounts|length }}</span>
-                </div>
-                <div class="card-body">
-                    <div class="dashboard-schedule">
-                        {% for role, total in roleCounts %}
-                            <div class="dashboard-schedule__row">
-                                <div>
-                                    <strong>{{ role|replace({'ROLE_': '', '_': ' '})|title }}</strong>
-                                    <span>Repartition des acces</span>
-                                </div>
-                                <code>{{ total }}</code>
-                            </div>
-                        {% endfor %}
+            {% if not isCommercialScope %}
+                <div class="card dashboard-side-card">
+                    <div class="card-header">
+                        <span class="card-title">Roles utilisateurs</span>
+                        <span class="tag tag-info">{{ roleCounts|length }}</span>
                     </div>
-                </div>
-            </div>
-
-            <div class="card dashboard-side-card">
-                <div class="card-header">
-                    <span class="card-title">Logs par niveau</span>
-                    <span class="tag tag-accent">24h</span>
-                </div>
-                <div class="card-body">
-                    <div class="dashboard-schedule">
-                        {% for level, total in levelCounts %}
-                            <div class="dashboard-schedule__row">
-                                <div>
-                                    <strong>{{ level|title }}</strong>
-                                    <span>Volume recemment enregistre</span>
+                    <div class="card-body">
+                        <div class="dashboard-schedule">
+                            {% for role, total in roleCounts %}
+                                <div class="dashboard-schedule__row">
+                                    <div>
+                                        <strong>{{ role|replace({'ROLE_': '', '_': ' '})|title }}</strong>
+                                        <span>Repartition des acces</span>
+                                    </div>
+                                    <code>{{ total }}</code>
                                 </div>
-                                <code>{{ total }}</code>
-                            </div>
-                        {% endfor %}
-                    </div>
-                </div>
-            </div>
-
-            <div class="card dashboard-side-card">
-                <div class="card-header">
-                    <span class="card-title">Activite par flux</span>
-                    <span class="tag tag-warning">24h</span>
-                </div>
-                <div class="card-body">
-                    <div class="dashboard-schedule">
-                        {% for fluxKey, total in fluxCounts %}
-                            <div class="dashboard-schedule__row">
-                                <div>
-                                    <strong>{{ fluxKey|replace({'_': ' '})|title }}</strong>
-                                    <span>Evenements traces</span>
-                                </div>
-                                <code>{{ total }}</code>
-                            </div>
-                        {% else %}
-                            <div class="dashboard-alert-empty">Aucune activite recente.</div>
-                        {% endfor %}
-                    </div>
-                </div>
-            </div>
-
-            <div class="card dashboard-side-card">
-                <div class="card-header">
-                    <span class="card-title">Qualite de donnees</span>
-                    <span class="tag tag-danger">A surveiller</span>
-                </div>
-                <div class="card-body">
-                    <div class="dashboard-schedule">
-                        <div class="dashboard-schedule__row">
-                            <div>
-                                <strong>Companies sans id_erp</strong>
-                                <span>Bloquant pour certains flux ERP</span>
-                            </div>
-                            <code>{{ stats.companiesWithoutErpId }}</code>
+                            {% endfor %}
                         </div>
                     </div>
                 </div>
-            </div>
+
+                <div class="card dashboard-side-card">
+                    <div class="card-header">
+                        <span class="card-title">Logs par niveau</span>
+                        <span class="tag tag-accent">24h</span>
+                    </div>
+                    <div class="card-body">
+                        <div class="dashboard-schedule">
+                            {% for level, total in levelCounts %}
+                                <div class="dashboard-schedule__row">
+                                    <div>
+                                        <strong>{{ level|title }}</strong>
+                                        <span>Volume recemment enregistre</span>
+                                    </div>
+                                    <code>{{ total }}</code>
+                                </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card dashboard-side-card">
+                    <div class="card-header">
+                        <span class="card-title">Activite par flux</span>
+                        <span class="tag tag-warning">24h</span>
+                    </div>
+                    <div class="card-body">
+                        <div class="dashboard-schedule">
+                            {% for fluxKey, total in fluxCounts %}
+                                <div class="dashboard-schedule__row">
+                                    <div>
+                                        <strong>{{ fluxKey|replace({'_': ' '})|title }}</strong>
+                                        <span>Evenements traces</span>
+                                    </div>
+                                    <code>{{ total }}</code>
+                                </div>
+                            {% else %}
+                                <div class="dashboard-alert-empty">Aucune activite recente.</div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card dashboard-side-card">
+                    <div class="card-header">
+                        <span class="card-title">Qualite de donnees</span>
+                        <span class="tag tag-danger">A surveiller</span>
+                    </div>
+                    <div class="card-body">
+                        <div class="dashboard-schedule">
+                            <div class="dashboard-schedule__row">
+                                <div>
+                                    <strong>Companies sans id_erp</strong>
+                                    <span>Bloquant pour certains flux ERP</span>
+                                </div>
+                                <code>{{ stats.companiesWithoutErpId }}</code>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            {% endif %}
         </aside>
     </section>
 {% endblock %}

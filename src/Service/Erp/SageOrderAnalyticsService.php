@@ -13,7 +13,7 @@ final class SageOrderAnalyticsService
         ['hubspotId' => '65155850', 'firstName' => 'Cyril', 'lastName' => 'Motz', 'email' => 'cyril.motz@lnstrade.fr'],
         ['hubspotId' => '65524033', 'firstName' => 'Savinien', 'lastName' => 'Saint Paul', 'email' => 'savinien.saint-paul@lnstrade.fr'],
         ['hubspotId' => '65157022', 'firstName' => 'Corentin', 'lastName' => 'BURY', 'email' => 'corentin.bury@lnstrade.fr'],
-        ['hubspotId' => '77839925', 'firstName' => 'Enzo', 'lastName' => 'Houdé', 'email' => 'enzo.houde@lnstrade.fr'],
+        ['hubspotId' => '77839925', 'firstName' => 'Enzo', 'lastName' => 'Houde', 'email' => 'enzo.houde@lnstrade.fr'],
         ['hubspotId' => '78818212', 'firstName' => 'Jerome', 'lastName' => 'Degreve', 'email' => 'jerome.degreve@lnstrade.fr'],
         ['hubspotId' => '29391503', 'firstName' => 'Vincent', 'lastName' => 'TOUATI', 'email' => 'vincent.touati@lnstrade.fr'],
         ['hubspotId' => '65669769', 'firstName' => 'Anthony', 'lastName' => 'Chaoui', 'email' => 'anthony.chaoui@lnstrade.fr'],
@@ -30,6 +30,10 @@ final class SageOrderAnalyticsService
         $headers = $this->sageClient->get('/Document/header', $this->buildHeaderQuery($normalizedFilters));
         $dashboard = $this->buildDashboard($headers, $normalizedFilters['group_by'], $normalizedFilters['table_limit']);
 
+        $comparisonFilters = $this->buildComparisonFilters($normalizedFilters);
+        $comparisonHeaders = $this->sageClient->get('/Document/header', $this->buildHeaderQuery($comparisonFilters));
+        $comparisonDashboard = $this->buildDashboard($comparisonHeaders, $normalizedFilters['group_by'], $normalizedFilters['table_limit']);
+
         $selectedOrder = null;
         $selectedLines = [];
 
@@ -41,8 +45,10 @@ final class SageOrderAnalyticsService
         return [
             'filters' => $normalizedFilters,
             'summary' => $dashboard['summary'],
+            'comparison' => $this->buildComparison($dashboard['summary'], $comparisonDashboard['summary'], $normalizedFilters, $comparisonFilters),
             'charts' => $dashboard['charts'],
             'topCommercials' => $dashboard['topCommercials'],
+            'topClients' => $dashboard['topClients'],
             'representants' => $dashboard['representants'],
             'recentOrders' => $dashboard['recentOrders'],
             'selectedOrder' => $selectedOrder,
@@ -68,6 +74,9 @@ final class SageOrderAnalyticsService
         $statusCounts = [];
         $commercialRevenue = [];
         $commercialOrders = [];
+        $clientRevenue = [];
+        $clientOrders = [];
+        $clientTiers = [];
         $revenueSeries = [];
         $orderSeries = [];
 
@@ -85,6 +94,11 @@ final class SageOrderAnalyticsService
             $commercialRevenue[$order['representant']] = ($commercialRevenue[$order['representant']] ?? 0.0) + $order['montantTTC'];
             $commercialOrders[$order['representant']] = ($commercialOrders[$order['representant']] ?? 0) + 1;
 
+            $clientName = $order['company_name'] !== '' ? $order['company_name'] : ($order['tiers'] !== '' ? $order['tiers'] : $order['piece']);
+            $clientRevenue[$clientName] = ($clientRevenue[$clientName] ?? 0.0) + $order['montantTTC'];
+            $clientOrders[$clientName] = ($clientOrders[$clientName] ?? 0) + 1;
+            $clientTiers[$clientName] = $order['tiers'];
+
             $bucket = $this->buildPeriodBucket($order['date'], $groupBy);
             $revenueSeries[$bucket['key']] = [
                 'label' => $bucket['label'],
@@ -98,6 +112,7 @@ final class SageOrderAnalyticsService
 
         arsort($commercialRevenue);
         arsort($statusCounts);
+        arsort($clientRevenue);
         ksort($revenueSeries);
         ksort($orderSeries);
 
@@ -107,6 +122,16 @@ final class SageOrderAnalyticsService
                 'name' => $name,
                 'amount' => round($amount, 2),
                 'orders' => $commercialOrders[$name] ?? 0,
+            ];
+        }
+
+        $topClients = [];
+        foreach (array_slice($clientRevenue, 0, 8, true) as $name => $amount) {
+            $topClients[] = [
+                'name' => $name,
+                'tiers' => $clientTiers[$name] ?? '',
+                'amount' => round($amount, 2),
+                'orders' => $clientOrders[$name] ?? 0,
             ];
         }
 
@@ -135,23 +160,46 @@ final class SageOrderAnalyticsService
                     'labels' => array_column($topCommercials, 'name'),
                     'data' => array_column($topCommercials, 'amount'),
                 ],
+                'clients' => [
+                    'labels' => array_column($topClients, 'name'),
+                    'data' => array_column($topClients, 'amount'),
+                ],
                 'statuses' => [
                     'labels' => array_keys($statusCounts),
                     'data' => array_values($statusCounts),
                 ],
             ],
             'topCommercials' => $topCommercials,
+            'topClients' => $topClients,
             'representants' => $this->buildRepresentantOptions($orders),
             'recentOrders' => array_slice($orders, 0, max(1, $tableLimit)),
             'allOrders' => $orders,
         ];
     }
 
+    public function resolveRepresentantValueByEmail(string $email): ?string
+    {
+        $normalizedEmail = mb_strtolower(trim($email));
+
+        if ($normalizedEmail === '') {
+            return null;
+        }
+
+        foreach (self::ALLOWED_COMMERCIALS as $commercial) {
+            if (mb_strtolower($commercial['email']) === $normalizedEmail) {
+                return $this->buildSageCommercialValue($commercial);
+            }
+        }
+
+        return null;
+    }
+
     private function normalizeFilters(array $filters): array
     {
-        $period = (string) ($filters['period'] ?? 'custom');
-        $allowedPeriods = ['current_month', 'current_year', 'last_12_months', 'custom'];
-        $period = in_array($period, $allowedPeriods, true) ? $period : 'custom';
+        $defaultPeriod = $this->hasExplicitPeriodFilters($filters) ? 'custom' : 'last_3_months';
+        $period = (string) ($filters['period'] ?? $defaultPeriod);
+        $allowedPeriods = ['current_month', 'current_year', 'last_3_months', 'last_12_months', 'custom'];
+        $period = in_array($period, $allowedPeriods, true) ? $period : $defaultPeriod;
 
         $groupBy = (string) ($filters['group_by'] ?? 'month');
         $groupBy = in_array($groupBy, ['month', 'year'], true) ? $groupBy : 'month';
@@ -160,7 +208,7 @@ final class SageOrderAnalyticsService
         $dateFin = trim((string) ($filters['date_fin'] ?? ''));
 
         if ($period === 'custom' && ($dateDebut === '' || $dateFin === '')) {
-            [$dateDebut, $dateFin] = $this->resolvePeriodDates('rolling_4_months');
+            [$dateDebut, $dateFin] = $this->resolvePeriodDates('last_3_months');
         } elseif ($period !== 'custom') {
             [$dateDebut, $dateFin] = $this->resolvePeriodDates($period);
         }
@@ -191,12 +239,12 @@ final class SageOrderAnalyticsService
                 $today->modify('first day of this month')->format('Y-m-d'),
                 $today->format('Y-m-d'),
             ],
-            'last_12_months' => [
-                $today->modify('-11 months')->modify('first day of this month')->format('Y-m-d'),
+            'last_3_months' => [
+                $today->modify('-2 months')->modify('first day of this month')->format('Y-m-d'),
                 $today->format('Y-m-d'),
             ],
-            'rolling_4_months' => [
-                $today->modify('-4 months')->format('Y-m-d'),
+            'last_12_months' => [
+                $today->modify('-11 months')->modify('first day of this month')->format('Y-m-d'),
                 $today->format('Y-m-d'),
             ],
             default => [
@@ -204,6 +252,17 @@ final class SageOrderAnalyticsService
                 $today->format('Y-m-d'),
             ],
         };
+    }
+
+    private function hasExplicitPeriodFilters(array $filters): bool
+    {
+        foreach (['date_debut', 'date_fin', 'representant', 'piece', 'selected_piece'] as $key) {
+            if (trim((string) ($filters[$key] ?? '')) !== '') {
+                return true;
+            }
+        }
+
+        return isset($filters['period']) && trim((string) $filters['period']) !== '';
     }
 
     private function buildHeaderQuery(array $filters): array
@@ -297,6 +356,65 @@ final class SageOrderAnalyticsService
         }
 
         return null;
+    }
+
+    private function buildComparison(array $currentSummary, array $previousSummary, array $currentFilters, array $previousFilters): array
+    {
+        return [
+            'current_label' => $this->buildRangeLabel($currentFilters['date_debut'], $currentFilters['date_fin']),
+            'previous_label' => $this->buildRangeLabel($previousFilters['date_debut'], $previousFilters['date_fin']),
+            'metrics' => [
+                $this->buildComparisonMetric('Chiffre d affaires', 'currency', $currentSummary['revenue_total'], $previousSummary['revenue_total']),
+                $this->buildComparisonMetric('Commandes', 'number', $currentSummary['order_count'], $previousSummary['order_count']),
+                $this->buildComparisonMetric('Panier moyen', 'currency', $currentSummary['average_basket'], $previousSummary['average_basket']),
+                $this->buildComparisonMetric('CA valide', 'currency', $currentSummary['validated_revenue'], $previousSummary['validated_revenue']),
+            ],
+        ];
+    }
+
+    private function buildComparisonMetric(string $label, string $format, float|int $current, float|int $previous): array
+    {
+        $delta = $current - $previous;
+        $deltaPercent = null;
+
+        if ((float) $previous !== 0.0) {
+            $deltaPercent = round(($delta / $previous) * 100, 1);
+        }
+
+        return [
+            'label' => $label,
+            'format' => $format,
+            'current' => $format === 'number' ? (int) $current : round((float) $current, 2),
+            'previous' => $format === 'number' ? (int) $previous : round((float) $previous, 2),
+            'delta' => $format === 'number' ? (int) $delta : round((float) $delta, 2),
+            'delta_percent' => $deltaPercent,
+            'trend' => $delta > 0 ? 'up' : ($delta < 0 ? 'down' : 'flat'),
+        ];
+    }
+
+    private function buildComparisonFilters(array $filters): array
+    {
+        $currentStart = new \DateTimeImmutable($filters['date_debut'].' 00:00:00');
+        $currentEnd = new \DateTimeImmutable($filters['date_fin'].' 00:00:00');
+        $interval = $currentStart->diff($currentEnd);
+        $previousEnd = $currentStart->modify('-1 day');
+        $previousStart = $previousEnd->sub($interval);
+
+        $comparisonFilters = $filters;
+        $comparisonFilters['date_debut'] = $previousStart->format('Y-m-d');
+        $comparisonFilters['date_fin'] = $previousEnd->format('Y-m-d');
+        $comparisonFilters['selected_piece'] = '';
+
+        return $comparisonFilters;
+    }
+
+    private function buildRangeLabel(string $dateStart, string $dateEnd): string
+    {
+        if ($dateStart === '' || $dateEnd === '') {
+            return 'Periode indisponible';
+        }
+
+        return sprintf('%s -> %s', $dateStart, $dateEnd);
     }
 
     private function createDate(mixed $value): ?\DateTimeImmutable

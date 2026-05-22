@@ -48,6 +48,7 @@ class UserManagementType extends AbstractType
                 'mapped' => false,
                 'choices' => [
                     'Utilisateur' => 'ROLE_USER',
+                    'Commercial' => 'ROLE_COM',
                     'Administrateur' => 'ROLE_ADMIN',
                 ],
             ])
@@ -72,6 +73,8 @@ class UserManagementType extends AbstractType
 
             if ($user instanceof User && in_array('ROLE_ADMIN', $user->getRoles(), true)) {
                 $selectedRole = 'ROLE_ADMIN';
+            } elseif ($user instanceof User && in_array('ROLE_COM', $user->getRoles(), true)) {
+                $selectedRole = 'ROLE_COM';
             }
 
             $form->get('role')->setData($selectedRole);

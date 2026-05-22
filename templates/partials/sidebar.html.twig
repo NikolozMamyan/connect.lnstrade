@@ -1,6 +1,7 @@
 {% set current_route = app.request.attributes.get('_route') %}
 {% set user_name = app.user ? app.user.fullName : 'Utilisateur' %}
 {% set user_initials = user_name|slice(0, 1)|upper %}
+{% set is_commercial_user = is_granted('ROLE_COM') and not is_granted('ROLE_ADMIN') %}
 
 <aside class="sidebar">
     <div class="sidebar-logo">
@@ -22,72 +23,76 @@
             Tableau de bord
         </a>
 
-        <span class="nav-section-label">Flux HubSpot x Sage</span>
+        {% if not is_commercial_user %}
+            <span class="nav-section-label">Flux HubSpot x Sage</span>
 
-        <a href="{{ path('flux_client_index') }}" class="nav-item {{ current_route starts with 'flux_client' ? 'active' : '' }}">
-            <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
-                <circle cx="9" cy="7" r="4"/>
-                <path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>
-            </svg>
-            Companies / Clients
-            <span class="nav-flux-badge nav-flux-badge--hs-sage" title="HubSpot vers Sage">HS=>S</span>
-        </a>
+            <a href="{{ path('flux_client_index') }}" class="nav-item {{ current_route starts with 'flux_client' ? 'active' : '' }}">
+                <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+                    <circle cx="9" cy="7" r="4"/>
+                    <path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+                </svg>
+                Companies / Clients
+                <span class="nav-flux-badge nav-flux-badge--hs-sage" title="HubSpot vers Sage">HS=>S</span>
+            </a>
 
-        <a href="{{ path('flux_produits_index') }}" class="nav-item {{ current_route starts with 'flux_produits' ? 'active' : '' }}">
-            <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
-                <polyline points="3.27 6.96 12 12.01 20.73 6.96"/>
-                <line x1="12" y1="22.08" x2="12" y2="12"/>
-            </svg>
-            Produits / Articles
-            <span class="nav-flux-badge nav-flux-badge--sage-hs" title="Sage vers HubSpot">S=>HS</span>
-        </a>
+            <a href="{{ path('flux_produits_index') }}" class="nav-item {{ current_route starts with 'flux_produits' ? 'active' : '' }}">
+                <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
+                    <polyline points="3.27 6.96 12 12.01 20.73 6.96"/>
+                    <line x1="12" y1="22.08" x2="12" y2="12"/>
+                </svg>
+                Produits / Articles
+                <span class="nav-flux-badge nav-flux-badge--sage-hs" title="Sage vers HubSpot">S=>HS</span>
+            </a>
 
-        <a href="{{ path('flux_commandes_index') }}" class="nav-item {{ current_route starts with 'flux_commandes' ? 'active' : '' }}">
-            <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/>
-                <line x1="3" y1="6" x2="21" y2="6"/>
-                <path d="M16 10a4 4 0 0 1-8 0"/>
-            </svg>
-            Commandes / Deals
-            <span class="nav-flux-badge nav-flux-badge--sage-hs" title="Sage vers HubSpot">S=>HS</span>
-        </a>
+            <a href="{{ path('flux_commandes_index') }}" class="nav-item {{ current_route starts with 'flux_commandes' ? 'active' : '' }}">
+                <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/>
+                    <line x1="3" y1="6" x2="21" y2="6"/>
+                    <path d="M16 10a4 4 0 0 1-8 0"/>
+                </svg>
+                Commandes / Deals
+                <span class="nav-flux-badge nav-flux-badge--sage-hs" title="Sage vers HubSpot">S=>HS</span>
+            </a>
 
-        <a href="{{ path('flux_factures_index') }}" class="nav-item {{ current_route starts with 'flux_factures' ? 'active' : '' }}">
-            <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-                <polyline points="14 2 14 8 20 8"/>
-                <line x1="8" y1="13" x2="16" y2="13"/>
-                <line x1="8" y1="17" x2="16" y2="17"/>
-            </svg>
-            Factures / Documents
-            <span class="nav-flux-badge nav-flux-badge--sage-hs" title="Lecture Sage">S=>EX</span>
-        </a>
+            <a href="{{ path('flux_factures_index') }}" class="nav-item {{ current_route starts with 'flux_factures' ? 'active' : '' }}">
+                <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                    <polyline points="14 2 14 8 20 8"/>
+                    <line x1="8" y1="13" x2="16" y2="13"/>
+                    <line x1="8" y1="17" x2="16" y2="17"/>
+                </svg>
+                Factures / Documents
+                <span class="nav-flux-badge nav-flux-badge--sage-hs" title="Lecture Sage">S=>EX</span>
+            </a>
 
-        <span class="nav-section-label">Supervision</span>
+            <span class="nav-section-label">Supervision</span>
 
-        <a href="{{ path('sync_logs_index') }}" class="nav-item {{ current_route starts with 'sync_logs' ? 'active' : '' }}">
-            <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-                <polyline points="14 2 14 8 20 8"/>
-                <line x1="16" y1="13" x2="8" y2="13"/>
-                <line x1="16" y1="17" x2="8" y2="17"/>
-            </svg>
-            Logs de synchronisation
-            {% if nb_erreurs is defined and nb_erreurs > 0 %}
-                <span class="nav-badge">{{ nb_erreurs }}</span>
-            {% endif %}
-        </a>
+            <a href="{{ path('sync_logs_index') }}" class="nav-item {{ current_route starts with 'sync_logs' ? 'active' : '' }}">
+                <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                    <polyline points="14 2 14 8 20 8"/>
+                    <line x1="16" y1="13" x2="8" y2="13"/>
+                    <line x1="16" y1="17" x2="8" y2="17"/>
+                </svg>
+                Logs de synchronisation
+                {% if nb_erreurs is defined and nb_erreurs > 0 %}
+                    <span class="nav-badge">{{ nb_erreurs }}</span>
+                {% endif %}
+            </a>
 
-        <a href="{{ path('supervision_users_index') }}" class="nav-item {{ current_route starts with 'supervision_users' ? 'active' : '' }}">
-            <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
-                <circle cx="9" cy="7" r="4"/>
-                <path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>
-            </svg>
-            Utilisateurs
-        </a>
+            <a href="{{ path('supervision_users_index') }}" class="nav-item {{ current_route starts with 'supervision_users' ? 'active' : '' }}">
+                <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+                    <circle cx="9" cy="7" r="4"/>
+                    <path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+                </svg>
+                Utilisateurs
+            </a>
+        {% else %}
+            <span class="nav-section-label">Supervision</span>
+        {% endif %}
 
         <a href="{{ path('supervision_statistics_index') }}" class="nav-item {{ current_route == 'supervision_statistics_index' ? 'active' : '' }}">
             <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">

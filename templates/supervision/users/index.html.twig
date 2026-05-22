@@ -55,8 +55,14 @@
                                 </td>
                                 <td>{{ user.email }}</td>
                                 <td>
-                                    <span class="tag {{ 'ROLE_ADMIN' in user.roles ? 'tag-warning' : 'tag-muted' }}">
-                                        {{ ('ROLE_ADMIN' in user.roles ? 'Administrateur' : 'Utilisateur') }}
+                                    <span class="tag {{ 'ROLE_ADMIN' in user.roles ? 'tag-warning' : ('ROLE_COM' in user.roles ? 'tag-info' : 'tag-muted') }}">
+                                        {% if 'ROLE_ADMIN' in user.roles %}
+                                            Administrateur
+                                        {% elseif 'ROLE_COM' in user.roles %}
+                                            Commercial
+                                        {% else %}
+                                            Utilisateur
+                                        {% endif %}
                                     </span>
                                 </td>
                                 <td>{{ user.createdAt ? user.createdAt|date('d/m/Y H:i') : '-' }}</td>

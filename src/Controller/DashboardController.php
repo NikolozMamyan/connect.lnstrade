@@ -2,11 +2,16 @@
 
 namespace App\Controller;
 
+use App\Entity\User;
+use App\Repository\DealRepository;
+use App\Repository\OrderFormRepository;
+use App\Repository\DealLineItemRepository;
 use App\Repository\ErpProductRepository;
 use App\Repository\HubspotCompanyRepository;
 use App\Repository\HubspotContactRepository;
 use App\Repository\SyncLogRepository;
 use App\Entity\SyncLog;
+use App\Service\Security\CommercialAccessService;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Attribute\Route;
@@ -19,7 +24,39 @@ final class DashboardController extends AbstractController
         HubspotContactRepository $hubspotContactRepository,
         ErpProductRepository $erpProductRepository,
         SyncLogRepository $syncLogRepository,
+        OrderFormRepository $orderFormRepository,
+        DealRepository $dealRepository,
+        DealLineItemRepository $dealLineItemRepository,
+        CommercialAccessService $commercialAccessService,
     ): Response {
+        /** @var User|null $user */
+        $user = $this->getUser();
+        $commercial = $commercialAccessService->resolveCommercial($user);
+
+        if ($commercialAccessService->isCommercialUser($user)) {
+            $statusCounts = $commercial ? array_replace(
+                ['pending' => 0, 'validated' => 0, 'failed' => 0],
+                $orderFormRepository->countByStatusForCommercial($commercial)
+            ) : ['pending' => 0, 'validated' => 0, 'failed' => 0];
+
+            return $this->render('dashboard/index.html.twig', [
+                'dashboardScope' => 'commercial',
+                'commercialScopeName' => $commercial?->getFullName(),
+                'stats' => [
+                    'orderForms' => $commercial ? $orderFormRepository->countByCommercial($commercial) : 0,
+                    'deals' => $commercial ? $dealRepository->countByCommercial($commercial) : 0,
+                    'dealAmount' => $commercial ? $dealRepository->sumTotalAmountByCommercial($commercial) : 0.0,
+                    'pendingOrderForms' => $statusCounts['pending'],
+                    'validatedOrderForms' => $statusCounts['validated'],
+                    'failedOrderForms' => $statusCounts['failed'],
+                ],
+                'orderFormDailyCounts' => $commercial ? $orderFormRepository->countLastDaysForCommercial($commercial, 7) : [],
+                'topReferences' => $commercial ? $dealLineItemRepository->findTopReferencesForCommercial($commercial, 8) : [],
+                'recentOrderForms' => $commercial ? $orderFormRepository->findLatestForCommercial($commercial, 6) : [],
+                'recentDeals' => $commercial ? $dealRepository->findLatestForCommercial($commercial, 6) : [],
+            ]);
+        }
+
         $since24h = new \DateTimeImmutable('-24 hours');
         $companies = $hubspotCompanyRepository->findAllWithContacts();
         $activeProducts = $erpProductRepository->findActiveProductsForSync();
@@ -75,6 +112,7 @@ final class DashboardController extends AbstractController
         ];
 
         return $this->render('dashboard/index.html.twig', [
+            'dashboardScope' => 'global',
             'stats' => [
                 'companies' => count($companies),
                 'companiesReady' => $companiesReady,
@@ -104,6 +142,10 @@ final class DashboardController extends AbstractController
     #[Route('/', name: 'app_index')]
     public function appIndex(): Response 
     {
+        if ($this->getUser() !== null) {
+            return $this->redirectToRoute('app_dashboard');
+        }
+
         return $this->redirectToRoute('app_login');
     }
 

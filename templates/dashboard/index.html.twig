@@ -15,6 +15,162 @@
 {% endblock %}
 
 {% block content %}
+    {% if dashboardScope == 'commercial' %}
+        <section class="dashboard-hero">
+            <div class="dashboard-hero__content">
+                <span class="dashboard-hero__eyebrow">Espace commercial</span>
+                <h2 class="dashboard-hero__title">Vue personnelle de votre activite order forms et deals.</h2>
+                <p class="dashboard-hero__text">
+                    {% if commercialScopeName %}
+                        Donnees filtrees pour {{ commercialScopeName }}.
+                    {% else %}
+                        Aucun commercial actif n est associe a votre compte. Les indicateurs restent volontairement limites.
+                    {% endif %}
+                </p>
+            </div>
+        </section>
+
+        <section class="dashboard-kpis">
+            <article class="stat-card dashboard-kpi-card dashboard-kpi-card--products">
+                <div class="stat-header">
+                    <span class="stat-label">Mes order forms</span>
+                    <div class="stat-icon orange"><i class="fas fa-file-lines"></i></div>
+                </div>
+                <div class="stat-value">{{ stats.orderForms }}</div>
+                <div class="dashboard-kpi-card__meta">
+                    <span>{{ stats.pendingOrderForms }} en attente</span>
+                    <span>{{ stats.validatedOrderForms }} valides</span>
+                </div>
+            </article>
+
+            <article class="stat-card dashboard-kpi-card dashboard-kpi-card--clients">
+                <div class="stat-header">
+                    <span class="stat-label">Mes deals</span>
+                    <div class="stat-icon purple"><i class="fas fa-briefcase"></i></div>
+                </div>
+                <div class="stat-value">{{ stats.deals }}</div>
+                <div class="dashboard-kpi-card__meta">
+                    <span>{{ stats.failedOrderForms }} order forms en echec</span>
+                </div>
+            </article>
+
+            <article class="stat-card dashboard-kpi-card dashboard-kpi-card--logs">
+                <div class="stat-header">
+                    <span class="stat-label">Montant cumule</span>
+                    <div class="stat-icon accent"><i class="fas fa-euro-sign"></i></div>
+                </div>
+                <div class="stat-value">{{ stats.dealAmount|number_format(0, ',', ' ') }}</div>
+                <div class="dashboard-kpi-card__meta">
+                    <span>Total TTC de vos deals valides</span>
+                </div>
+            </article>
+        </section>
+
+        <section class="dashboard-main-grid">
+            <div class="dashboard-main-grid__primary">
+                <div class="card dashboard-table-card">
+                    <div class="card-header">
+                        <span class="card-title">Activite sur 7 jours</span>
+                        <span class="tag tag-accent">Order forms</span>
+                    </div>
+                    <div class="card-body">
+                        <div class="dashboard-schedule">
+                            {% for day, total in orderFormDailyCounts %}
+                                <div class="dashboard-schedule__row">
+                                    <div>
+                                        <strong>{{ day|date('d/m/Y') }}</strong>
+                                        <span>Soumissions detectees</span>
+                                    </div>
+                                    <code>{{ total }}</code>
+                                </div>
+                            {% else %}
+                                <div class="dashboard-alert-empty">Aucune activite recente.</div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card dashboard-table-card">
+                    <div class="card-header">
+                        <span class="card-title">Mes derniers deals</span>
+                        <span class="tag tag-info">{{ recentDeals|length }}</span>
+                    </div>
+                    <div class="card-body card-body-flush">
+                        <table class="table">
+                            <thead>
+                                <tr>
+                                    <th>Reference</th>
+                                    <th>Soumis le</th>
+                                    <th>Type</th>
+                                    <th>Montant</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for deal in recentDeals %}
+                                    <tr>
+                                        <td><strong>{{ deal.referenceNumber }}</strong></td>
+                                        <td>{{ deal.submittedAt ? deal.submittedAt|date('d/m/Y H:i') : '-' }}</td>
+                                        <td>{{ deal.dealType|title }}</td>
+                                        <td>{{ deal.totalAmount|number_format(2, ',', ' ') }} EUR</td>
+                                    </tr>
+                                {% else %}
+                                    <tr>
+                                        <td colspan="4">Aucun deal disponible.</td>
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <aside class="dashboard-main-grid__aside">
+                <div class="card dashboard-side-card">
+                    <div class="card-header">
+                        <span class="card-title">Mes derniers order forms</span>
+                        <span class="tag tag-warning">{{ recentOrderForms|length }}</span>
+                    </div>
+                    <div class="card-body">
+                        <div class="dashboard-schedule">
+                            {% for orderForm in recentOrderForms %}
+                                <div class="dashboard-schedule__row">
+                                    <div>
+                                        <strong>{{ orderForm.referenceNumber }}</strong>
+                                        <span>{{ orderForm.status|replace({'_': ' '})|title }}</span>
+                                    </div>
+                                    <code>{{ orderForm.submittedAt ? orderForm.submittedAt|date('d/m H:i') : '-' }}</code>
+                                </div>
+                            {% else %}
+                                <div class="dashboard-alert-empty">Aucun order form disponible.</div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card dashboard-side-card">
+                    <div class="card-header">
+                        <span class="card-title">Top references produit</span>
+                        <span class="tag tag-muted">Mes deals</span>
+                    </div>
+                    <div class="card-body">
+                        <div class="dashboard-schedule">
+                            {% for item in topReferences %}
+                                <div class="dashboard-schedule__row">
+                                    <div>
+                                        <strong>{{ item.reference }}</strong>
+                                        <span>{{ item.lines }} ligne(s)</span>
+                                    </div>
+                                    <code>{{ item.quantity|number_format(0, ',', ' ') }}</code>
+                                </div>
+                            {% else %}
+                                <div class="dashboard-alert-empty">Aucune reference disponible.</div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+            </aside>
+        </section>
+    {% else %}
     <section class="dashboard-hero">
         <div class="dashboard-hero__content">
             <span class="dashboard-hero__eyebrow">Centre de supervision</span>
@@ -298,4 +454,5 @@
             </div>
         </aside>
     </section>
+    {% endif %}
 {% endblock %}

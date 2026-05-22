@@ -1,300 +1,838 @@
 {% extends 'layout/app.html.twig' %}
 
 {% block page_title %}Statistiques Sage{% endblock %}
-{% block page_subtitle %}Lecture KPI des commandes Sage par periode, commercial et chiffre d affaires.{% endblock %}
+{% block page_subtitle %}KPI commandes Sage · Période, commercial & chiffre d'affaires{% endblock %}
 
 {% block stylesheets %}
     {{ parent() }}
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
+    
     <style>
-        .erp-section {
-            display: grid;
-            gap: 24px;
-            margin-bottom: 32px;
+        :root {
+            --of-primary: #1A1F3C;
+            --of-secondary: #2B3160;
+            --of-accent: #00C2A8;
+            --of-accent-hover: #00A891;
+            --of-accent-light: #E6FAF8;
+            --of-base: #F4F5F9;
+            --of-surface: #FFFFFF;
+            --of-border: rgba(26, 31, 60, 0.12);
+            --of-border-soft: rgba(26, 31, 60, 0.06);
+            --of-text-soft: rgba(26, 31, 60, 0.58);
+            --of-text-muted: rgba(26, 31, 60, 0.42);
+            --of-error: #E53E3E;
+            --of-success: #10B981;
+            --of-warning: #F59E0B;
+            --of-info: #3B82F6;
+
+            --of-radius-sm: 10px;
+            --of-radius-md: 14px;
+            --of-radius-lg: 20px;
+            --of-radius-xl: 24px;
+
+            --of-shadow-xs: 0 1px 2px rgba(26, 31, 60, 0.04);
+            --of-shadow-sm: 0 2px 8px rgba(26, 31, 60, 0.06);
+            --of-shadow-md: 0 8px 24px rgba(26, 31, 60, 0.08);
+            --of-shadow-lg: 0 16px 40px rgba(26, 31, 60, 0.10);
+
+            --of-transition: 180ms cubic-bezier(0.4, 0, 0.2, 1);
         }
 
-        .erp-hero {
+        /* ========== BASE ========== */
+        .sage-page {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            color: var(--of-primary);
+            font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+            -webkit-font-smoothing: antialiased;
+        }
+
+        .sage-page * {
+            box-sizing: border-box;
+        }
+
+        .sage-page .num,
+        .sage-page .erp-kpi__value,
+        .sage-page .sage-metric__value {
+            font-variant-numeric: tabular-nums;
+            font-feature-settings: 'tnum' 1;
+        }
+
+        .sage-section {
+            display: grid;
+            gap: 20px;
+            margin-bottom: 24px;
+        }
+
+        /* ========== HERO ========== */
+        .sage-hero {
             position: relative;
             overflow: hidden;
-            border-radius: 28px;
-            padding: 28px;
-            background:
-                radial-gradient(circle at top right, rgba(255, 255, 255, 0.28), transparent 28%),
-                linear-gradient(135deg, #0f3d5e 0%, #146c94 48%, #71c4ef 100%);
+            border-radius: var(--of-radius-xl);
+            padding: 32px;
+            background: linear-gradient(135deg, var(--of-primary) 0%, var(--of-secondary) 100%);
             color: #fff;
-            box-shadow: 0 24px 60px rgba(15, 61, 94, 0.26);
+            box-shadow: var(--of-shadow-lg);
         }
 
-        .erp-hero__grid {
+        .sage-hero::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            right: -10%;
+            width: 500px;
+            height: 500px;
+            background: radial-gradient(circle, var(--of-accent) 0%, transparent 60%);
+            opacity: 0.18;
+            pointer-events: none;
+        }
+
+        .sage-hero::after {
+            content: '';
+            position: absolute;
+            bottom: -30%;
+            left: -10%;
+            width: 400px;
+            height: 400px;
+            background: radial-gradient(circle, var(--of-accent) 0%, transparent 70%);
+            opacity: 0.08;
+            pointer-events: none;
+        }
+
+        .sage-hero__grid {
+            position: relative;
             display: grid;
-            grid-template-columns: minmax(0, 1.7fr) minmax(320px, 1fr);
-            gap: 20px;
-            align-items: end;
+            grid-template-columns: minmax(0, 1.6fr) minmax(300px, 1fr);
+            gap: 32px;
+            align-items: center;
         }
 
-        .erp-hero__eyebrow {
+        .sage-hero__eyebrow {
             display: inline-flex;
             align-items: center;
             gap: 8px;
-            padding: 8px 14px;
+            padding: 6px 12px;
             border-radius: 999px;
-            background: rgba(255, 255, 255, 0.14);
-            font-size: 12px;
+            background: rgba(0, 194, 168, 0.18);
+            border: 1px solid rgba(0, 194, 168, 0.32);
+            color: var(--of-accent-light);
+            font-size: 11px;
             font-weight: 700;
             letter-spacing: 0.08em;
             text-transform: uppercase;
         }
 
-        .erp-hero h2 {
-            margin: 16px 0 10px;
-            font-size: clamp(28px, 4vw, 40px);
-            line-height: 1.05;
+        .sage-hero__eyebrow .dot {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: var(--of-accent);
+            box-shadow: 0 0 0 0 rgba(0, 194, 168, 0.6);
+            animation: pulse 2s infinite;
         }
 
-        .erp-hero p {
-            max-width: 760px;
+        @keyframes pulse {
+            0% { box-shadow: 0 0 0 0 rgba(0, 194, 168, 0.6); }
+            70% { box-shadow: 0 0 0 8px rgba(0, 194, 168, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(0, 194, 168, 0); }
+        }
+
+        .sage-hero h1 {
+            margin: 16px 0 8px;
+            font-size: clamp(24px, 3vw, 32px);
+            font-weight: 700;
+            letter-spacing: -0.02em;
+            line-height: 1.15;
+            color: #fff;
+        }
+
+        .sage-hero p {
             margin: 0;
-            color: rgba(255, 255, 255, 0.84);
+            max-width: 620px;
+            color: rgba(255, 255, 255, 0.75);
+            font-size: 15px;
+            line-height: 1.55;
         }
 
-        .erp-hero__meta {
+        .sage-hero__meta {
             display: grid;
-            grid-template-columns: repeat(3, minmax(0, 1fr));
-            gap: 14px;
+            grid-template-columns: 1fr;
+            gap: 10px;
         }
 
-        .erp-hero__meta-card {
-            padding: 16px 18px;
-            border-radius: 20px;
-            background: rgba(7, 25, 39, 0.22);
-            backdrop-filter: blur(14px);
+        .sage-hero__meta-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px 14px;
+            border-radius: var(--of-radius-md);
+            background: rgba(255, 255, 255, 0.06);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            backdrop-filter: blur(10px);
         }
 
-        .erp-hero__meta-card span {
+        .sage-hero__meta-icon {
+            width: 36px;
+            height: 36px;
+            border-radius: 10px;
+            background: rgba(0, 194, 168, 0.16);
+            color: var(--of-accent);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+            flex-shrink: 0;
+        }
+
+        .sage-hero__meta-text span {
             display: block;
-            font-size: 12px;
+            font-size: 11px;
             text-transform: uppercase;
             letter-spacing: 0.06em;
-            color: rgba(255, 255, 255, 0.72);
+            color: rgba(255, 255, 255, 0.55);
+            font-weight: 600;
         }
 
-        .erp-hero__meta-card strong {
+        .sage-hero__meta-text strong {
             display: block;
-            margin-top: 6px;
-            font-size: 22px;
+            margin-top: 2px;
+            color: #fff;
+            font-size: 14px;
+            font-weight: 600;
         }
 
-        .erp-filter-card {
-            border-radius: 26px;
-            padding: 22px;
-            border: 1px solid rgba(15, 61, 94, 0.08);
-            background: linear-gradient(180deg, #ffffff 0%, #f7fbfd 100%);
-            box-shadow: 0 18px 45px rgba(20, 108, 148, 0.08);
-        }
-
-        .erp-filter-grid {
-            display: grid;
-            grid-template-columns: repeat(6, minmax(0, 1fr));
-            gap: 14px;
-        }
-
-        .erp-filter-grid .field {
-            display: grid;
-            gap: 8px;
-        }
-
-        .erp-filter-grid label {
-            font-size: 12px;
-            font-weight: 700;
-            text-transform: uppercase;
-            letter-spacing: 0.05em;
-            color: #4f6472;
-        }
-
-        .erp-filter-grid input,
-        .erp-filter-grid select {
-            width: 100%;
-            min-height: 46px;
-            padding: 0 14px;
-            border: 1px solid #d5e2ea;
-            border-radius: 14px;
-            background: #fff;
-            color: #183646;
-        }
-
-        .erp-filter-actions {
+        /* ========== ALERT ========== */
+        .sage-alert {
             display: flex;
+            align-items: flex-start;
+            gap: 14px;
+            padding: 16px 20px;
+            border-radius: var(--of-radius-md);
+            background: #FEF2F2;
+            border: 1px solid rgba(229, 62, 62, 0.2);
+            border-left: 3px solid var(--of-error);
+            color: #991B1B;
+        }
+
+        .sage-alert__icon {
+            font-size: 18px;
+            margin-top: 2px;
+        }
+
+        .sage-alert strong {
+            display: block;
+            margin-bottom: 4px;
+            color: var(--of-error);
+        }
+
+        /* ========== FILTRES ========== */
+        .sage-filters {
+            border-radius: var(--of-radius-xl);
+            padding: 20px;
+            background: var(--of-surface);
+            border: 1px solid var(--of-border-soft);
+            box-shadow: var(--of-shadow-sm);
+        }
+
+        .sage-filters__header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+
+        .sage-filters__title {
+            display: flex;
+            align-items: center;
             gap: 10px;
+            font-size: 15px;
+            font-weight: 700;
+            color: var(--of-primary);
+        }
+
+        .sage-filters__title .icon {
+            width: 28px;
+            height: 28px;
+            border-radius: 8px;
+            background: var(--of-accent-light);
+            color: var(--of-accent);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+        }
+
+        .sage-period-chips {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            padding: 4px;
+            background: var(--of-base);
+            border-radius: 12px;
+        }
+
+        .sage-period-chip {
+            padding: 8px 14px;
+            border: 0;
+            background: transparent;
+            color: var(--of-text-soft);
+            font-size: 13px;
+            font-weight: 600;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: var(--of-transition);
+            font-family: inherit;
+        }
+
+        .sage-period-chip:hover {
+            color: var(--of-primary);
+        }
+
+        .sage-period-chip.is-active {
+            background: var(--of-surface);
+            color: var(--of-primary);
+            box-shadow: var(--of-shadow-xs);
+        }
+
+        .sage-filters form {
+            display: grid;
+            grid-template-columns: repeat(12, 1fr);
+            gap: 12px;
             align-items: end;
         }
 
-        .erp-kpis {
+        .sage-field {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .sage-field--sm { grid-column: span 2; }
+        .sage-field--md { grid-column: span 3; }
+        .sage-field--lg { grid-column: span 4; }
+        .sage-field--actions {
+            grid-column: span 12;
+            display: flex;
+            gap: 8px;
+            justify-content: flex-end;
+            padding-top: 4px;
+        }
+
+        .sage-field label {
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--of-text-soft);
+        }
+
+        .sage-field input,
+        .sage-field select {
+            width: 100%;
+            height: 42px;
+            padding: 0 14px;
+            border: 1px solid var(--of-border);
+            border-radius: var(--of-radius-sm);
+            background: var(--of-surface);
+            color: var(--of-primary);
+            font-family: inherit;
+            font-size: 14px;
+            font-weight: 500;
+            transition: var(--of-transition);
+        }
+
+        .sage-field input:focus,
+        .sage-field select:focus {
+            outline: 0;
+            border-color: var(--of-accent);
+            box-shadow: 0 0 0 3px rgba(0, 194, 168, 0.12);
+        }
+
+        .sage-field input::placeholder {
+            color: var(--of-text-muted);
+            font-weight: 400;
+        }
+
+        .sage-btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            height: 42px;
+            padding: 0 18px;
+            border-radius: var(--of-radius-sm);
+            font-family: inherit;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: var(--of-transition);
+            text-decoration: none;
+            border: 1px solid transparent;
+            white-space: nowrap;
+        }
+
+        .sage-btn--primary {
+            background: var(--of-accent);
+            color: #fff;
+            box-shadow: 0 4px 12px rgba(0, 194, 168, 0.25);
+        }
+
+        .sage-btn--primary:hover {
+            background: var(--of-accent-hover);
+            transform: translateY(-1px);
+            box-shadow: 0 6px 16px rgba(0, 194, 168, 0.32);
+        }
+
+        .sage-btn--ghost {
+            background: var(--of-surface);
+            color: var(--of-text-soft);
+            border-color: var(--of-border);
+        }
+
+        .sage-btn--ghost:hover {
+            background: var(--of-base);
+            color: var(--of-primary);
+        }
+
+        /* ========== KPI CARDS ========== */
+        .sage-kpis {
             display: grid;
             grid-template-columns: repeat(5, minmax(0, 1fr));
-            gap: 18px;
+            gap: 14px;
         }
 
-        .erp-kpi {
+        .sage-kpi {
             position: relative;
             overflow: hidden;
-            border-radius: 24px;
             padding: 20px;
-            color: #fff;
-            min-height: 154px;
-            box-shadow: 0 22px 46px rgba(20, 108, 148, 0.18);
+            background: var(--of-surface);
+            border: 1px solid var(--of-border-soft);
+            border-radius: var(--of-radius-lg);
+            box-shadow: var(--of-shadow-xs);
+            transition: var(--of-transition);
         }
 
-        .erp-kpi:nth-child(1) { background: linear-gradient(135deg, #0f3d5e 0%, #146c94 100%); }
-        .erp-kpi:nth-child(2) { background: linear-gradient(135deg, #0b6e4f 0%, #2bb673 100%); }
-        .erp-kpi:nth-child(3) { background: linear-gradient(135deg, #8f4d00 0%, #f59e0b 100%); }
-        .erp-kpi:nth-child(4) { background: linear-gradient(135deg, #5b2d86 0%, #9b5de5 100%); }
-        .erp-kpi:nth-child(5) { background: linear-gradient(135deg, #6f1d1b 0%, #d8572a 100%); }
+        .sage-kpi:hover {
+            transform: translateY(-2px);
+            box-shadow: var(--of-shadow-md);
+            border-color: var(--of-border);
+        }
 
-        .erp-kpi__label {
+        .sage-kpi__head {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 14px;
+        }
+
+        .sage-kpi__label {
             font-size: 12px;
-            letter-spacing: 0.06em;
+            font-weight: 600;
+            color: var(--of-text-soft);
             text-transform: uppercase;
-            color: rgba(255, 255, 255, 0.76);
+            letter-spacing: 0.04em;
         }
 
-        .erp-kpi__value {
+        .sage-kpi__icon {
+            width: 32px;
+            height: 32px;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 13px;
+        }
+
+        .sage-kpi__icon--accent { background: var(--of-accent-light); color: var(--of-accent); }
+        .sage-kpi__icon--success { background: rgba(16, 185, 129, 0.12); color: var(--of-success); }
+        .sage-kpi__icon--warning { background: rgba(245, 158, 11, 0.12); color: var(--of-warning); }
+        .sage-kpi__icon--info { background: rgba(59, 130, 246, 0.12); color: var(--of-info); }
+        .sage-kpi__icon--danger { background: rgba(229, 62, 62, 0.12); color: var(--of-error); }
+
+        .sage-kpi__value {
+            font-size: clamp(20px, 2.2vw, 26px);
+            font-weight: 700;
+            color: var(--of-primary);
+            line-height: 1.1;
+            letter-spacing: -0.02em;
+        }
+
+        .sage-kpi__currency {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--of-text-soft);
+            margin-left: 2px;
+        }
+
+        .sage-kpi__meta {
+            margin-top: 8px;
+            font-size: 13px;
+            color: var(--of-text-soft);
+            line-height: 1.4;
+        }
+
+        .sage-kpi__bar {
+            margin-top: 14px;
+            height: 4px;
+            background: var(--of-base);
+            border-radius: 2px;
+            overflow: hidden;
+        }
+
+        .sage-kpi__bar-fill {
+            height: 100%;
+            background: var(--of-accent);
+            border-radius: 2px;
+            transition: width 0.6s ease;
+        }
+
+        /* ========== COMPARAISON ========== */
+        .sage-card {
+            background: var(--of-surface);
+            border: 1px solid var(--of-border-soft);
+            border-radius: var(--of-radius-xl);
+            box-shadow: var(--of-shadow-xs);
+            overflow: hidden;
+        }
+
+        .sage-card__header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 12px;
+            padding: 20px 22px 16px;
+            border-bottom: 1px solid var(--of-border-soft);
+        }
+
+        .sage-card__title {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 15px;
+            font-weight: 700;
+            color: var(--of-primary);
+        }
+
+        .sage-card__title .icon {
+            width: 28px;
+            height: 28px;
+            border-radius: 8px;
+            background: var(--of-accent-light);
+            color: var(--of-accent);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+        }
+
+        .sage-card__subtitle {
+            font-size: 13px;
+            color: var(--of-text-soft);
+            font-weight: 500;
+        }
+
+        .sage-card__body {
+            padding: 20px 22px;
+        }
+
+        .sage-card__body--flush {
+            padding: 0;
+        }
+
+        .sage-comparison {
+            display: grid;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 14px;
+        }
+
+        .sage-metric {
+            padding: 16px;
+            border-radius: var(--of-radius-md);
+            background: var(--of-base);
+            border: 1px solid transparent;
+            transition: var(--of-transition);
+        }
+
+        .sage-metric:hover {
+            background: var(--of-surface);
+            border-color: var(--of-border);
+        }
+
+        .sage-metric__label {
+            display: block;
+            font-size: 11px;
+            font-weight: 600;
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+            color: var(--of-text-soft);
+        }
+
+        .sage-metric__value {
+            display: block;
+            margin-top: 8px;
+            font-size: 22px;
+            font-weight: 700;
+            color: var(--of-primary);
+            letter-spacing: -0.01em;
+        }
+
+        .sage-metric__previous {
+            display: block;
+            margin-top: 4px;
+            font-size: 12px;
+            color: var(--of-text-muted);
+        }
+
+        .sage-trend {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
             margin-top: 10px;
-            font-size: clamp(28px, 2.4vw, 38px);
-            line-height: 1;
+            padding: 4px 10px;
+            border-radius: 999px;
+            font-size: 12px;
             font-weight: 700;
         }
 
-        .erp-kpi__meta {
-            margin-top: 12px;
-            color: rgba(255, 255, 255, 0.82);
-            font-size: 14px;
+        .sage-trend--up {
+            background: rgba(16, 185, 129, 0.1);
+            color: var(--of-success);
         }
 
-        .erp-chart-grid {
+        .sage-trend--down {
+            background: rgba(229, 62, 62, 0.1);
+            color: var(--of-error);
+        }
+
+        .sage-trend--flat {
+            background: var(--of-base);
+            color: var(--of-text-soft);
+        }
+
+        /* ========== CHARTS GRID ========== */
+        .sage-chart-grid {
             display: grid;
             grid-template-columns: 2fr 1fr;
-            gap: 18px;
+            gap: 16px;
         }
 
-        .erp-chart-stack {
+        .sage-chart-stack {
             display: grid;
-            gap: 18px;
+            gap: 16px;
         }
 
-        .erp-chart-card,
-        .erp-table-card,
-        .erp-detail-card {
-            border-radius: 24px;
-            background: #fff;
-            border: 1px solid rgba(18, 52, 72, 0.08);
-            box-shadow: 0 18px 45px rgba(15, 61, 94, 0.08);
-        }
-
-        .erp-chart-card .card-header,
-        .erp-table-card .card-header,
-        .erp-detail-card .card-header {
-            padding: 18px 20px 0;
-        }
-
-        .erp-chart-card .card-body,
-        .erp-table-card .card-body,
-        .erp-detail-card .card-body {
-            padding: 18px 20px 20px;
-        }
-
-        .erp-chart-canvas {
+        .sage-chart-canvas {
             position: relative;
             min-height: 320px;
         }
 
-        .erp-chart-canvas--sm {
+        .sage-chart-canvas--sm {
             min-height: 260px;
         }
 
-        .erp-table-grid {
+        /* ========== TABLES ========== */
+        .sage-table-grid {
             display: grid;
             grid-template-columns: minmax(0, 1.6fr) minmax(340px, 1fr);
-            gap: 18px;
+            gap: 16px;
         }
 
-        .erp-orders-table tbody tr.is-selected {
-            background: rgba(113, 196, 239, 0.16);
+        .sage-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 14px;
         }
 
-        .erp-orders-table .btn-linkish {
-            display: inline-flex;
-            align-items: center;
-            gap: 8px;
-            padding: 0;
-            border: 0;
-            background: none;
-            color: #146c94;
+        .sage-table thead th {
+            padding: 12px 16px;
+            text-align: left;
+            font-size: 11px;
             font-weight: 700;
-            text-decoration: none;
-        }
-
-        .erp-detail-grid {
-            display: grid;
-            grid-template-columns: repeat(2, minmax(0, 1fr));
-            gap: 14px;
-            margin-bottom: 18px;
-        }
-
-        .erp-detail-metric {
-            padding: 14px 16px;
-            border-radius: 18px;
-            background: #f7fbfd;
-            border: 1px solid rgba(20, 108, 148, 0.08);
-        }
-
-        .erp-detail-metric span {
-            display: block;
-            font-size: 12px;
             text-transform: uppercase;
             letter-spacing: 0.05em;
-            color: #607887;
+            color: var(--of-text-soft);
+            background: var(--of-base);
+            border-bottom: 1px solid var(--of-border-soft);
+            white-space: nowrap;
         }
 
-        .erp-detail-metric strong {
+        .sage-table tbody td {
+            padding: 14px 16px;
+            border-bottom: 1px solid var(--of-border-soft);
+            color: var(--of-primary);
+            vertical-align: middle;
+        }
+
+        .sage-table tbody tr {
+            transition: background 120ms ease;
+        }
+
+        .sage-table tbody tr:hover {
+            background: rgba(0, 194, 168, 0.04);
+        }
+
+        .sage-table tbody tr:last-child td {
+            border-bottom: 0;
+        }
+
+        .sage-table tbody tr.is-selected {
+            background: var(--of-accent-light);
+        }
+
+        .sage-table tbody tr.is-selected td:first-child {
+            box-shadow: inset 3px 0 0 var(--of-accent);
+        }
+
+        .sage-table__num {
+            font-variant-numeric: tabular-nums;
+            font-weight: 600;
+        }
+
+        .sage-table__amount {
+            font-variant-numeric: tabular-nums;
+            font-weight: 600;
+            color: var(--of-primary);
+        }
+
+        .sage-table__sub {
             display: block;
-            margin-top: 6px;
-            color: #17384a;
+            margin-top: 2px;
+            font-size: 12px;
+            color: var(--of-text-soft);
+            font-weight: 500;
         }
 
-        .erp-alert {
-            padding: 16px 18px;
-            border-radius: 18px;
-            border: 1px solid rgba(184, 63, 54, 0.15);
-            background: rgba(184, 63, 54, 0.06);
-            color: #8f2d25;
+        .sage-piece-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 4px 10px;
+            border-radius: 6px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--of-accent);
+            background: var(--of-accent-light);
+            text-decoration: none;
+            transition: var(--of-transition);
         }
 
-        .erp-subsection-title {
-            margin: 6px 0 0;
-            font-size: 22px;
-            color: #17384a;
+        .sage-piece-link:hover {
+            background: var(--of-accent);
+            color: #fff;
         }
 
+        .sage-badge {
+            display: inline-flex;
+            align-items: center;
+            padding: 3px 9px;
+            border-radius: 999px;
+            font-size: 11px;
+            font-weight: 600;
+            background: var(--of-base);
+            color: var(--of-text-soft);
+        }
+
+        .sage-empty {
+            padding: 48px 24px;
+            text-align: center;
+            color: var(--of-text-soft);
+            font-size: 14px;
+        }
+
+        .sage-empty__icon {
+            font-size: 32px;
+            color: var(--of-text-muted);
+            margin-bottom: 12px;
+        }
+
+        /* ========== DETAIL ========== */
+        .sage-detail-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 10px;
+            margin-bottom: 16px;
+        }
+
+        .sage-detail-metric {
+            padding: 12px 14px;
+            background: var(--of-base);
+            border-radius: var(--of-radius-sm);
+        }
+
+        .sage-detail-metric span {
+            display: block;
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--of-text-soft);
+            font-weight: 600;
+        }
+
+        .sage-detail-metric strong {
+            display: block;
+            margin-top: 4px;
+            font-size: 14px;
+            color: var(--of-primary);
+            font-weight: 600;
+        }
+
+        .sage-detail-metric--highlight {
+            background: var(--of-accent-light);
+            border: 1px solid rgba(0, 194, 168, 0.2);
+        }
+
+        .sage-detail-metric--highlight strong {
+            color: var(--of-accent);
+        }
+
+        /* ========== RESPONSIVE ========== */
         @media (max-width: 1440px) {
-            .erp-kpis,
-            .erp-filter-grid {
-                grid-template-columns: repeat(3, minmax(0, 1fr));
+            .sage-kpis {
+                grid-template-columns: repeat(3, 1fr);
+            }
+            .sage-comparison {
+                grid-template-columns: repeat(2, 1fr);
             }
         }
 
         @media (max-width: 1120px) {
-            .erp-hero__grid,
-            .erp-chart-grid,
-            .erp-table-grid,
-            .erp-detail-grid {
+            .sage-hero__grid,
+            .sage-chart-grid,
+            .sage-table-grid {
                 grid-template-columns: 1fr;
+            }
+            .sage-field--sm,
+            .sage-field--md,
+            .sage-field--lg {
+                grid-column: span 6;
             }
         }
 
-        @media (max-width: 860px) {
-            .erp-kpis,
-            .erp-filter-grid,
-            .erp-hero__meta {
+        @media (max-width: 720px) {
+            .sage-hero { padding: 24px; }
+            .sage-kpis,
+            .sage-comparison {
                 grid-template-columns: 1fr;
+            }
+            .sage-field--sm,
+            .sage-field--md,
+            .sage-field--lg,
+            .sage-field--actions {
+                grid-column: span 12;
+            }
+            .sage-detail-grid {
+                grid-template-columns: 1fr;
+            }
+            .sage-card__header {
+                padding: 16px 18px 12px;
+            }
+            .sage-card__body {
+                padding: 16px 18px;
             }
         }
     </style>
@@ -302,194 +840,383 @@
 
 {% block content %}
     {% set sage = sageStatistics %}
+    {% set isCommercialScope = isCommercialScope ?? false %}
 
-    <section class="erp-section">
-        <div class="erp-hero">
-            <div class="erp-hero__grid">
-                <div>
-                    <span class="erp-hero__eyebrow">
-                        <i class="fas fa-chart-line"></i>
-                        ERP Sage analytics
-                    </span>
-                    <h2 style="color:white;">Lecture business des commandes Sage</h2>
-                    <p>
-                        Vue finance et commerciale unifiee sur document/header et document/line :
-                        chiffre d affaires, panier moyen, top commerciaux, statuts et detail des commandes.
-                    </p>
+    <div class="sage-page">
+        <section class="sage-section">
+            {% if isCommercialScope %}
+                <div class="sage-alert" style="background:#EFF6FF; border-color:rgba(59,130,246,.2); border-left-color:var(--of-info); color:#1E3A8A;">
+                    <i class="fas fa-user-lock sage-alert__icon" style="color:var(--of-info);"></i>
+                    <div>
+                        <strong style="color:var(--of-info);">Vue commerciale restreinte</strong>
+                        <div>
+                            Les statistiques Sage sont limitees a votre perimetre{% if commercialScopeName %} : {{ commercialScopeName }}{% endif %}.
+                        </div>
+                    </div>
                 </div>
-                <div class="erp-hero__meta">
-                    <div class="erp-hero__meta-card">
-                        <span>Periode</span>
-                        <strong>{{ sage ? sage.filters.date_debut ~ ' -> ' ~ sage.filters.date_fin : 'Indisponible' }}</strong>
+            {% endif %}
+
+            {# ========== HERO ========== #}
+            <div class="sage-hero">
+                <div class="sage-hero__grid">
+                    <div>
+                        <span class="sage-hero__eyebrow">
+                            <span class="dot"></span>
+                            ERP Sage · Live
+                        </span>
+                        <h1>Pilotage commercial Sage</h1>
+                        <p>
+                            Vision consolidée de votre activité commerciale&nbsp;: chiffre d'affaires, panier moyen,
+                            top commerciaux, top clients et détail ligne par ligne de chaque commande.
+                        </p>
                     </div>
-                    <div class="erp-hero__meta-card">
-                        <span>Granularite</span>
-                        <strong>{{ sage ? (sage.filters.group_by == 'year' ? 'Annee' : 'Mois') : 'N/A' }}</strong>
-                    </div>
-                    <div class="erp-hero__meta-card">
-                        <span>Source</span>
-                        <strong>Document header / line</strong>
+                    <div class="sage-hero__meta">
+                        <div class="sage-hero__meta-item">
+                            <div class="sage-hero__meta-icon"><i class="fas fa-calendar-alt"></i></div>
+                            <div class="sage-hero__meta-text">
+                                <span>Période analysée</span>
+                                <strong>{{ sage ? sage.filters.date_debut ~ ' → ' ~ sage.filters.date_fin : 'Indisponible' }}</strong>
+                            </div>
+                        </div>
+                        <div class="sage-hero__meta-item">
+                            <div class="sage-hero__meta-icon"><i class="fas fa-layer-group"></i></div>
+                            <div class="sage-hero__meta-text">
+                                <span>Granularité</span>
+                                <strong>{{ sage ? (sage.filters.group_by == 'year' ? 'Par année' : 'Par mois') : 'N/A' }}</strong>
+                            </div>
+                        </div>
+                        <div class="sage-hero__meta-item">
+                            <div class="sage-hero__meta-icon"><i class="fas fa-database"></i></div>
+                            <div class="sage-hero__meta-text">
+                                <span>Source de données</span>
+                                <strong>Document Header / Line</strong>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
-        </div>
 
-        {% if sageError %}
-            <div class="erp-alert">
-                <strong>Lecture Sage indisponible.</strong>
-                <div>{{ sageError }}</div>
-            </div>
-        {% endif %}
+            {# ========== ALERT ========== #}
+            {% if sageError %}
+                <div class="sage-alert">
+                    <i class="fas fa-exclamation-triangle sage-alert__icon"></i>
+                    <div>
+                        <strong>Lecture Sage indisponible</strong>
+                        <div>{{ sageError }}</div>
+                    </div>
+                </div>
+            {% endif %}
 
-        <div class="erp-filter-card">
-            <div class="card-header" style="padding: 0 0 18px;">
-                <span class="card-title">Filtres KPI Sage</span>
-            </div>
-            <form method="get" class="erp-filter-grid">
-                <div class="field">
-                    <label for="period">Periode</label>
-                    <select id="period" name="period">
-                        <option value="current_month" {{ sage and sage.filters.period == 'current_month' ? 'selected' : '' }}>Mois en cours</option>
-                        <option value="current_year" {{ sage and sage.filters.period == 'current_year' ? 'selected' : '' }}>Annee en cours</option>
-                        <option value="last_12_months" {{ sage and sage.filters.period == 'last_12_months' ? 'selected' : '' }}>12 derniers mois</option>
-                        <option value="custom" {{ sage and sage.filters.period == 'custom' ? 'selected' : '' }}>Periode libre</option>
-                    </select>
-                </div>
-                <div class="field">
-                    <label for="group_by">Vue</label>
-                    <select id="group_by" name="group_by">
-                        <option value="month" {{ sage and sage.filters.group_by == 'month' ? 'selected' : '' }}>Par mois</option>
-                        <option value="year" {{ sage and sage.filters.group_by == 'year' ? 'selected' : '' }}>Par annee</option>
-                    </select>
-                </div>
-                <div class="field">
-                    <label for="date_debut">Date debut</label>
-                    <input id="date_debut" type="date" name="date_debut" value="{{ sage ? sage.filters.date_debut : '' }}">
-                </div>
-                <div class="field">
-                    <label for="date_fin">Date fin</label>
-                    <input id="date_fin" type="date" name="date_fin" value="{{ sage ? sage.filters.date_fin : '' }}">
-                </div>
-                <div class="field">
-                    <label for="representant">Commercial</label>
-                    <select id="representant" name="representant">
-                        <option value="">Tous les commerciaux</option>
-                        {% for representant in sage.representants %}
-                            <option value="{{ representant.value }}" {{ sage.filters.representant == representant.value ? 'selected' : '' }}>{{ representant.label }}</option>
+            {# ========== FILTRES ========== #}
+            <div class="sage-filters">
+                <div class="sage-filters__header">
+                    <div class="sage-filters__title">
+                        <span class="icon"><i class="fas fa-sliders-h"></i></span>
+                        Filtres d'analyse
+                    </div>
+                    <div class="sage-period-chips" role="tablist" aria-label="Période rapide">
+                        {% set periods = {
+                            'current_month': 'Mois en cours',
+                            'current_year': 'Année en cours',
+                            'last_3_months': '3 derniers mois',
+                            'last_12_months': '12 derniers mois',
+                            'custom': 'Personnalisée'
+                        } %}
+                        {% for value, label in periods %}
+                            <button
+                                type="button"
+                                class="sage-period-chip {{ sage and sage.filters.period == value ? 'is-active' : '' }}"
+                                data-period="{{ value }}"
+                                role="tab"
+                                aria-selected="{{ sage and sage.filters.period == value ? 'true' : 'false' }}"
+                            >{{ label }}</button>
                         {% endfor %}
-                    </select>
-                </div>
-                <div class="field">
-                    <label for="piece">Piece</label>
-                    <input id="piece" type="text" name="piece" value="{{ sage ? sage.filters.piece : '' }}" placeholder="BC002137">
-                </div>
-                <input type="hidden" name="table_limit" value="15">
-                <div class="erp-filter-actions">
-                    <button class="btn btn-primary btn-md" type="submit">Analyser</button>
-                    <a class="btn btn-secondary btn-md" href="{{ path('supervision_statistics_index') }}">Reset</a>
-                </div>
-            </form>
-        </div>
-
-        {% if sage %}
-            <section class="erp-kpis">
-                <article class="erp-kpi">
-                    <div class="erp-kpi__label">Chiffre d affaires</div>
-                    <div class="erp-kpi__value">{{ sage.summary.revenue_total|number_format(2, ',', ' ') }} EUR</div>
-                    <div class="erp-kpi__meta">{{ sage.summary.order_count }} commandes sur la periode</div>
-                </article>
-                <article class="erp-kpi">
-                    <div class="erp-kpi__label">CA valide</div>
-                    <div class="erp-kpi__value">{{ sage.summary.validated_revenue|number_format(2, ',', ' ') }} EUR</div>
-                    <div class="erp-kpi__meta">Commandes confirmees dans Sage</div>
-                </article>
-                <article class="erp-kpi">
-                    <div class="erp-kpi__label">Panier moyen</div>
-                    <div class="erp-kpi__value">{{ sage.summary.average_basket|number_format(2, ',', ' ') }} EUR</div>
-                    <div class="erp-kpi__meta">Montant moyen par commande</div>
-                </article>
-                <article class="erp-kpi">
-                    <div class="erp-kpi__label">Top commercial</div>
-                    <div class="erp-kpi__value">{{ sage.summary.best_commercial.name }}</div>
-                    <div class="erp-kpi__meta">{{ sage.summary.best_commercial.amount|number_format(2, ',', ' ') }} EUR sur {{ sage.summary.best_commercial.orders }} commandes</div>
-                </article>
-                <article class="erp-kpi">
-                    <div class="erp-kpi__label">Reste a payer</div>
-                    <div class="erp-kpi__value">{{ sage.summary.unpaid_total|number_format(2, ',', ' ') }} EUR</div>
-                    <div class="erp-kpi__meta">Encours theorique sur la selection</div>
-                </article>
-            </section>
-
-            <section class="erp-chart-grid">
-                <div class="erp-chart-card">
-                    <div class="card-header">
-                        <span class="card-title">Evolution du chiffre d affaires</span>
                     </div>
-                    <div class="card-body">
-                        <div class="erp-chart-canvas">
-                            <canvas id="erpRevenueChart"></canvas>
+                </div>
+
+                <form method="get" id="sageFiltersForm">
+                    <div class="sage-field sage-field--sm">
+                        <label for="period">Période</label>
+                        <select id="period" name="period">
+                            {% for value, label in periods %}
+                                <option value="{{ value }}" {{ sage and sage.filters.period == value ? 'selected' : '' }}>{{ label }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="sage-field sage-field--sm">
+                        <label for="group_by">Vue</label>
+                        <select id="group_by" name="group_by">
+                            <option value="month" {{ sage and sage.filters.group_by == 'month' ? 'selected' : '' }}>Par mois</option>
+                            <option value="year" {{ sage and sage.filters.group_by == 'year' ? 'selected' : '' }}>Par année</option>
+                        </select>
+                    </div>
+                    <div class="sage-field sage-field--sm">
+                        <label for="date_debut">Du</label>
+                        <input id="date_debut" type="date" name="date_debut" value="{{ sage ? sage.filters.date_debut : '' }}">
+                    </div>
+                    <div class="sage-field sage-field--sm">
+                        <label for="date_fin">Au</label>
+                        <input id="date_fin" type="date" name="date_fin" value="{{ sage ? sage.filters.date_fin : '' }}">
+                    </div>
+                    <div class="sage-field sage-field--md">
+                        <label for="representant">Commercial</label>
+                        <select id="representant" name="representant" {{ isCommercialScope ? 'disabled' : '' }}>
+                            {% if not isCommercialScope %}
+                                <option value="">Tous les commerciaux</option>
+                            {% endif %}
+                            {% for representant in sage ? sage.representants : [] %}
+                                <option value="{{ representant.value }}" {{ sage and sage.filters.representant == representant.value ? 'selected' : '' }}>{{ representant.label }}</option>
+                            {% endfor %}
+                        </select>
+                        {% if isCommercialScope %}
+                            <input type="hidden" name="representant" value="{{ sage ? sage.filters.representant : '' }}">
+                        {% endif %}
+                    </div>
+                    <div class="sage-field sage-field--md">
+                        <label for="piece">Numéro de pièce</label>
+                        <input id="piece" type="text" name="piece" value="{{ sage ? sage.filters.piece : '' }}" placeholder="ex : BC002137">
+                    </div>
+                    <input type="hidden" name="table_limit" value="15">
+
+                    <div class="sage-field--actions">
+                        <a class="sage-btn sage-btn--ghost" href="{{ path('supervision_statistics_index') }}">
+                            <i class="fas fa-rotate-left"></i>
+                            Réinitialiser
+                        </a>
+                        <button class="sage-btn sage-btn--primary" type="submit">
+                            <i class="fas fa-chart-line"></i>
+                            Analyser
+                        </button>
+                    </div>
+                </form>
+            </div>
+
+            {% if sage %}
+
+                {# ========== KPI CARDS ========== #}
+                <div class="sage-kpis">
+                    <article class="sage-kpi">
+                        <div class="sage-kpi__head">
+                            <span class="sage-kpi__label">Chiffre d'affaires</span>
+                            <div class="sage-kpi__icon sage-kpi__icon--accent"><i class="fas fa-euro-sign"></i></div>
+                        </div>
+                        <div class="sage-kpi__value">
+                            {{ sage.summary.revenue_total|number_format(0, ',', ' ') }}<span class="sage-kpi__currency">€</span>
+                        </div>
+                        <div class="sage-kpi__meta">{{ sage.summary.order_count }} commandes sur la période</div>
+                        <div class="sage-kpi__bar"><div class="sage-kpi__bar-fill" style="width: 100%"></div></div>
+                    </article>
+
+                    <article class="sage-kpi">
+                        <div class="sage-kpi__head">
+                            <span class="sage-kpi__label">CA validé</span>
+                            <div class="sage-kpi__icon sage-kpi__icon--success"><i class="fas fa-check-circle"></i></div>
+                        </div>
+                        <div class="sage-kpi__value">
+                            {{ sage.summary.validated_revenue|number_format(0, ',', ' ') }}<span class="sage-kpi__currency">€</span>
+                        </div>
+                        <div class="sage-kpi__meta">Commandes confirmées dans Sage</div>
+                        <div class="sage-kpi__bar">
+                            <div class="sage-kpi__bar-fill" style="width: {{ sage.summary.revenue_total > 0 ? (sage.summary.validated_revenue / sage.summary.revenue_total * 100)|round : 0 }}%; background: var(--of-success);"></div>
+                        </div>
+                    </article>
+
+                    <article class="sage-kpi">
+                        <div class="sage-kpi__head">
+                            <span class="sage-kpi__label">Panier moyen</span>
+                            <div class="sage-kpi__icon sage-kpi__icon--info"><i class="fas fa-shopping-basket"></i></div>
+                        </div>
+                        <div class="sage-kpi__value">
+                            {{ sage.summary.average_basket|number_format(0, ',', ' ') }}<span class="sage-kpi__currency">€</span>
+                        </div>
+                        <div class="sage-kpi__meta">Montant moyen par commande</div>
+                        <div class="sage-kpi__bar"><div class="sage-kpi__bar-fill" style="width: 100%; background: var(--of-info);"></div></div>
+                    </article>
+
+                    <article class="sage-kpi">
+                        <div class="sage-kpi__head">
+                            <span class="sage-kpi__label">Top commercial</span>
+                            <div class="sage-kpi__icon sage-kpi__icon--warning"><i class="fas fa-trophy"></i></div>
+                        </div>
+                        <div class="sage-kpi__value" style="font-size: 18px;">
+                            {{ sage.summary.best_commercial.name }}
+                        </div>
+                        <div class="sage-kpi__meta">
+                            <strong style="color: var(--of-primary);">{{ sage.summary.best_commercial.amount|number_format(0, ',', ' ') }} €</strong> · {{ sage.summary.best_commercial.orders }} cmd
+                        </div>
+                        <div class="sage-kpi__bar"><div class="sage-kpi__bar-fill" style="width: 100%; background: var(--of-warning);"></div></div>
+                    </article>
+
+                    <article class="sage-kpi">
+                        <div class="sage-kpi__head">
+                            <span class="sage-kpi__label">Reste à payer</span>
+                            <div class="sage-kpi__icon sage-kpi__icon--danger"><i class="fas fa-clock"></i></div>
+                        </div>
+                        <div class="sage-kpi__value">
+                            {{ sage.summary.unpaid_total|number_format(0, ',', ' ') }}<span class="sage-kpi__currency">€</span>
+                        </div>
+                        <div class="sage-kpi__meta">Encours théorique sélectionné</div>
+                        <div class="sage-kpi__bar">
+                            <div class="sage-kpi__bar-fill" style="width: {{ sage.summary.revenue_total > 0 ? (sage.summary.unpaid_total / sage.summary.revenue_total * 100)|round : 0 }}%; background: var(--of-error);"></div>
+                        </div>
+                    </article>
+                </div>
+
+                {# ========== COMPARAISON N / N-1 ========== #}
+                <div class="sage-card">
+                    <div class="sage-card__header">
+                        <div class="sage-card__title">
+                            <span class="icon"><i class="fas fa-code-compare"></i></span>
+                            Comparaison N / N-1
+                        </div>
+                        <div class="sage-card__subtitle">
+                            <strong>{{ sage.comparison.current_label }}</strong> vs {{ sage.comparison.previous_label }}
+                        </div>
+                    </div>
+                    <div class="sage-card__body">
+                        <div class="sage-comparison">
+                            {% for metric in sage.comparison.metrics %}
+                                <article class="sage-metric">
+                                    <span class="sage-metric__label">{{ metric.label }}</span>
+                                    <strong class="sage-metric__value">
+                                        {% if metric.format == 'currency' %}
+                                            {{ metric.current|number_format(0, ',', ' ') }} €
+                                        {% else %}
+                                            {{ metric.current|number_format(0, ',', ' ') }}
+                                        {% endif %}
+                                    </strong>
+                                    <small class="sage-metric__previous">
+                                        N-1 :
+                                        {% if metric.format == 'currency' %}
+                                            {{ metric.previous|number_format(0, ',', ' ') }} €
+                                        {% else %}
+                                            {{ metric.previous|number_format(0, ',', ' ') }}
+                                        {% endif %}
+                                    </small>
+                                    <div class="sage-trend sage-trend--{{ metric.trend }}">
+                                        {% if metric.trend == 'up' %}
+                                            <i class="fas fa-arrow-up"></i>
+                                        {% elseif metric.trend == 'down' %}
+                                            <i class="fas fa-arrow-down"></i>
+                                        {% else %}
+                                            <i class="fas fa-minus"></i>
+                                        {% endif %}
+                                        <span>
+                                            {% if metric.delta_percent is not null %}
+                                                {{ metric.delta_percent > 0 ? '+' : '' }}{{ metric.delta_percent|number_format(1, ',', ' ') }}%
+                                            {% else %}
+                                                {% if metric.format == 'currency' %}
+                                                    {{ metric.delta|number_format(0, ',', ' ') }} €
+                                                {% else %}
+                                                    {{ metric.delta|number_format(0, ',', ' ') }}
+                                                {% endif %}
+                                            {% endif %}
+                                        </span>
+                                    </div>
+                                </article>
+                            {% endfor %}
                         </div>
                     </div>
                 </div>
-                <div class="erp-chart-stack">
-                    <div class="erp-chart-card">
-                        <div class="card-header">
-                            <span class="card-title">CA par commercial</span>
+
+                {# ========== CHARTS PRINCIPAUX ========== #}
+                <div class="sage-chart-grid">
+                    <div class="sage-card">
+                        <div class="sage-card__header">
+                            <div class="sage-card__title">
+                                <span class="icon"><i class="fas fa-chart-area"></i></span>
+                                Évolution du chiffre d'affaires
+                            </div>
+                            <div class="sage-card__subtitle">{{ sage.filters.group_by == 'year' ? 'Vue annuelle' : 'Vue mensuelle' }}</div>
                         </div>
-                        <div class="card-body">
-                            <div class="erp-chart-canvas erp-chart-canvas--sm">
-                                <canvas id="erpCommercialChart"></canvas>
+                        <div class="sage-card__body">
+                            <div class="sage-chart-canvas">
+                                <canvas id="erpRevenueChart"></canvas>
                             </div>
                         </div>
                     </div>
-                    <div class="erp-chart-card">
-                        <div class="card-header">
-                            <span class="card-title">Repartition des statuts</span>
+                    <div class="sage-chart-stack">
+                        <div class="sage-card">
+                            <div class="sage-card__header">
+                                <div class="sage-card__title">
+                                    <span class="icon"><i class="fas fa-users"></i></span>
+                                    CA par commercial
+                                </div>
+                            </div>
+                            <div class="sage-card__body">
+                                <div class="sage-chart-canvas sage-chart-canvas--sm">
+                                    <canvas id="erpCommercialChart"></canvas>
+                                </div>
+                            </div>
                         </div>
-                        <div class="card-body">
-                            <div class="erp-chart-canvas erp-chart-canvas--sm">
-                                <canvas id="erpStatusChart"></canvas>
+                        <div class="sage-card">
+                            <div class="sage-card__header">
+                                <div class="sage-card__title">
+                                    <span class="icon"><i class="fas fa-chart-pie"></i></span>
+                                    Répartition des statuts
+                                </div>
+                            </div>
+                            <div class="sage-card__body">
+                                <div class="sage-chart-canvas sage-chart-canvas--sm">
+                                    <canvas id="erpStatusChart"></canvas>
+                                </div>
                             </div>
                         </div>
                     </div>
                 </div>
-            </section>
 
-            <section class="erp-chart-grid">
-                <div class="erp-chart-card">
-                    <div class="card-header">
-                        <span class="card-title">Volume de commandes</span>
-                    </div>
-                    <div class="card-body">
-                        <div class="erp-chart-canvas erp-chart-canvas--sm">
-                            <canvas id="erpOrdersChart"></canvas>
+                {# ========== TOP CLIENTS ========== #}
+                <div class="sage-chart-grid">
+                    <div class="sage-card">
+                        <div class="sage-card__header">
+                            <div class="sage-card__title">
+                                <span class="icon"><i class="fas fa-medal"></i></span>
+                                Top clients
+                            </div>
+                            <div class="sage-card__subtitle">Classement par CA</div>
+                        </div>
+                        <div class="sage-card__body">
+                            <div class="sage-chart-canvas sage-chart-canvas--sm">
+                                <canvas id="erpClientChart"></canvas>
+                            </div>
                         </div>
                     </div>
-                </div>
-                <div class="erp-table-card">
-                    <div class="card-header">
-                        <span class="card-title">Top commerciaux</span>
-                    </div>
-                    <div class="card-body" style="padding: 0;">
-                        <div class="table-responsive">
-                            <table class="table">
+                    <div class="sage-card">
+                        <div class="sage-card__header">
+                            <div class="sage-card__title">
+                                <span class="icon"><i class="fas fa-list-ol"></i></span>
+                                Détail top clients
+                            </div>
+                        </div>
+                        <div class="sage-card__body sage-card__body--flush">
+                            <table class="sage-table">
                                 <thead>
                                     <tr>
-                                        <th>Commercial</th>
-                                        <th>Commandes</th>
-                                        <th>CA</th>
+                                        <th>Client</th>
+                                        <th style="text-align:right;">Cmd</th>
+                                        <th style="text-align:right;">CA</th>
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {% for item in sage.topCommercials %}
+                                    {% for item in sage.topClients %}
                                         <tr>
-                                            <td><strong>{{ item.name }}</strong></td>
-                                            <td>{{ item.orders }}</td>
-                                            <td>{{ item.amount|number_format(2, ',', ' ') }} EUR</td>
+                                            <td>
+                                                <strong>{{ item.name }}</strong>
+                                                {% if item.tiers != '' and item.tiers != item.name %}
+                                                    <span class="sage-table__sub">{{ item.tiers }}</span>
+                                                {% endif %}
+                                            </td>
+                                            <td class="sage-table__num" style="text-align:right;">{{ item.orders }}</td>
+                                            <td class="sage-table__amount" style="text-align:right;">{{ item.amount|number_format(0, ',', ' ') }} €</td>
                                         </tr>
                                     {% else %}
                                         <tr>
-                                            <td colspan="3" style="text-align:center; padding: 2rem;">Aucune donnee commerciale.</td>
+                                            <td colspan="3">
+                                                <div class="sage-empty">
+                                                    <div class="sage-empty__icon"><i class="fas fa-inbox"></i></div>
+                                                    Aucune donnée client disponible
+                                                </div>
+                                            </td>
                                         </tr>
                                     {% endfor %}
                                 </tbody>
@@ -497,31 +1224,89 @@
                         </div>
                     </div>
                 </div>
-            </section>
 
-            <section class="erp-table-grid">
-                <div class="erp-table-card">
-                    <div class="card-header">
-                        <span class="card-title">Dernieres commandes Sage</span>
+                {# ========== VOLUME + TOP COMMERCIAUX ========== #}
+                <div class="sage-chart-grid">
+                    <div class="sage-card">
+                        <div class="sage-card__header">
+                            <div class="sage-card__title">
+                                <span class="icon"><i class="fas fa-chart-bar"></i></span>
+                                Volume de commandes
+                            </div>
+                            <div class="sage-card__subtitle">Nombre de commandes par période</div>
+                        </div>
+                        <div class="sage-card__body">
+                            <div class="sage-chart-canvas sage-chart-canvas--sm">
+                                <canvas id="erpOrdersChart"></canvas>
+                            </div>
+                        </div>
                     </div>
-                    <div class="card-body" style="padding: 0;">
-                        <div class="table-responsive">
-                            <table class="table erp-orders-table">
+                    <div class="sage-card">
+                        <div class="sage-card__header">
+                            <div class="sage-card__title">
+                                <span class="icon"><i class="fas fa-award"></i></span>
+                                Top commerciaux
+                            </div>
+                        </div>
+                        <div class="sage-card__body sage-card__body--flush">
+                            <table class="sage-table">
                                 <thead>
                                     <tr>
-                                        <th>Piece</th>
+                                        <th>Commercial</th>
+                                        <th style="text-align:right;">Cmd</th>
+                                        <th style="text-align:right;">CA</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for item in sage.topCommercials %}
+                                        <tr>
+                                            <td><strong>{{ item.name }}</strong></td>
+                                            <td class="sage-table__num" style="text-align:right;">{{ item.orders }}</td>
+                                            <td class="sage-table__amount" style="text-align:right;">{{ item.amount|number_format(0, ',', ' ') }} €</td>
+                                        </tr>
+                                    {% else %}
+                                        <tr>
+                                            <td colspan="3">
+                                                <div class="sage-empty">
+                                                    <div class="sage-empty__icon"><i class="fas fa-user-slash"></i></div>
+                                                    Aucune donnée commerciale
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                {# ========== COMMANDES + DETAIL ========== #}
+                <div class="sage-table-grid">
+                    <div class="sage-card">
+                        <div class="sage-card__header">
+                            <div class="sage-card__title">
+                                <span class="icon"><i class="fas fa-receipt"></i></span>
+                                Dernières commandes
+                            </div>
+                            <div class="sage-card__subtitle">Cliquez sur une pièce pour voir le détail</div>
+                        </div>
+                        <div class="sage-card__body sage-card__body--flush">
+                            <table class="sage-table">
+                                <thead>
+                                    <tr>
+                                        <th>Pièce</th>
                                         <th>Date</th>
                                         <th>Client</th>
                                         <th>Commercial</th>
                                         <th>Statut</th>
-                                        <th>Montant TTC</th>
+                                        <th style="text-align:right;">Montant TTC</th>
                                     </tr>
                                 </thead>
                                 <tbody>
                                     {% for order in sage.recentOrders %}
                                         <tr class="{{ sage.filters.selected_piece == order.piece ? 'is-selected' : '' }}">
                                             <td>
-                                                <a class="btn-linkish" href="{{ path('supervision_statistics_index', {
+                                                <a class="sage-piece-link" href="{{ path('supervision_statistics_index', {
                                                     period: sage.filters.period,
                                                     group_by: sage.filters.group_by,
                                                     date_debut: sage.filters.date_debut,
@@ -542,94 +1327,110 @@
                                             <td>{{ order.date_label }}</td>
                                             <td>
                                                 <strong>{{ order.company_name != '' ? order.company_name : order.tiers }}</strong>
-                                                <div style="font-size: 12px; color: #6c8491;">{{ order.tiers }}</div>
+                                                <span class="sage-table__sub">{{ order.tiers }}</span>
                                             </td>
-                                            <td>{{ order.representant != '' ? order.representant : 'Non attribue' }}</td>
-                                            <td>{{ order.statut != '' ? order.statut : 'Non renseigne' }}</td>
-                                            <td>{{ order.montantTTC|number_format(2, ',', ' ') }} EUR</td>
+                                            <td>{{ order.representant != '' ? order.representant : '—' }}</td>
+                                            <td>
+                                                <span class="sage-badge">{{ order.statut != '' ? order.statut : 'N/A' }}</span>
+                                            </td>
+                                            <td class="sage-table__amount" style="text-align:right;">{{ order.montantTTC|number_format(2, ',', ' ') }} €</td>
                                         </tr>
                                     {% else %}
                                         <tr>
-                                            <td colspan="6" style="text-align:center; padding: 2rem;">Aucune commande remontee par Sage sur ce filtre.</td>
+                                            <td colspan="6">
+                                                <div class="sage-empty">
+                                                    <div class="sage-empty__icon"><i class="fas fa-search"></i></div>
+                                                    Aucune commande sur ces filtres
+                                                </div>
+                                            </td>
                                         </tr>
                                     {% endfor %}
                                 </tbody>
                             </table>
                         </div>
                     </div>
-                </div>
 
-                <div class="erp-detail-card">
-                    <div class="card-header">
-                        <span class="card-title">Detail commande</span>
-                    </div>
-                    <div class="card-body">
-                        {% if sage.selectedOrder %}
-                            <div class="erp-detail-grid">
-                                <div class="erp-detail-metric">
-                                    <span>Piece</span>
-                                    <strong>{{ sage.selectedOrder.piece }}</strong>
-                                </div>
-                                <div class="erp-detail-metric">
-                                    <span>Date</span>
-                                    <strong>{{ sage.selectedOrder.date_label }}</strong>
-                                </div>
-                                <div class="erp-detail-metric">
-                                    <span>Commercial</span>
-                                    <strong>{{ sage.selectedOrder.representant != '' ? sage.selectedOrder.representant : 'Non attribue' }}</strong>
-                                </div>
-                                <div class="erp-detail-metric">
-                                    <span>Montant TTC</span>
-                                    <strong>{{ sage.selectedOrder.montantTTC|number_format(2, ',', ' ') }} EUR</strong>
-                                </div>
-                                <div class="erp-detail-metric">
-                                    <span>Client</span>
-                                    <strong>{{ sage.selectedOrder.company_name != '' ? sage.selectedOrder.company_name : sage.selectedOrder.tiers }}</strong>
-                                </div>
-                                <div class="erp-detail-metric">
-                                    <span>Reste a payer</span>
-                                    <strong>{{ sage.selectedOrder.resteAPayer|number_format(2, ',', ' ') }} EUR</strong>
-                                </div>
+                    <div class="sage-card">
+                        <div class="sage-card__header">
+                            <div class="sage-card__title">
+                                <span class="icon"><i class="fas fa-file-invoice"></i></span>
+                                Détail commande
                             </div>
+                            {% if sage.selectedOrder %}
+                                <div class="sage-card__subtitle">{{ sage.selectedOrder.piece }}</div>
+                            {% endif %}
+                        </div>
+                        <div class="sage-card__body">
+                            {% if sage.selectedOrder %}
+                                <div class="sage-detail-grid">
+                                    <div class="sage-detail-metric">
+                                        <span>Pièce</span>
+                                        <strong>{{ sage.selectedOrder.piece }}</strong>
+                                    </div>
+                                    <div class="sage-detail-metric">
+                                        <span>Date</span>
+                                        <strong>{{ sage.selectedOrder.date_label }}</strong>
+                                    </div>
+                                    <div class="sage-detail-metric">
+                                        <span>Commercial</span>
+                                        <strong>{{ sage.selectedOrder.representant != '' ? sage.selectedOrder.representant : '—' }}</strong>
+                                    </div>
+                                    <div class="sage-detail-metric sage-detail-metric--highlight">
+                                        <span>Montant TTC</span>
+                                        <strong>{{ sage.selectedOrder.montantTTC|number_format(2, ',', ' ') }} €</strong>
+                                    </div>
+                                    <div class="sage-detail-metric">
+                                        <span>Client</span>
+                                        <strong>{{ sage.selectedOrder.company_name != '' ? sage.selectedOrder.company_name : sage.selectedOrder.tiers }}</strong>
+                                    </div>
+                                    <div class="sage-detail-metric">
+                                        <span>Reste à payer</span>
+                                        <strong>{{ sage.selectedOrder.resteAPayer|number_format(2, ',', ' ') }} €</strong>
+                                    </div>
+                                </div>
 
-                            <div class="table-responsive">
-                                <table class="table">
+                                <table class="sage-table">
                                     <thead>
                                         <tr>
-                                            <th>Reference</th>
-                                            <th>Designation</th>
-                                            <th>Qte</th>
-                                            <th>PU TTC</th>
-                                            <th>Montant</th>
+                                            <th>Référence</th>
+                                            <th>Désignation</th>
+                                            <th style="text-align:right;">Qté</th>
+                                            <th style="text-align:right;">PU TTC</th>
+                                            <th style="text-align:right;">Montant</th>
                                         </tr>
                                     </thead>
                                     <tbody>
                                         {% for line in sage.selectedLines %}
                                             <tr>
-                                                <td><strong>{{ line.referenceArticle }}</strong></td>
+                                                <td><strong style="font-family: 'JetBrains Mono', monospace; font-size: 12px;">{{ line.referenceArticle }}</strong></td>
                                                 <td>{{ line.designationArticle }}</td>
-                                                <td>{{ line.qteArticle|number_format(0, ',', ' ') }} {{ line.uniteArticle }}</td>
-                                                <td>{{ line.prixTTCArticle|number_format(2, ',', ' ') }} EUR</td>
-                                                <td>{{ line.montantArticle|number_format(2, ',', ' ') }} EUR</td>
+                                                <td class="sage-table__num" style="text-align:right;">{{ line.qteArticle|number_format(0, ',', ' ') }} {{ line.uniteArticle }}</td>
+                                                <td class="sage-table__amount" style="text-align:right;">{{ line.prixTTCArticle|number_format(2, ',', ' ') }} €</td>
+                                                <td class="sage-table__amount" style="text-align:right;">{{ line.montantArticle|number_format(2, ',', ' ') }} €</td>
                                             </tr>
                                         {% else %}
                                             <tr>
-                                                <td colspan="5" style="text-align:center; padding: 1.5rem;">Aucune ligne retournee pour cette piece.</td>
+                                                <td colspan="5">
+                                                    <div class="sage-empty">Aucune ligne pour cette pièce</div>
+                                                </td>
                                             </tr>
                                         {% endfor %}
                                     </tbody>
                                 </table>
-                            </div>
-                        {% else %}
-                            <div class="dashboard-alert-empty">
-                                Selectionne une piece dans la table de gauche pour afficher document/line.
-                            </div>
-                        {% endif %}
+                            {% else %}
+                                <div class="sage-empty">
+                                    <div class="sage-empty__icon"><i class="fas fa-hand-pointer"></i></div>
+                                    <strong style="display:block; color:var(--of-primary); margin-bottom:4px;">Aucune pièce sélectionnée</strong>
+                                    Cliquez sur un numéro de pièce dans la table de gauche pour voir le détail des lignes.
+                                </div>
+                            {% endif %}
+                        </div>
                     </div>
                 </div>
-            </section>
-        {% endif %}
-    </section>
+
+            {% endif %}
+        </section>
+    </div>
 
 {% endblock %}
 
@@ -639,19 +1440,48 @@
         <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
         <script>
             (() => {
-                const chartPalette = ['#146C94', '#2BB673', '#F59E0B', '#9B5DE5', '#D8572A', '#0F3D5E', '#71C4EF', '#7C9A3D'];
+                // ===== PALETTE alignée sur les variables CSS =====
+                const palette = {
+                    primary: '#1A1F3C',
+                    secondary: '#2B3160',
+                    accent: '#00C2A8',
+                    accentSoft: 'rgba(0, 194, 168, 0.14)',
+                    chart: ['#00C2A8', '#2B3160', '#3B82F6', '#F59E0B', '#9B5DE5', '#10B981', '#E53E3E', '#71C4EF']
+                };
+
+                // ===== Defaults Chart.js =====
+                if (typeof Chart !== 'undefined') {
+                    Chart.defaults.font.family = "'Inter', sans-serif";
+                    Chart.defaults.font.size = 12;
+                    Chart.defaults.color = 'rgba(26, 31, 60, 0.65)';
+                    Chart.defaults.plugins.tooltip.backgroundColor = '#1A1F3C';
+                    Chart.defaults.plugins.tooltip.titleFont = { weight: '600', size: 12 };
+                    Chart.defaults.plugins.tooltip.bodyFont = { size: 12 };
+                    Chart.defaults.plugins.tooltip.padding = 12;
+                    Chart.defaults.plugins.tooltip.cornerRadius = 8;
+                    Chart.defaults.plugins.tooltip.displayColors = false;
+                    Chart.defaults.plugins.tooltip.boxPadding = 6;
+                }
+
                 const revenueData = {{ sageStatistics.charts.revenue|json_encode(constant('JSON_UNESCAPED_UNICODE'))|raw }};
                 const orderData = {{ sageStatistics.charts.orders|json_encode(constant('JSON_UNESCAPED_UNICODE'))|raw }};
                 const commercialData = {{ sageStatistics.charts.commercials|json_encode(constant('JSON_UNESCAPED_UNICODE'))|raw }};
+                const clientData = {{ sageStatistics.charts.clients|json_encode(constant('JSON_UNESCAPED_UNICODE'))|raw }};
                 const statusData = {{ sageStatistics.charts.statuses|json_encode(constant('JSON_UNESCAPED_UNICODE'))|raw }};
 
                 window.erpSageCharts = window.erpSageCharts || {};
 
-                const buildCurrency = (value) => new Intl.NumberFormat('fr-FR', {
+                const fmtCurrency = (value) => new Intl.NumberFormat('fr-FR', {
                     style: 'currency',
                     currency: 'EUR',
                     maximumFractionDigits: 0
                 }).format(value);
+
+                const fmtCompact = (value) => {
+                    if (Math.abs(value) >= 1e6) return (value / 1e6).toFixed(1).replace('.0', '') + 'M€';
+                    if (Math.abs(value) >= 1e3) return (value / 1e3).toFixed(1).replace('.0', '') + 'k€';
+                    return value + '€';
+                };
 
                 const resetChart = (key) => {
                     if (window.erpSageCharts[key]) {
@@ -660,35 +1490,95 @@
                     }
                 };
 
-                const renderCharts = () => {
-                    if (typeof Chart === 'undefined') {
-                        return;
-                    }
+                const buildGradient = (ctx, color) => {
+                    const gradient = ctx.createLinearGradient(0, 0, 0, 320);
+                    gradient.addColorStop(0, color.replace('1)', '0.28)').replace('rgb(', 'rgba(').replace(')', ', 0.28)'));
+                    gradient.addColorStop(1, 'rgba(0, 194, 168, 0)');
+                    return gradient;
+                };
 
-                    const revenueCanvas = document.getElementById('erpRevenueChart');
-                    const orderCanvas = document.getElementById('erpOrdersChart');
-                    const commercialCanvas = document.getElementById('erpCommercialChart');
-                    const statusCanvas = document.getElementById('erpStatusChart');
+                const renderCharts = () => {
+                    if (typeof Chart === 'undefined') return;
 
                     resetChart('revenue');
                     resetChart('orders');
                     resetChart('commercials');
+                    resetChart('clients');
                     resetChart('statuses');
 
+                    // ===== REVENUE (line, gradient) =====
+                    const revenueCanvas = document.getElementById('erpRevenueChart');
                     if (revenueCanvas) {
+                        const ctx = revenueCanvas.getContext('2d');
+                        const gradient = ctx.createLinearGradient(0, 0, 0, 320);
+                        gradient.addColorStop(0, 'rgba(0, 194, 168, 0.32)');
+                        gradient.addColorStop(1, 'rgba(0, 194, 168, 0)');
+
                         window.erpSageCharts.revenue = new Chart(revenueCanvas, {
                             type: 'line',
                             data: {
                                 labels: revenueData.labels,
                                 datasets: [{
-                                    label: 'CA',
+                                    label: 'Chiffre d\'affaires',
                                     data: revenueData.data,
-                                    borderColor: '#146C94',
-                                    backgroundColor: 'rgba(20,108,148,0.14)',
+                                    borderColor: palette.accent,
+                                    backgroundColor: gradient,
+                                    borderWidth: 2.5,
                                     fill: true,
                                     tension: 0.35,
-                                    pointRadius: 4,
-                                    pointHoverRadius: 6
+                                    pointRadius: 0,
+                                    pointHoverRadius: 6,
+                                    pointHoverBackgroundColor: palette.accent,
+                                    pointHoverBorderColor: '#fff',
+                                    pointHoverBorderWidth: 2
+                                }]
+                            },
+                            options: {
+                                responsive: true,
+                                maintainAspectRatio: false,
+                                interaction: { mode: 'index', intersect: false },
+                                plugins: {
+                                    legend: { display: false },
+                                    tooltip: {
+                                        callbacks: {
+                                            label: (ctx) => '  ' + fmtCurrency(ctx.parsed.y || 0)
+                                        }
+                                    }
+                                },
+                                scales: {
+                                    x: {
+                                        grid: { display: false },
+                                        border: { display: false }
+                                    },
+                                    y: {
+                                        beginAtZero: true,
+                                        grid: { color: 'rgba(26, 31, 60, 0.06)' },
+                                        border: { display: false },
+                                        ticks: {
+                                            callback: (v) => fmtCompact(v)
+                                        }
+                                    }
+                                }
+                            }
+                        });
+                    }
+
+                    // ===== ORDERS (bars) =====
+                    const orderCanvas = document.getElementById('erpOrdersChart');
+                    if (orderCanvas) {
+                        window.erpSageCharts.orders = new Chart(orderCanvas, {
+                            type: 'bar',
+                            data: {
+                                labels: orderData.labels,
+                                datasets: [{
+                                    label: 'Commandes',
+                                    data: orderData.data,
+                                    backgroundColor: palette.accent,
+                                    hoverBackgroundColor: palette.secondary,
+                                    borderRadius: 8,
+                                    borderSkipped: false,
+                                    barThickness: 'flex',
+                                    maxBarThickness: 32
                                 }]
                             },
                             options: {
@@ -698,43 +1588,25 @@
                                     legend: { display: false },
                                     tooltip: {
                                         callbacks: {
-                                            label: (context) => buildCurrency(context.parsed.y || 0)
+                                            label: (ctx) => '  ' + ctx.parsed.y + ' commandes'
                                         }
                                     }
                                 },
                                 scales: {
+                                    x: { grid: { display: false }, border: { display: false } },
                                     y: {
-                                        ticks: {
-                                            callback: (value) => buildCurrency(value)
-                                        }
+                                        beginAtZero: true,
+                                        grid: { color: 'rgba(26, 31, 60, 0.06)' },
+                                        border: { display: false },
+                                        ticks: { precision: 0 }
                                     }
                                 }
                             }
                         });
                     }
 
-                    if (orderCanvas) {
-                        window.erpSageCharts.orders = new Chart(orderCanvas, {
-                            type: 'bar',
-                            data: {
-                                labels: orderData.labels,
-                                datasets: [{
-                                    label: 'Commandes',
-                                    data: orderData.data,
-                                    backgroundColor: '#71C4EF',
-                                    borderRadius: 10
-                                }]
-                            },
-                            options: {
-                                responsive: true,
-                                maintainAspectRatio: false,
-                                plugins: {
-                                    legend: { display: false }
-                                }
-                            }
-                        });
-                    }
-
+                    // ===== COMMERCIALS (horizontal bars) =====
+                    const commercialCanvas = document.getElementById('erpCommercialChart');
                     if (commercialCanvas) {
                         window.erpSageCharts.commercials = new Chart(commercialCanvas, {
                             type: 'bar',
@@ -743,8 +1615,11 @@
                                 datasets: [{
                                     label: 'CA',
                                     data: commercialData.data,
-                                    backgroundColor: chartPalette,
-                                    borderRadius: 10
+                                    backgroundColor: palette.chart,
+                                    borderRadius: 6,
+                                    borderSkipped: false,
+                                    barThickness: 'flex',
+                                    maxBarThickness: 22
                                 }]
                             },
                             options: {
@@ -755,21 +1630,67 @@
                                     legend: { display: false },
                                     tooltip: {
                                         callbacks: {
-                                            label: (context) => buildCurrency(context.parsed.x || 0)
+                                            label: (ctx) => '  ' + fmtCurrency(ctx.parsed.x || 0)
                                         }
                                     }
                                 },
                                 scales: {
                                     x: {
-                                        ticks: {
-                                            callback: (value) => buildCurrency(value)
-                                        }
-                                    }
+                                        beginAtZero: true,
+                                        grid: { color: 'rgba(26, 31, 60, 0.06)' },
+                                        border: { display: false },
+                                        ticks: { callback: (v) => fmtCompact(v) }
+                                    },
+                                    y: { grid: { display: false }, border: { display: false } }
                                 }
                             }
                         });
                     }
 
+                    // ===== CLIENTS (horizontal bars) =====
+                    const clientCanvas = document.getElementById('erpClientChart');
+                    if (clientCanvas) {
+                        window.erpSageCharts.clients = new Chart(clientCanvas, {
+                            type: 'bar',
+                            data: {
+                                labels: clientData.labels,
+                                datasets: [{
+                                    label: 'CA',
+                                    data: clientData.data,
+                                    backgroundColor: palette.chart,
+                                    borderRadius: 6,
+                                    borderSkipped: false,
+                                    barThickness: 'flex',
+                                    maxBarThickness: 22
+                                }]
+                            },
+                            options: {
+                                indexAxis: 'y',
+                                responsive: true,
+                                maintainAspectRatio: false,
+                                plugins: {
+                                    legend: { display: false },
+                                    tooltip: {
+                                        callbacks: {
+                                            label: (ctx) => '  ' + fmtCurrency(ctx.parsed.x || 0)
+                                        }
+                                    }
+                                },
+                                scales: {
+                                    x: {
+                                        beginAtZero: true,
+                                        grid: { color: 'rgba(26, 31, 60, 0.06)' },
+                                        border: { display: false },
+                                        ticks: { callback: (v) => fmtCompact(v) }
+                                    },
+                                    y: { grid: { display: false }, border: { display: false } }
+                                }
+                            }
+                        });
+                    }
+
+                    // ===== STATUS (doughnut) =====
+                    const statusCanvas = document.getElementById('erpStatusChart');
                     if (statusCanvas) {
                         window.erpSageCharts.statuses = new Chart(statusCanvas, {
                             type: 'doughnut',
@@ -777,16 +1698,25 @@
                                 labels: statusData.labels,
                                 datasets: [{
                                     data: statusData.data,
-                                    backgroundColor: chartPalette,
-                                    borderWidth: 0
+                                    backgroundColor: palette.chart,
+                                    borderWidth: 3,
+                                    borderColor: '#fff',
+                                    hoverOffset: 8
                                 }]
                             },
                             options: {
                                 responsive: true,
                                 maintainAspectRatio: false,
+                                cutout: '65%',
                                 plugins: {
                                     legend: {
-                                        position: 'bottom'
+                                        position: 'bottom',
+                                        labels: {
+                                            padding: 14,
+                                            usePointStyle: true,
+                                            pointStyle: 'circle',
+                                            font: { size: 11, weight: '500' }
+                                        }
                                     }
                                 }
                             }
@@ -794,17 +1724,44 @@
                     }
                 };
 
+                // ===== Period chips → sync select + auto-submit =====
+                const setupPeriodChips = () => {
+                    const chips = document.querySelectorAll('.sage-period-chip');
+                    const periodSelect = document.getElementById('period');
+                    const form = document.getElementById('sageFiltersForm');
+
+                    chips.forEach(chip => {
+                        chip.addEventListener('click', () => {
+                            const value = chip.dataset.period;
+                            chips.forEach(c => {
+                                c.classList.remove('is-active');
+                                c.setAttribute('aria-selected', 'false');
+                            });
+                            chip.classList.add('is-active');
+                            chip.setAttribute('aria-selected', 'true');
+                            if (periodSelect) periodSelect.value = value;
+                            if (value !== 'custom' && form) form.submit();
+                        });
+                    });
+                };
+
                 document.addEventListener('turbo:before-cache', () => {
                     resetChart('revenue');
                     resetChart('orders');
                     resetChart('commercials');
+                    resetChart('clients');
                     resetChart('statuses');
                 }, { once: true });
 
-                if (document.readyState === 'loading') {
-                    document.addEventListener('DOMContentLoaded', renderCharts, { once: true });
-                } else {
+                const init = () => {
                     renderCharts();
+                    setupPeriodChips();
+                };
+
+                if (document.readyState === 'loading') {
+                    document.addEventListener('DOMContentLoaded', init, { once: true });
+                } else {
+                    init();
                 }
             })();
         </script>
