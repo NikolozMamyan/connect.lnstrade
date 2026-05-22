@@ -23,7 +23,7 @@ class ClientFluxOrchestrator
 
     public function run(): array
     {
-        // $syncResult = $this->hubspotCompanySyncService->syncCompanies();
+        $syncResult = $this->hubspotCompanySyncService->syncCompanies();
         $erpResult = $this->erpCompanyExportService->sendCompaniesToErp();
 
         return [
