@@ -22,6 +22,7 @@ class OrderFormSpreadsheetParserTest extends TestCase
         self::assertCount(2, $result['lineItems']);
         self::assertSame('AR-100', $result['lineItems'][0]['articleRef']);
         self::assertSame(12.0, $result['lineItems'][0]['quantity']);
+        self::assertSame(9.99, $result['lineItems'][1]['unitPrice']);
     }
 
     public function testParseFailsWhenRequiredHeaderIsMissing(): void
@@ -36,6 +37,26 @@ class OrderFormSpreadsheetParserTest extends TestCase
 
         self::assertFalse($result['success']);
         self::assertNotEmpty($result['errors']);
+    }
+
+    public function testParseIgnoresRowsWithoutQuantityOrUnitPrice(): void
+    {
+        $filePath = $this->createXlsxFile([
+            ['Art. ref', 'Description', 'EAN Unit', 'Units par / carton', 'Unit price'],
+            ['AR-100', 'Produit A', '1234567890123', '12', '3.50'],
+            ['AR-200', 'Produit B', '1234567890124', '', '9.99'],
+            ['AR-300', 'Produit C', '1234567890125', '4', ''],
+            ['AR-400', 'Produit D', '1234567890126', '0', '8.00'],
+            ['AR-500', 'Produit E', '1234567890127', '2', '0'],
+        ]);
+
+        $parser = new OrderFormSpreadsheetParser();
+        $result = $parser->parse($filePath);
+
+        self::assertTrue($result['success']);
+        self::assertCount(1, $result['lineItems']);
+        self::assertSame([], $result['failedRows']);
+        self::assertSame('AR-100', $result['lineItems'][0]['articleRef']);
     }
 
     /**

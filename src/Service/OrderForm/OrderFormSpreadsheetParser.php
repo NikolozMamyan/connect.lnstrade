@@ -91,6 +91,10 @@ class OrderFormSpreadsheetParser
 
             $mappedRow = $this->mapLineItemRow($rowValues, $resolvedHeaders, $rowNumber);
 
+            if (($mappedRow['ignored'] ?? false) === true) {
+                continue;
+            }
+
             if (isset($mappedRow['errors'])) {
                 $failedRows[] = $mappedRow;
                 continue;
@@ -340,17 +344,30 @@ class OrderFormSpreadsheetParser
         $quantityValue = trim((string) ($rowValues[$resolvedHeaders['quantity']] ?? ''));
         $unitPriceValue = trim((string) ($rowValues[$resolvedHeaders['unitPrice']] ?? ''));
 
+        if (
+            $quantityValue === ''
+            || $unitPriceValue === ''
+            || ($this->isNumericString($quantityValue) && $this->toFloat($quantityValue) <= 0.0)
+            || ($this->isNumericString($unitPriceValue) && $this->toFloat($unitPriceValue) <= 0.0)
+        ) {
+            return [
+                'rowNumber' => $rowNumber,
+                'values' => $rowValues,
+                'ignored' => true,
+            ];
+        }
+
         $errors = [];
 
         if ($articleRef === '') {
             $errors[] = 'Art. ref manquant.';
         }
 
-        if ($quantityValue === '' || !$this->isNumericString($quantityValue)) {
+        if (!$this->isNumericString($quantityValue)) {
             $errors[] = 'Units par / carton invalide.';
         }
 
-        if ($unitPriceValue === '' || !$this->isNumericString($unitPriceValue)) {
+        if (!$this->isNumericString($unitPriceValue)) {
             $errors[] = 'Unit price invalide.';
         }
 
