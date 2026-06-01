@@ -347,7 +347,7 @@ class OrderFormSpreadsheetParser
         if (
             $quantityValue === ''
             || $unitPriceValue === ''
-            || ($this->isNumericString($quantityValue) && $this->toFloat($quantityValue) <= 0.0)
+            || ($this->isNumericString($quantityValue) && $this->toFloat($quantityValue) === 0.0)
             || ($this->isNumericString($unitPriceValue) && $this->toFloat($unitPriceValue) <= 0.0)
         ) {
             return [
@@ -365,6 +365,8 @@ class OrderFormSpreadsheetParser
 
         if (!$this->isNumericString($quantityValue)) {
             $errors[] = 'Units par / carton invalide.';
+        } elseif ($this->toFloat($quantityValue) < 0.0) {
+            $errors[] = 'Units par / carton doit etre positif.';
         }
 
         if (!$this->isNumericString($unitPriceValue)) {

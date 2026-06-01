@@ -59,6 +59,24 @@ class OrderFormSpreadsheetParserTest extends TestCase
         self::assertSame('AR-100', $result['lineItems'][0]['articleRef']);
     }
 
+    public function testParseIgnoresZeroQuantityButRejectsNegativeQuantity(): void
+    {
+        $filePath = $this->createXlsxFile([
+            ['Art. ref', 'Description', 'EAN Unit', 'Units par / carton', 'Unit price'],
+            ['AR-100', 'Produit A', '1234567890123', '12', '3.50'],
+            ['AR-200', 'Produit B', '1234567890124', '0', '9.99'],
+            ['AR-300', 'Produit C', '1234567890125', '-4', '8.00'],
+        ]);
+
+        $parser = new OrderFormSpreadsheetParser();
+        $result = $parser->parse($filePath);
+
+        self::assertFalse($result['success']);
+        self::assertCount(1, $result['failedRows']);
+        self::assertSame(4, $result['failedRows'][0]['rowNumber']);
+        self::assertSame(['Units par / carton doit etre positif.'], $result['failedRows'][0]['errors']);
+    }
+
     /**
      * @param array<int, array<int, string>> $rows
      */
