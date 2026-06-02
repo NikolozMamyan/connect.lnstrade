@@ -4,7 +4,6 @@ namespace App\Service\HubSpot;
 
 use App\Entity\Commercial;
 use App\Entity\OrderForm;
-use App\Repository\ErpProductRepository;
 use Symfony\Component\DependencyInjection\Attribute\Autowire;
 
 class HubspotOrderFormDealSyncService
@@ -16,7 +15,6 @@ class HubspotOrderFormDealSyncService
 
     public function __construct(
         private readonly HubSpotClient $hubSpotClient,
-        private readonly ErpProductRepository $erpProductRepository,
         #[Autowire('%hubspot_order_form_pipeline_label%')]
         private readonly string $configuredPipelineLabel,
         #[Autowire('%hubspot_order_form_pipeline_value%')]
@@ -74,7 +72,7 @@ class HubspotOrderFormDealSyncService
             $taxRateGroupId = null;
 
             if ($applyTaxRate) {
-                $taxRateResolution = $this->resolveTaxRateGroupIdForReference($reference);
+                $taxRateResolution = $this->resolveTaxRateGroupIdForProduct($product, $reference);
 
                 if (($taxRateResolution['success'] ?? false) !== true) {
                     return [
@@ -425,13 +423,18 @@ class HubspotOrderFormDealSyncService
     /**
      * @return array{success: bool, taxRateGroupId?: string, errors?: array<int, array<string, mixed>>}
      */
-    private function resolveTaxRateGroupIdForReference(string $reference): array
+    private function resolveTaxRateGroupIdForProduct(array $product, string $reference): array
     {
-        $vatRate = $this->resolveVatRateFromLocalProduct($reference);
+        $vatRate = $this->resolveVatRateFromHubspotProduct($product);
 
         if ($vatRate === null) {
             return [
-                'success' => true,
+                'success' => false,
+                'errors' => [$this->error(
+                    'taxRate',
+                    sprintf('Le champ vat du produit HubSpot %s est vide ou inexploitable.', $reference),
+                    ['reference' => $reference]
+                )],
             ];
         }
 
@@ -471,29 +474,31 @@ class HubspotOrderFormDealSyncService
         return $normalizedCountry === 'france' || $normalizedCountry === 'fr';
     }
 
-    private function resolveVatRateFromLocalProduct(string $reference): ?string
+    /**
+     * @param array<string, mixed> $product
+     */
+    private function resolveVatRateFromHubspotProduct(array $product): ?string
     {
-        $product = $this->erpProductRepository->findOneByReference($reference);
+        $properties = isset($product['properties']) && is_array($product['properties']) ? $product['properties'] : [];
+        $vat = trim((string) (($properties['vat'] ?? null) ?: ''));
 
-        if ($product === null) {
+        if ($vat === '') {
             return null;
         }
 
-        $codeFiscal = trim((string) $product->getCodeFiscal());
+        $normalizedVat = str_replace(',', '.', $vat);
 
-        if ($codeFiscal === '') {
+        if (preg_match('/\d+(?:\.\d+)?/', $normalizedVat, $matches) !== 1) {
             return null;
         }
 
-        if (preg_match('/(?:^|[^0-9])5[.,]5(?:[^0-9]|$)/', $codeFiscal) === 1) {
-            return '5.5';
-        }
+        $rate = (float) $matches[0];
 
-        if (preg_match('/(?:^|[^0-9])20(?:[.,]0+)?(?:[^0-9]|$)/', $codeFiscal) === 1) {
-            return '20';
-        }
-
-        return null;
+        return match (true) {
+            abs($rate - 5.5) < 0.0001 => '5.5',
+            abs($rate - 20.0) < 0.0001 => '20',
+            default => null,
+        };
     }
 
     /**
@@ -599,7 +604,7 @@ class HubspotOrderFormDealSyncService
     {
         $response = $this->hubSpotClient->searchObjects('products', [
             'limit' => 1,
-            'properties' => ['name', 'hs_sku'],
+            'properties' => ['name', 'hs_sku', 'vat'],
             'filterGroups' => [
                 [
                     'filters' => [

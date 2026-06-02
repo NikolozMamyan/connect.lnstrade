@@ -3,9 +3,7 @@
 namespace App\Tests\Service\HubSpot;
 
 use App\Entity\Commercial;
-use App\Entity\ErpProduct;
 use App\Entity\OrderForm;
-use App\Repository\ErpProductRepository;
 use App\Service\HubSpot\HubSpotClient;
 use App\Service\HubSpot\HubspotOrderFormDealSyncService;
 use PHPUnit\Framework\TestCase;
@@ -17,18 +15,7 @@ class HubspotOrderFormDealSyncServiceTest extends TestCase
         $createdLineItems = [];
         $hubSpotClient = $this->createHubSpotClientForNewDeal('France', $createdLineItems);
 
-        $products = [
-            'AR-55' => $this->createProduct('AR-55', 'TVA 5,5'),
-            'AR-20' => $this->createProduct('AR-20', 'TVA 20'),
-        ];
-
-        $erpProductRepository = $this->createMock(ErpProductRepository::class);
-        $erpProductRepository
-            ->expects($this->exactly(2))
-            ->method('findOneByReference')
-            ->willReturnCallback(static fn (string $reference): ?ErpProduct => $products[$reference] ?? null);
-
-        $service = $this->createService($hubSpotClient, $erpProductRepository);
+        $service = $this->createService($hubSpotClient);
         $result = $service->sync($this->createNewDealOrderForm(), [
             [
                 'articleRef' => 'AR-55',
@@ -53,12 +40,7 @@ class HubspotOrderFormDealSyncServiceTest extends TestCase
         $createdLineItems = [];
         $hubSpotClient = $this->createHubSpotClientForNewDeal('Germany', $createdLineItems);
 
-        $erpProductRepository = $this->createMock(ErpProductRepository::class);
-        $erpProductRepository
-            ->expects($this->never())
-            ->method('findOneByReference');
-
-        $service = $this->createService($hubSpotClient, $erpProductRepository);
+        $service = $this->createService($hubSpotClient);
         $result = $service->sync($this->createNewDealOrderForm(), [
             [
                 'articleRef' => 'AR-20',
@@ -127,6 +109,7 @@ class HubspotOrderFormDealSyncServiceTest extends TestCase
             ->method('searchObjects')
             ->willReturnCallback(static function (string $objectType, array $payload): array {
                 self::assertSame('products', $objectType);
+                self::assertContains('vat', $payload['properties'] ?? []);
 
                 $reference = (string) ($payload['filterGroups'][0]['filters'][0]['value'] ?? '');
 
@@ -141,6 +124,11 @@ class HubspotOrderFormDealSyncServiceTest extends TestCase
                             'properties' => [
                                 'name' => $reference,
                                 'hs_sku' => $reference,
+                                'vat' => match ($reference) {
+                                    'AR-55' => '5.5',
+                                    'AR-20' => '20',
+                                    default => '',
+                                },
                             ],
                         ],
                     ],
@@ -167,11 +155,10 @@ class HubspotOrderFormDealSyncServiceTest extends TestCase
         return $hubSpotClient;
     }
 
-    private function createService(HubSpotClient $hubSpotClient, ErpProductRepository $erpProductRepository): HubspotOrderFormDealSyncService
+    private function createService(HubSpotClient $hubSpotClient): HubspotOrderFormDealSyncService
     {
         return new HubspotOrderFormDealSyncService(
             $hubSpotClient,
-            $erpProductRepository,
             'Pipeline sales',
             'default',
             'Sending the offer',
@@ -194,12 +181,5 @@ class HubspotOrderFormDealSyncServiceTest extends TestCase
             ->setDealType(OrderForm::DEAL_TYPE_NOUVEAU)
             ->setCommercial($commercial)
             ->setEnterpriseId('123456');
-    }
-
-    private function createProduct(string $reference, string $codeFiscal): ErpProduct
-    {
-        return (new ErpProduct())
-            ->setReference($reference)
-            ->setCodeFiscal($codeFiscal);
     }
 }
