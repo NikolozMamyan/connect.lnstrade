@@ -32,7 +32,8 @@ class HubspotOrderFormDealSyncService
      * @return array{
      *   success: bool,
      *   hubspotDealId: ?string,
-     *   errors: array<int, array<string, mixed>>
+     *   errors: array<int, array<string, mixed>>,
+     *   warnings: array<int, array<string, mixed>>
      * }
      */
     public function sync(OrderForm $orderForm, array $lineItems): array
@@ -44,6 +45,7 @@ class HubspotOrderFormDealSyncService
                 'success' => false,
                 'hubspotDealId' => null,
                 'errors' => $validation['errors'] ?? [],
+                'warnings' => [],
             ];
         }
 
@@ -56,6 +58,7 @@ class HubspotOrderFormDealSyncService
         $productsByReference = $validation['productsByReference'];
         $hubspotDealId = $validation['hubspotDealId'];
         $applyTaxRate = $this->shouldApplyTaxRate($companyCountry);
+        $warnings = [];
 
         if ($orderForm->getDealType() === OrderForm::DEAL_TYPE_NOUVEAU) {
             $hubspotDealId = $this->createNewDeal($orderForm, $commercial, $hubspotOwnerId, $companyName);
@@ -79,9 +82,11 @@ class HubspotOrderFormDealSyncService
                         'success' => false,
                         'hubspotDealId' => null,
                         'errors' => $taxRateResolution['errors'] ?? [],
+                        'warnings' => $warnings,
                     ];
                 }
 
+                $warnings = array_merge($warnings, $taxRateResolution['warnings'] ?? []);
                 $resolvedTaxRateGroupId = $taxRateResolution['taxRateGroupId'] ?? null;
                 $taxRateGroupId = is_string($resolvedTaxRateGroupId) ? $resolvedTaxRateGroupId : null;
             }
@@ -98,6 +103,7 @@ class HubspotOrderFormDealSyncService
             'success' => true,
             'hubspotDealId' => $hubspotDealId,
             'errors' => [],
+            'warnings' => $warnings,
         ];
     }
 
@@ -375,6 +381,19 @@ class HubspotOrderFormDealSyncService
         ], $context);
     }
 
+    /**
+     * @param array<string, mixed> $context
+     *
+     * @return array<string, mixed>
+     */
+    private function warning(string $field, string $message, array $context = []): array
+    {
+        return array_merge([
+            'field' => $field,
+            'message' => $message,
+        ], $context);
+    }
+
     private function looksLikeHubspotId(?string $value): bool
     {
         return $value !== null && preg_match('/^\d+$/', trim($value)) === 1;
@@ -421,7 +440,7 @@ class HubspotOrderFormDealSyncService
     }
 
     /**
-     * @return array{success: bool, taxRateGroupId?: string, errors?: array<int, array<string, mixed>>}
+     * @return array{success: bool, taxRateGroupId?: string, errors?: array<int, array<string, mixed>>, warnings?: array<int, array<string, mixed>>}
      */
     private function resolveTaxRateGroupIdForProduct(array $product, string $reference): array
     {
@@ -429,11 +448,13 @@ class HubspotOrderFormDealSyncService
 
         if ($vatRate === null) {
             return [
-                'success' => false,
-                'errors' => [$this->error(
+                'success' => true,
+                'warnings' => [$this->warning(
                     'taxRate',
-                    sprintf('Le champ vat du produit HubSpot %s est vide ou inexploitable.', $reference),
-                    ['reference' => $reference]
+                    sprintf('Aucune TVA exploitable n est renseignee sur le produit HubSpot %s. Le line item sera envoye sans TVA.', $reference),
+                    [
+                        'reference' => $reference,
+                    ]
                 )],
             ];
         }
@@ -486,13 +507,20 @@ class HubspotOrderFormDealSyncService
             return null;
         }
 
-        $normalizedVat = str_replace(',', '.', $vat);
+        $normalizedVat = html_entity_decode($vat, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        $normalizedVat = str_replace(["\xc2\xa0", ',', '_'], [' ', '.', '.'], $normalizedVat);
+        $normalizedVat = preg_replace('/(?<=\d)\s+(?=\d)/', '.', $normalizedVat) ?? $normalizedVat;
+        $normalizedVat = preg_replace('/\.+/', '.', $normalizedVat) ?? $normalizedVat;
 
         if (preg_match('/\d+(?:\.\d+)?/', $normalizedVat, $matches) !== 1) {
             return null;
         }
 
         $rate = (float) $matches[0];
+
+        if ($rate > 0.0 && $rate < 1.0) {
+            $rate *= 100.0;
+        }
 
         return match (true) {
             abs($rate - 5.5) < 0.0001 => '5.5',

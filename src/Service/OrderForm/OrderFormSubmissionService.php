@@ -34,7 +34,8 @@ class OrderFormSubmissionService
      *   success: bool,
      *   orderForm: OrderForm,
      *   deal: ?Deal,
-     *   errors: array<int, array<string, mixed>>
+     *   errors: array<int, array<string, mixed>>,
+     *   warnings: array<int, array<string, mixed>>
      * }
      */
     public function submit(OrderForm $orderForm, UploadedFile $uploadedFile): array
@@ -80,6 +81,7 @@ class OrderFormSubmissionService
                 'orderForm' => $orderForm,
                 'deal' => null,
                 'errors' => $this->normalizeErrors($parseResult),
+                'warnings' => [],
             ];
         }
 
@@ -101,6 +103,7 @@ class OrderFormSubmissionService
                 'orderForm' => $orderForm,
                 'deal' => null,
                 'errors' => $hubspotErrors,
+                'warnings' => [],
             ];
         }
 
@@ -115,6 +118,7 @@ class OrderFormSubmissionService
                 'orderForm' => $orderForm,
                 'deal' => null,
                 'errors' => $hubspotErrors,
+                'warnings' => $hubspotResult['warnings'] ?? [],
             ];
         }
 
@@ -141,6 +145,7 @@ class OrderFormSubmissionService
             'orderForm' => $orderForm,
             'deal' => $deal,
             'errors' => [],
+            'warnings' => $hubspotResult['warnings'] ?? [],
         ];
     }
 

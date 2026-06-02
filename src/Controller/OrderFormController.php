@@ -66,6 +66,7 @@ class OrderFormController extends AbstractController
             return new JsonResponse([
                 'success' => false,
                 'errors' => $submissionResult['errors'] ?? [],
+                'warnings' => $submissionResult['warnings'] ?? [],
                 'reference' => $orderForm->getReferenceNumber(),
             ], Response::HTTP_UNPROCESSABLE_ENTITY);
         }
@@ -75,6 +76,7 @@ class OrderFormController extends AbstractController
         return new JsonResponse([
             'success' => true,
             'reference' => $orderForm->getReferenceNumber(),
+            'warnings' => $submissionResult['warnings'] ?? [],
         ]);
     }
 

@@ -54,6 +54,27 @@ class HubspotOrderFormDealSyncServiceTest extends TestCase
         self::assertArrayNotHasKey('hs_tax_rate_group_id', $createdLineItems[0]);
     }
 
+    public function testSyncWarnsButDoesNotBlockWhenFrenchProductHasNoVat(): void
+    {
+        $createdLineItems = [];
+        $hubSpotClient = $this->createHubSpotClientForNewDeal('France', $createdLineItems);
+
+        $service = $this->createService($hubSpotClient);
+        $result = $service->sync($this->createNewDealOrderForm(), [
+            [
+                'articleRef' => 'AR-NOVAT',
+                'quantity' => 1.0,
+                'unitPrice' => 20.0,
+            ],
+        ]);
+
+        self::assertTrue($result['success']);
+        self::assertCount(1, $createdLineItems);
+        self::assertArrayNotHasKey('hs_tax_rate_group_id', $createdLineItems[0]);
+        self::assertSame('taxRate', $result['warnings'][0]['field']);
+        self::assertSame('AR-NOVAT', $result['warnings'][0]['reference']);
+    }
+
     /**
      * @param array<int, array<string, mixed>> $createdLineItems
      */
@@ -125,8 +146,8 @@ class HubspotOrderFormDealSyncServiceTest extends TestCase
                                 'name' => $reference,
                                 'hs_sku' => $reference,
                                 'vat' => match ($reference) {
-                                    'AR-55' => '5.5',
-                                    'AR-20' => '20',
+                                    'AR-55' => '0.055',
+                                    'AR-20' => '0.2',
                                     default => '',
                                 },
                             ],

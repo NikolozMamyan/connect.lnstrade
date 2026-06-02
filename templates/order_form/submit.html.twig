@@ -525,6 +525,9 @@
                     buildSuccess(data.reference);
                     goTo(4, 'panel-4');
                     flash(`Order form ${data.reference} soumis avec succès.`, 'success');
+                    (Array.isArray(data.warnings) ? data.warnings : []).forEach((warning) => {
+                        flash(warning.message || 'Order form soumis avec un avertissement.', 'warning');
+                    });
                     launchConfetti();
                 } catch (error) {
                     flash('Une erreur réseau est survenue pendant l’envoi.', 'error');
