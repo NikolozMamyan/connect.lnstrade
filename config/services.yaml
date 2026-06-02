@@ -5,8 +5,6 @@ parameters:
     hubspot_order_form_pipeline_label: 'Pipeline sales'
     hubspot_order_form_pipeline_value: 'default'
     hubspot_order_form_stage_label: 'Sending the offer'
-    hubspot_order_form_tax_rate_id: '115152086'
-    hubspot_order_form_tax_rate_percentage: 20.0
     hubspot_order_form_tax_rate_group_ids:
         '5.5': '115152085'
         '20': '115152086'

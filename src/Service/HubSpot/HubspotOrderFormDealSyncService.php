@@ -12,6 +12,7 @@ class HubspotOrderFormDealSyncService
     private const DEAL_OBJECT_TYPE = 'deals';
     private const DEAL_TO_COMPANY_PRIMARY_ASSOCIATION_TYPE_ID = 5;
     private const LINE_ITEM_TO_DEAL_ASSOCIATION_TYPE_ID = 20;
+    private const COMPANY_PROPERTIES = ['name', 'id_erp', 'company_country_en'];
 
     public function __construct(
         private readonly HubSpotClient $hubSpotClient,
@@ -22,10 +23,6 @@ class HubspotOrderFormDealSyncService
         private readonly string $configuredPipelineValue,
         #[Autowire('%hubspot_order_form_stage_label%')]
         private readonly string $configuredStageLabel,
-        #[Autowire('%hubspot_order_form_tax_rate_id%')]
-        private readonly string $configuredTaxRateId,
-        #[Autowire('%hubspot_order_form_tax_rate_percentage%')]
-        private readonly float $configuredTaxRatePercentage,
         #[Autowire('%hubspot_order_form_tax_rate_group_ids%')]
         private readonly array $taxRateGroupIds,
     ) {
@@ -56,9 +53,12 @@ class HubspotOrderFormDealSyncService
         $commercial = $validation['commercial'];
         $hubspotOwnerId = (string) ($validation['hubspotOwnerId'] ?? '');
         $companyName = (string) ($validation['companyName'] ?? '');
+        $companyCountry = (string) ($validation['companyCountry'] ?? '');
         /** @var array<string, array<string, mixed>> $productsByReference */
         $productsByReference = $validation['productsByReference'];
         $hubspotDealId = $validation['hubspotDealId'];
+        $applyTaxRate = $this->shouldApplyTaxRate($companyCountry);
+
         if ($orderForm->getDealType() === OrderForm::DEAL_TYPE_NOUVEAU) {
             $hubspotDealId = $this->createNewDeal($orderForm, $commercial, $hubspotOwnerId, $companyName);
         }
@@ -71,21 +71,28 @@ class HubspotOrderFormDealSyncService
                 throw new \RuntimeException(sprintf('Produit %s introuvable dans le contexte de synchronisation.', $reference));
             }
 
-            $taxRateResolution = $this->resolveTaxRateGroupIdForReference($reference);
+            $taxRateGroupId = null;
 
-            if (($taxRateResolution['success'] ?? false) !== true) {
-                return [
-                    'success' => false,
-                    'hubspotDealId' => null,
-                    'errors' => $taxRateResolution['errors'] ?? [],
-                ];
+            if ($applyTaxRate) {
+                $taxRateResolution = $this->resolveTaxRateGroupIdForReference($reference);
+
+                if (($taxRateResolution['success'] ?? false) !== true) {
+                    return [
+                        'success' => false,
+                        'hubspotDealId' => null,
+                        'errors' => $taxRateResolution['errors'] ?? [],
+                    ];
+                }
+
+                $resolvedTaxRateGroupId = $taxRateResolution['taxRateGroupId'] ?? null;
+                $taxRateGroupId = is_string($resolvedTaxRateGroupId) ? $resolvedTaxRateGroupId : null;
             }
 
             $this->createLineItem(
                 $hubspotDealId,
                 $product,
                 $lineItem,
-                (string) ($taxRateResolution['taxRateGroupId'] ?? '')
+                $taxRateGroupId
             );
         }
 
@@ -107,6 +114,7 @@ class HubspotOrderFormDealSyncService
         $commercial = $orderForm->getCommercial();
         $hubspotOwnerId = null;
         $companyName = null;
+        $companyCountry = null;
 
         if (!$commercial instanceof Commercial) {
             $errors[] = $this->error('commercial', 'Aucun commercial valide n est associe a la soumission.');
@@ -131,8 +139,9 @@ class HubspotOrderFormDealSyncService
                 $errors[] = $this->error('enterpriseId', 'L identifiant entreprise HubSpot est invalide.');
             } else {
                 try {
-                    $company = $this->hubSpotClient->getObject('companies', $enterpriseId, ['properties' => ['name', 'id_erp']]);
+                    $company = $this->hubSpotClient->getObject('companies', $enterpriseId, ['properties' => self::COMPANY_PROPERTIES]);
                     $companyName = trim((string) (($company['properties']['name'] ?? null) ?: ''));
+                    $companyCountry = $this->extractCompanyCountry($company);
                     $companyErpId = trim((string) (($company['properties']['id_erp'] ?? null) ?: ''));
 
                     if ($companyErpId === '') {
@@ -180,7 +189,8 @@ class HubspotOrderFormDealSyncService
                                 'Le deal HubSpot n est associe a aucune entreprise exploitable. La soumission du formulaire est refusee.'
                             );
                         } else {
-                            $company = $this->hubSpotClient->getObject('companies', $companyId, ['properties' => ['id_erp']]);
+                            $company = $this->hubSpotClient->getObject('companies', $companyId, ['properties' => self::COMPANY_PROPERTIES]);
+                            $companyCountry = $this->extractCompanyCountry($company);
                             $companyErpId = trim((string) (($company['properties']['id_erp'] ?? null) ?: ''));
 
                             if ($companyErpId === '') {
@@ -244,6 +254,7 @@ class HubspotOrderFormDealSyncService
             'commercial' => $commercial,
             'hubspotOwnerId' => $hubspotOwnerId,
             'companyName' => $companyName,
+            'companyCountry' => $companyCountry,
             'hubspotDealId' => $hubspotDealId,
             'productsByReference' => $productsByReference,
         ];
@@ -290,7 +301,7 @@ class HubspotOrderFormDealSyncService
      * @param array<string, mixed> $product
      * @param array<string, mixed> $lineItem
      */
-    private function createLineItem(string $hubspotDealId, array $product, array $lineItem, string $taxRateGroupId): void
+    private function createLineItem(string $hubspotDealId, array $product, array $lineItem, ?string $taxRateGroupId): void
     {
         $productId = (string) ($product['id'] ?? '');
         $productProperties = isset($product['properties']) && is_array($product['properties']) ? $product['properties'] : [];
@@ -306,8 +317,11 @@ class HubspotOrderFormDealSyncService
             'name' => $productName !== '' ? $productName : (string) ($lineItem['articleRef'] ?? 'Line item'),
             'quantity' => (float) ($lineItem['quantity'] ?? 0),
             'price' => (float) ($lineItem['unitPrice'] ?? 0),
-            'hs_tax_rate_group_id' => $taxRateGroupId,
         ];
+
+        if ($taxRateGroupId !== null && trim($taxRateGroupId) !== '') {
+            $properties['hs_tax_rate_group_id'] = $taxRateGroupId;
+        }
 
         if (!empty($lineItem['description'])) {
             $properties['description'] = (string) $lineItem['description'];
@@ -415,92 +429,46 @@ class HubspotOrderFormDealSyncService
     {
         $vatRate = $this->resolveVatRateFromLocalProduct($reference);
 
-        if ($vatRate !== null) {
-            $mappedTaxRateId = $this->taxRateGroupIds[$vatRate] ?? null;
-
-            if (is_string($mappedTaxRateId) && $this->looksLikeHubspotId($mappedTaxRateId)) {
-                return [
-                    'success' => true,
-                    'taxRateGroupId' => $mappedTaxRateId,
-                ];
-            }
-
+        if ($vatRate === null) {
             return [
-                'success' => false,
-                'errors' => [$this->error(
-                    'taxRate',
-                    sprintf('Aucun hs_tax_rate_group_id n est configure pour la TVA %s sur la reference %s.', $vatRate, $reference)
-                )],
+                'success' => true,
             ];
         }
 
-        return $this->resolveDefaultTaxRateGroupId();
-    }
+        $mappedTaxRateId = $this->taxRateGroupIds[$vatRate] ?? null;
 
-    /**
-     * @return array{success: bool, taxRateGroupId?: string, errors?: array<int, array<string, mixed>>}
-     */
-    private function resolveDefaultTaxRateGroupId(): array
-    {
-        $configuredTaxRateId = trim($this->configuredTaxRateId);
-
-        if ($this->looksLikeHubspotId($configuredTaxRateId)) {
-            try {
-                $taxRate = $this->hubSpotClient->get(sprintf('/tax-rates/v1/tax-rates/%s', $configuredTaxRateId));
-
-                if (($taxRate['active'] ?? false) !== true) {
-                    return [
-                        'success' => false,
-                        'errors' => [$this->error('taxRate', sprintf('Le tax rate HubSpot %s est inactif.', $configuredTaxRateId))],
-                    ];
-                }
-
-                return [
-                    'success' => true,
-                    'taxRateGroupId' => $configuredTaxRateId,
-                ];
-            } catch (\Throwable $exception) {
-                return [
-                    'success' => false,
-                    'errors' => [$this->error(
-                        'taxRate',
-                        sprintf('Le tax rate HubSpot %s est introuvable ou inaccessible.', $configuredTaxRateId),
-                        ['details' => $exception->getMessage()]
-                    )],
-                ];
-            }
-        }
-
-        try {
-            $response = $this->hubSpotClient->get('/tax-rates/v1/tax-rates');
-        } catch (\Throwable $exception) {
+        if (is_string($mappedTaxRateId) && $this->looksLikeHubspotId($mappedTaxRateId)) {
             return [
-                'success' => false,
-                'errors' => [$this->error(
-                    'taxRate',
-                    'La recuperation des tax rates HubSpot a echoue.',
-                    ['details' => $exception->getMessage()]
-                )],
-            ];
-        }
-
-        $taxRates = $this->normalizeTaxRatesResponse($response);
-        $matchingTaxRate = $this->findMatchingTaxRate($taxRates, $this->configuredTaxRatePercentage);
-
-        if ($matchingTaxRate === null) {
-            return [
-                'success' => false,
-                'errors' => [$this->error(
-                    'taxRate',
-                    sprintf('Aucun tax rate HubSpot actif ne correspond a %.2f%%.', $this->configuredTaxRatePercentage)
-                )],
+                'success' => true,
+                'taxRateGroupId' => $mappedTaxRateId,
             ];
         }
 
         return [
-            'success' => true,
-            'taxRateGroupId' => (string) $matchingTaxRate['id'],
+            'success' => false,
+            'errors' => [$this->error(
+                'taxRate',
+                sprintf('Aucun hs_tax_rate_group_id n est configure pour la TVA %s sur la reference %s.', $vatRate, $reference)
+            )],
         ];
+    }
+
+    /**
+     * @param array<string, mixed> $company
+     */
+    private function extractCompanyCountry(array $company): ?string
+    {
+        $properties = isset($company['properties']) && is_array($company['properties']) ? $company['properties'] : [];
+        $country = trim((string) (($properties['company_country_en'] ?? null) ?: ''));
+
+        return $country !== '' ? $country : null;
+    }
+
+    private function shouldApplyTaxRate(?string $companyCountry): bool
+    {
+        $normalizedCountry = preg_replace('/[^a-z]/', '', mb_strtolower(trim((string) $companyCountry))) ?? '';
+
+        return $normalizedCountry === 'france' || $normalizedCountry === 'fr';
     }
 
     private function resolveVatRateFromLocalProduct(string $reference): ?string
@@ -648,51 +616,5 @@ class HubspotOrderFormDealSyncService
         $result = $response['results'][0] ?? null;
 
         return is_array($result) ? $result : null;
-    }
-
-    /**
-     * @param mixed $response
-     *
-     * @return array<int, array<string, mixed>>
-     */
-    private function normalizeTaxRatesResponse(mixed $response): array
-    {
-        if (!is_array($response)) {
-            return [];
-        }
-
-        if (array_is_list($response)) {
-            return array_values(array_filter($response, 'is_array'));
-        }
-
-        if (isset($response['results']) && is_array($response['results'])) {
-            return array_values(array_filter($response['results'], 'is_array'));
-        }
-
-        return [];
-    }
-
-    /**
-     * @param array<int, array<string, mixed>> $taxRates
-     *
-     * @return array<string, mixed>|null
-     */
-    private function findMatchingTaxRate(array $taxRates, float $percentage): ?array
-    {
-        foreach ($taxRates as $taxRate) {
-            $rate = isset($taxRate['percentageRate']) ? (float) $taxRate['percentageRate'] : null;
-            $isActive = ($taxRate['active'] ?? false) === true;
-            $taxRateId = isset($taxRate['id']) ? trim((string) $taxRate['id']) : '';
-
-            if ($rate === null || !$isActive || !$this->looksLikeHubspotId($taxRateId)) {
-                continue;
-            }
-
-            if (abs($rate - $percentage) < 0.0001) {
-                return $taxRate;
-            }
-        }
-
-        return null;
     }
 }
