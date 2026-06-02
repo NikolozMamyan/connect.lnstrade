@@ -27,6 +27,7 @@ class HubspotOrderFormDealSyncServiceTest extends TestCase
                 'articleRef' => 'AR-20',
                 'quantity' => 1.0,
                 'unitPrice' => 20.0,
+                'eanUnit' => '3760000000000',
             ],
         ]);
 
@@ -35,6 +36,7 @@ class HubspotOrderFormDealSyncServiceTest extends TestCase
         self::assertCount(2, $createdLineItems);
         self::assertSame('115152085', $createdLineItems[0]['hs_tax_rate_group_id']);
         self::assertSame('115152086', $createdLineItems[1]['hs_tax_rate_group_id']);
+        self::assertSame('AR-20', $createdLineItems[1]['hs_sku']);
     }
 
     public function testSyncDoesNotSendVatForNonFrenchCompany(): void

@@ -385,9 +385,7 @@ class HubspotOrderFormDealSyncService
             $properties['description'] = (string) $lineItem['description'];
         }
 
-        if (!empty($lineItem['eanUnit'])) {
-            $properties['hs_sku'] = (string) $lineItem['eanUnit'];
-        } elseif ($productSku !== '') {
+        if ($productSku !== '') {
             $properties['hs_sku'] = $productSku;
         } elseif (!empty($lineItem['articleRef'])) {
             $properties['hs_sku'] = (string) $lineItem['articleRef'];
