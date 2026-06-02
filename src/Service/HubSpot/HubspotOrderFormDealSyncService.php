@@ -9,6 +9,7 @@ use Symfony\Component\DependencyInjection\Attribute\Autowire;
 class HubspotOrderFormDealSyncService
 {
     private const DEAL_OBJECT_TYPE = 'deals';
+    private const LINE_ITEM_OBJECT_TYPE = 'line_items';
     private const DEAL_TO_COMPANY_PRIMARY_ASSOCIATION_TYPE_ID = 5;
     private const LINE_ITEM_TO_DEAL_ASSOCIATION_TYPE_ID = 20;
     private const COMPANY_PROPERTIES = ['name', 'id_erp', 'company_country_en'];
@@ -58,10 +59,24 @@ class HubspotOrderFormDealSyncService
         $productsByReference = $validation['productsByReference'];
         $hubspotDealId = $validation['hubspotDealId'];
         $applyTaxRate = $this->shouldApplyTaxRate($companyCountry);
+        $dealAmount = $this->calculateDealAmount($lineItems);
         $warnings = [];
 
         if ($orderForm->getDealType() === OrderForm::DEAL_TYPE_NOUVEAU) {
-            $hubspotDealId = $this->createNewDeal($orderForm, $commercial, $hubspotOwnerId, $companyName);
+            $hubspotDealId = $this->createNewDeal($orderForm, $commercial, $hubspotOwnerId, $companyName, $dealAmount);
+        }
+
+        if ($orderForm->getDealType() === OrderForm::DEAL_TYPE_EXISTANT) {
+            $replacement = $this->clearExistingLineItems((string) $hubspotDealId);
+
+            if (($replacement['success'] ?? false) !== true) {
+                return [
+                    'success' => false,
+                    'hubspotDealId' => (string) $hubspotDealId,
+                    'errors' => $replacement['errors'] ?? [],
+                    'warnings' => $warnings,
+                ];
+            }
         }
 
         foreach ($lineItems as $lineItem) {
@@ -97,6 +112,10 @@ class HubspotOrderFormDealSyncService
                 $lineItem,
                 $taxRateGroupId
             );
+        }
+
+        if ($orderForm->getDealType() === OrderForm::DEAL_TYPE_EXISTANT) {
+            $this->updateDealAmount((string) $hubspotDealId, $dealAmount);
         }
 
         return [
@@ -264,7 +283,7 @@ class HubspotOrderFormDealSyncService
         ];
     }
 
-    private function createNewDeal(OrderForm $orderForm, Commercial $commercial, string $hubspotOwnerId, string $companyName): string
+    private function createNewDeal(OrderForm $orderForm, Commercial $commercial, string $hubspotOwnerId, string $companyName, float $dealAmount): string
     {
         $enterpriseId = (string) $orderForm->getEnterpriseId();
         $pipelineStage = $this->resolveDealPipelineStage();
@@ -273,6 +292,7 @@ class HubspotOrderFormDealSyncService
             'hubspot_owner_id' => $hubspotOwnerId,
             'pipeline' => $pipelineStage['pipelineId'],
             'dealstage' => $pipelineStage['stageId'],
+            'amount' => $this->formatHubspotAmount($dealAmount),
         ];
 
         $response = $this->hubSpotClient->createObject(self::DEAL_OBJECT_TYPE, $properties, [
@@ -299,6 +319,40 @@ class HubspotOrderFormDealSyncService
         }
 
         return $dealId;
+    }
+
+    /**
+     * @param array<int, array<string, mixed>> $lineItems
+     */
+    private function calculateDealAmount(array $lineItems): float
+    {
+        $totalAmount = 0.0;
+
+        foreach ($lineItems as $lineItem) {
+            $quantity = (float) ($lineItem['quantity'] ?? 0);
+            $unitPrice = (float) ($lineItem['unitPrice'] ?? 0);
+
+            if ($quantity !== 0.0 || $unitPrice !== 0.0) {
+                $totalAmount += $quantity * $unitPrice;
+                continue;
+            }
+
+            $totalAmount += (float) ($lineItem['lineTotal'] ?? 0);
+        }
+
+        return round($totalAmount, 2);
+    }
+
+    private function updateDealAmount(string $hubspotDealId, float $dealAmount): void
+    {
+        $this->hubSpotClient->updateObject(self::DEAL_OBJECT_TYPE, $hubspotDealId, [
+            'amount' => $this->formatHubspotAmount($dealAmount),
+        ]);
+    }
+
+    private function formatHubspotAmount(float $amount): string
+    {
+        return number_format($amount, 2, '.', '');
     }
 
     /**
@@ -339,7 +393,7 @@ class HubspotOrderFormDealSyncService
             $properties['hs_sku'] = (string) $lineItem['articleRef'];
         }
 
-        $this->hubSpotClient->createObject('line_items', $properties, [
+        $this->hubSpotClient->createObject(self::LINE_ITEM_OBJECT_TYPE, $properties, [
             [
                 'to' => [
                     'id' => $hubspotDealId,
@@ -352,6 +406,109 @@ class HubspotOrderFormDealSyncService
                 ],
             ],
         ]);
+    }
+
+    /**
+     * @return array{success: bool, errors?: array<int, array<string, mixed>>}
+     */
+    private function clearExistingLineItems(string $hubspotDealId): array
+    {
+        try {
+            $lineItemIds = $this->fetchExistingLineItemIds($hubspotDealId);
+        } catch (\Throwable $exception) {
+            return [
+                'success' => false,
+                'errors' => [$this->error(
+                    'lineItems',
+                    sprintf('La recuperation des line items existants du deal HubSpot %s a echoue.', $hubspotDealId),
+                    ['details' => $exception->getMessage()]
+                )],
+            ];
+        }
+
+        $errors = [];
+
+        foreach ($lineItemIds as $lineItemId) {
+            try {
+                $this->hubSpotClient->deleteObject(self::LINE_ITEM_OBJECT_TYPE, $lineItemId);
+            } catch (\Throwable $exception) {
+                $errors[] = $this->error(
+                    'lineItems',
+                    sprintf('La suppression du line item HubSpot %s a echoue.', $lineItemId),
+                    [
+                        'lineItemId' => $lineItemId,
+                        'details' => $exception->getMessage(),
+                    ]
+                );
+            }
+        }
+
+        if ($errors !== []) {
+            return [
+                'success' => false,
+                'errors' => $errors,
+            ];
+        }
+
+        return [
+            'success' => true,
+        ];
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    private function fetchExistingLineItemIds(string $hubspotDealId): array
+    {
+        if (trim($hubspotDealId) === '') {
+            return [];
+        }
+
+        $paths = [
+            sprintf('/crm/v3/objects/deals/%s/associations/line_items', $hubspotDealId),
+            sprintf('/crm/v3/objects/deals/%s/associations/line_item', $hubspotDealId),
+        ];
+        $lineItemIds = [];
+        $successfulLookup = false;
+        $lastException = null;
+
+        foreach ($paths as $path) {
+            try {
+                $response = $this->hubSpotClient->get($path);
+                $successfulLookup = true;
+            } catch (\Throwable $exception) {
+                $lastException = $exception;
+                continue;
+            }
+
+            $results = $response['results'] ?? [];
+
+            if (!is_array($results)) {
+                continue;
+            }
+
+            foreach ($results as $result) {
+                if (!is_array($result)) {
+                    continue;
+                }
+
+                $lineItemId = trim((string) (($result['id'] ?? null) ?: ($result['toObjectId'] ?? '')));
+
+                if ($lineItemId !== '') {
+                    $lineItemIds[] = $lineItemId;
+                }
+            }
+
+            if ($lineItemIds !== []) {
+                break;
+            }
+        }
+
+        if (!$successfulLookup && $lastException instanceof \Throwable) {
+            throw $lastException;
+        }
+
+        return array_values(array_unique($lineItemIds));
     }
 
     private function buildDealName(OrderForm $orderForm, string $companyName): string

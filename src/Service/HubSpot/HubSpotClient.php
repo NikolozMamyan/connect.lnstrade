@@ -83,6 +83,39 @@ class HubSpotClient
 
         return $response->toArray(false);
     }
+
+    /**
+     * Suppression / archivage generique DELETE.
+     *
+     * @throws TransportExceptionInterface
+     * @throws ClientExceptionInterface
+     * @throws RedirectionExceptionInterface
+     * @throws ServerExceptionInterface
+     */
+    public function delete(string $path, array $query = []): array
+    {
+        $query = $this->normalizeQuery($query);
+
+        $response = $this->httpClient->request('DELETE', $this->buildUrl($path), [
+            'headers' => $this->getHeaders(),
+            'query' => $query,
+        ]);
+
+        $content = trim($response->getContent(false));
+
+        if ($content === '') {
+            return [
+                'statusCode' => $response->getStatusCode(),
+            ];
+        }
+
+        $decoded = json_decode($content, true);
+
+        return is_array($decoded) ? $decoded : [
+            'statusCode' => $response->getStatusCode(),
+            'content' => $content,
+        ];
+    }
     /**
  * Mise à jour générique PATCH.
  *
@@ -145,6 +178,11 @@ public function patch(string $path, array $body = [], array $query = []): array
         }
 
         return $this->post(sprintf('/crm/objects/v3/%s', $objectType), $body);
+    }
+
+    public function deleteObject(string $objectType, string $objectId): array
+    {
+        return $this->delete(sprintf('/crm/objects/v3/%s/%s', $objectType, $objectId));
     }
     /**
  * Met à jour partiellement un objet HubSpot.
