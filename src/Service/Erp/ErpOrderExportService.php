@@ -9,6 +9,8 @@ use Psr\Log\LoggerInterface;
 
 class ErpOrderExportService
 {
+    private const DELIVERY_INSTRUCTION_MAX_LENGTH = 69;
+
     public function __construct(
         private readonly HubSpotClient $hubSpotClient,
         private readonly HubspotCompanyRepository $hubspotCompanyRepository,
@@ -20,7 +22,16 @@ class ErpOrderExportService
     public function sendDealToErp(string $hubspotDealId): array
     {
         $dealData = $this->hubSpotClient->getObject('deals', $hubspotDealId, [
-            'properties' => ['dealname', 'dealstage', 'createdate', 'closedate', 'hubspot_owner_id'],
+            'properties' => [
+                'dealname',
+                'dealstage',
+                'createdate',
+                'closedate',
+                'hubspot_owner_id',
+                'incoterm',
+                'expected_delivery_date',
+                'delivery_information',
+            ],
             'associations' => ['companies', 'line_item'],
         ]);
 
@@ -141,7 +152,9 @@ class ErpOrderExportService
     {
         $properties = isset($dealData['properties']) && is_array($dealData['properties']) ? $dealData['properties'] : [];
         $dateCommande = $this->normalizeErpDate($properties['createdate'] ?? null) ?? (new \DateTimeImmutable())->format('Y-m-d');
-        $dateLivraison = $this->normalizeIsoDate($properties['closedate'] ?? null) ?? $dateCommande;
+        $dateLivraison = $this->normalizeIsoDate($properties['expected_delivery_date'] ?? null)
+            ?? $this->normalizeIsoDate($properties['closedate'] ?? null)
+            ?? $dateCommande;
         $ownerFirstName = $owner['firstname'];
         $ownerName = $owner['lastname'];
 
@@ -151,10 +164,14 @@ class ErpOrderExportService
             'dateLivraison' => $dateLivraison,
             'referenceCommande' => trim((string) (($properties['dealname'] ?? null) ?: '')),
             'statut' => 'Saisi',
-            'modeExpedition' => 'Standard',
+            'modeExpedition' => trim((string) (($properties['incoterm'] ?? null) ?: 'Standard')),
             'ownerFirstName' => $ownerFirstName,
             'ownerName' => $ownerName,
-            'instructionDeLivraison' => '',
+            'instructionDeLivraison' => mb_substr(
+                trim((string) (($properties['delivery_information'] ?? null) ?: '')),
+                0,
+                self::DELIVERY_INSTRUCTION_MAX_LENGTH
+            ),
             'orderLines' => $this->buildOrderLines($dealData, (string) ($dealData['id'] ?? '')),
         ];
     }
