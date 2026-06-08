@@ -18,6 +18,13 @@ class ErpOrderExportService
         'FCA' => 'FCA - Franco transporteur',
     ];
 
+    private const PAYMENT_TERM_TO_SAGE_MODEL = [
+        'cash payment' => 'Comptant',
+        '30 days' => 'A 30 jours net',
+        '60 days' => 'A 60 jours net',
+        '90 days' => 'A 90 jours net',
+    ];
+
     public function __construct(
         private readonly HubSpotClient $hubSpotClient,
         private readonly HubspotCompanyRepository $hubspotCompanyRepository,
@@ -38,6 +45,8 @@ class ErpOrderExportService
                 'incoterm',
                 'expected_delivery_date',
                 'delivery_information',
+                'subcontracting',
+                'payment_term',
             ],
             'associations' => ['companies', 'line_item'],
         ]);
@@ -57,6 +66,7 @@ class ErpOrderExportService
             'referenceCommande' => $order['referenceCommande'] ?? null,
             'numClient' => $order['numClient'] ?? null,
             'modeExpedition' => $order['modeExpedition'] ?? null,
+            'modeleReglement' => $order['modeleReglement'] ?? null,
         ]);
 
         try {
@@ -166,7 +176,7 @@ class ErpOrderExportService
         $ownerFirstName = $owner['firstname'];
         $ownerName = $owner['lastname'];
 
-        return [
+        $order = [
             'numClient' => $numClient,
             'dateCommande' => $dateCommande,
             'dateLivraison' => $dateLivraison,
@@ -182,6 +192,22 @@ class ErpOrderExportService
             ),
             'orderLines' => $this->buildOrderLines($dealData, (string) ($dealData['id'] ?? '')),
         ];
+
+        $subcontracting = $this->normalizeSubcontractingForSage($properties['subcontracting'] ?? null);
+
+        if ($subcontracting !== null) {
+            $order['champsLibres'] = [
+                'Sous-traitance' => $subcontracting,
+            ];
+        }
+
+        $paymentModel = $this->normalizePaymentTermForSage($properties['payment_term'] ?? null);
+
+        if ($paymentModel !== null) {
+            $order['modeleReglement'] = $paymentModel;
+        }
+
+        return $order;
     }
 
     private function normalizeIncotermForSage(mixed $value): string
@@ -193,6 +219,29 @@ class ErpOrderExportService
         }
 
         return self::INCOTERM_TO_SAGE_MODE_EXPEDITION[$incoterm] ?? $incoterm;
+    }
+
+    private function normalizeSubcontractingForSage(mixed $value): ?string
+    {
+        $subcontracting = mb_strtolower(trim((string) $value));
+
+        return match ($subcontracting) {
+            '' => null,
+            'yes', 'true', '1', 'on' => 'OUI',
+            'no', 'false', '0', 'off' => 'NON',
+            default => trim((string) $value),
+        };
+    }
+
+    private function normalizePaymentTermForSage(mixed $value): ?string
+    {
+        $paymentTerm = mb_strtolower(trim((string) $value));
+
+        if ($paymentTerm === '') {
+            return null;
+        }
+
+        return self::PAYMENT_TERM_TO_SAGE_MODEL[$paymentTerm] ?? trim((string) $value);
     }
 
     /**

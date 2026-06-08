@@ -14,6 +14,28 @@ use Symfony\Component\HttpClient\Response\MockResponse;
 
 class ErpOrderExportServiceTest extends TestCase
 {
+    public function testNormalizeSubcontractingUsesSageFreeFieldValues(): void
+    {
+        $service = (new \ReflectionClass(ErpOrderExportService::class))->newInstanceWithoutConstructor();
+        $method = new \ReflectionMethod(ErpOrderExportService::class, 'normalizeSubcontractingForSage');
+
+        self::assertSame('OUI', $method->invoke($service, 'Yes'));
+        self::assertSame('NON', $method->invoke($service, 'No'));
+        self::assertNull($method->invoke($service, null));
+    }
+
+    public function testNormalizePaymentTermUsesSageModels(): void
+    {
+        $service = (new \ReflectionClass(ErpOrderExportService::class))->newInstanceWithoutConstructor();
+        $method = new \ReflectionMethod(ErpOrderExportService::class, 'normalizePaymentTermForSage');
+
+        self::assertSame('Comptant', $method->invoke($service, 'Cash payment'));
+        self::assertSame('A 30 jours net', $method->invoke($service, '30 days'));
+        self::assertSame('A 60 jours net', $method->invoke($service, '60 days'));
+        self::assertSame('A 90 jours net', $method->invoke($service, '90 days'));
+        self::assertNull($method->invoke($service, null));
+    }
+
     public function testNormalizeIncotermUsesConfiguredSageLabels(): void
     {
         $service = (new \ReflectionClass(ErpOrderExportService::class))->newInstanceWithoutConstructor();
@@ -52,6 +74,8 @@ class ErpOrderExportServiceTest extends TestCase
                             'incoterm' => 'DDP',
                             'expected_delivery_date' => '2026-07-15',
                             'delivery_information' => $deliveryInformation,
+                            'subcontracting' => 'Yes',
+                            'payment_term' => '60 days',
                         ],
                         'associations' => [
                             'companies' => [
@@ -141,9 +165,13 @@ class ErpOrderExportServiceTest extends TestCase
         self::assertContains('incoterm', $requestedDealProperties);
         self::assertContains('expected_delivery_date', $requestedDealProperties);
         self::assertContains('delivery_information', $requestedDealProperties);
+        self::assertContains('subcontracting', $requestedDealProperties);
+        self::assertContains('payment_term', $requestedDealProperties);
         self::assertSame('DDP - Rendu droits acquittés', $sageOrderPayload['modeExpedition']);
         self::assertSame('2026-07-15', $sageOrderPayload['dateLivraison']);
         self::assertSame(str_repeat('A', 69), $sageOrderPayload['instructionDeLivraison']);
+        self::assertSame(['Sous-traitance' => 'OUI'], $sageOrderPayload['champsLibres']);
+        self::assertSame('A 60 jours net', $sageOrderPayload['modeleReglement']);
         self::assertSame($sageOrderPayload, $result['payload']);
     }
 
