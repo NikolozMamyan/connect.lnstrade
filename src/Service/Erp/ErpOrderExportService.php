@@ -11,6 +11,13 @@ class ErpOrderExportService
 {
     private const DELIVERY_INSTRUCTION_MAX_LENGTH = 69;
 
+    private const INCOTERM_TO_SAGE_MODE_EXPEDITION = [
+        'DDP' => "DDP - Rendu droits acquitt\u{00E9}s",
+        'EXW' => "EXW - A l'usine",
+        'DAP' => 'DAP - Rendu au lieu de dest.',
+        'FCA' => 'FCA - Franco transporteur',
+    ];
+
     public function __construct(
         private readonly HubSpotClient $hubSpotClient,
         private readonly HubspotCompanyRepository $hubspotCompanyRepository,
@@ -49,6 +56,7 @@ class ErpOrderExportService
             'dealHubspotId' => $hubspotDealId,
             'referenceCommande' => $order['referenceCommande'] ?? null,
             'numClient' => $order['numClient'] ?? null,
+            'modeExpedition' => $order['modeExpedition'] ?? null,
         ]);
 
         try {
@@ -164,7 +172,7 @@ class ErpOrderExportService
             'dateLivraison' => $dateLivraison,
             'referenceCommande' => trim((string) (($properties['dealname'] ?? null) ?: '')),
             'statut' => 'Saisi',
-            'modeExpedition' => trim((string) (($properties['incoterm'] ?? null) ?: 'Standard')),
+            'modeExpedition' => $this->normalizeIncotermForSage($properties['incoterm'] ?? null),
             'ownerFirstName' => $ownerFirstName,
             'ownerName' => $ownerName,
             'instructionDeLivraison' => mb_substr(
@@ -174,6 +182,17 @@ class ErpOrderExportService
             ),
             'orderLines' => $this->buildOrderLines($dealData, (string) ($dealData['id'] ?? '')),
         ];
+    }
+
+    private function normalizeIncotermForSage(mixed $value): string
+    {
+        $incoterm = strtoupper(trim((string) $value));
+
+        if ($incoterm === '') {
+            return 'Standard';
+        }
+
+        return self::INCOTERM_TO_SAGE_MODE_EXPEDITION[$incoterm] ?? $incoterm;
     }
 
     /**

@@ -14,6 +14,19 @@ use Symfony\Component\HttpClient\Response\MockResponse;
 
 class ErpOrderExportServiceTest extends TestCase
 {
+    public function testNormalizeIncotermUsesConfiguredSageLabels(): void
+    {
+        $service = (new \ReflectionClass(ErpOrderExportService::class))->newInstanceWithoutConstructor();
+        $method = new \ReflectionMethod(ErpOrderExportService::class, 'normalizeIncotermForSage');
+
+        self::assertSame('DDP - Rendu droits acquittés', $method->invoke($service, 'DDP'));
+        self::assertSame("EXW - A l'usine", $method->invoke($service, 'exw'));
+        self::assertSame('DAP - Rendu au lieu de dest.', $method->invoke($service, 'DAP'));
+        self::assertSame('FCA - Franco transporteur', $method->invoke($service, 'FCA'));
+        self::assertSame('CPT', $method->invoke($service, 'CPT'));
+        self::assertSame('Standard', $method->invoke($service, null));
+    }
+
     public function testSendDealMapsAdditionalHubSpotPropertiesToSageOrder(): void
     {
         $requestedDealProperties = [];
@@ -36,7 +49,7 @@ class ErpOrderExportServiceTest extends TestCase
                             'createdate' => '2026-06-01T10:30:00Z',
                             'closedate' => '2026-06-30T00:00:00Z',
                             'hubspot_owner_id' => 'owner-1',
-                            'incoterm' => 'Express',
+                            'incoterm' => 'DDP',
                             'expected_delivery_date' => '2026-07-15',
                             'delivery_information' => $deliveryInformation,
                         ],
@@ -128,7 +141,7 @@ class ErpOrderExportServiceTest extends TestCase
         self::assertContains('incoterm', $requestedDealProperties);
         self::assertContains('expected_delivery_date', $requestedDealProperties);
         self::assertContains('delivery_information', $requestedDealProperties);
-        self::assertSame('Express', $sageOrderPayload['modeExpedition']);
+        self::assertSame('DDP - Rendu droits acquittés', $sageOrderPayload['modeExpedition']);
         self::assertSame('2026-07-15', $sageOrderPayload['dateLivraison']);
         self::assertSame(str_repeat('A', 69), $sageOrderPayload['instructionDeLivraison']);
         self::assertSame($sageOrderPayload, $result['payload']);
