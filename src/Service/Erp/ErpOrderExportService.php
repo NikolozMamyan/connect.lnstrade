@@ -11,7 +11,7 @@ class ErpOrderExportService
 {
     private const DELIVERY_INSTRUCTION_MAX_LENGTH = 69;
 
-    private const INCOTERM_TO_SAGE_MODE_EXPEDITION = [
+    private const INCOTERM_TO_SAGE_DELIVERY_CONDITION = [
         'DDP' => "DDP - Rendu droits acquitt\u{00E9}s",
         'EXW' => "EXW - A l'usine",
         'DAP' => 'DAP - Rendu au lieu de dest.',
@@ -66,6 +66,7 @@ class ErpOrderExportService
             'referenceCommande' => $order['referenceCommande'] ?? null,
             'numClient' => $order['numClient'] ?? null,
             'modeExpedition' => $order['modeExpedition'] ?? null,
+            'condLivraison' => $order['condLivraison'] ?? null,
             'modeleReglement' => $order['modeleReglement'] ?? null,
         ]);
 
@@ -182,7 +183,7 @@ class ErpOrderExportService
             'dateLivraison' => $dateLivraison,
             'referenceCommande' => trim((string) (($properties['dealname'] ?? null) ?: '')),
             'statut' => 'Saisi',
-            'modeExpedition' => $this->normalizeIncotermForSage($properties['incoterm'] ?? null),
+            'modeExpedition' => 'Standard',
             'ownerFirstName' => $ownerFirstName,
             'ownerName' => $ownerName,
             'instructionDeLivraison' => mb_substr(
@@ -192,6 +193,12 @@ class ErpOrderExportService
             ),
             'orderLines' => $this->buildOrderLines($dealData, (string) ($dealData['id'] ?? '')),
         ];
+
+        $deliveryCondition = $this->normalizeIncotermForSage($properties['incoterm'] ?? null);
+
+        if ($deliveryCondition !== null) {
+            $order['condLivraison'] = $deliveryCondition;
+        }
 
         $subcontracting = $this->normalizeSubcontractingForSage($properties['subcontracting'] ?? null);
 
@@ -210,15 +217,15 @@ class ErpOrderExportService
         return $order;
     }
 
-    private function normalizeIncotermForSage(mixed $value): string
+    private function normalizeIncotermForSage(mixed $value): ?string
     {
         $incoterm = strtoupper(trim((string) $value));
 
         if ($incoterm === '') {
-            return 'Standard';
+            return null;
         }
 
-        return self::INCOTERM_TO_SAGE_MODE_EXPEDITION[$incoterm] ?? $incoterm;
+        return self::INCOTERM_TO_SAGE_DELIVERY_CONDITION[$incoterm] ?? $incoterm;
     }
 
     private function normalizeSubcontractingForSage(mixed $value): ?string

@@ -46,7 +46,7 @@ class ErpOrderExportServiceTest extends TestCase
         self::assertSame('DAP - Rendu au lieu de dest.', $method->invoke($service, 'DAP'));
         self::assertSame('FCA - Franco transporteur', $method->invoke($service, 'FCA'));
         self::assertSame('CPT', $method->invoke($service, 'CPT'));
-        self::assertSame('Standard', $method->invoke($service, null));
+        self::assertNull($method->invoke($service, null));
     }
 
     public function testSendDealMapsAdditionalHubSpotPropertiesToSageOrder(): void
@@ -167,7 +167,8 @@ class ErpOrderExportServiceTest extends TestCase
         self::assertContains('delivery_information', $requestedDealProperties);
         self::assertContains('subcontracting', $requestedDealProperties);
         self::assertContains('payment_term', $requestedDealProperties);
-        self::assertSame('DDP - Rendu droits acquittés', $sageOrderPayload['modeExpedition']);
+        self::assertSame('Standard', $sageOrderPayload['modeExpedition']);
+        self::assertSame('DDP - Rendu droits acquittés', $sageOrderPayload['condLivraison']);
         self::assertSame('2026-07-15', $sageOrderPayload['dateLivraison']);
         self::assertSame(str_repeat('A', 69), $sageOrderPayload['instructionDeLivraison']);
         self::assertSame(['Sous-traitance' => 'OUI'], $sageOrderPayload['champsLibres']);
