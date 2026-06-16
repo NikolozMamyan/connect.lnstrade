@@ -3,9 +3,13 @@
 namespace App\Service\Erp;
 
 use App\Entity\Commercial;
+use App\Entity\ErpOrderExport;
+use App\Repository\ErpOrderExportRepository;
 use App\Repository\HubspotCompanyRepository;
 use App\Service\HubSpot\HubSpotClient;
+use Doctrine\ORM\EntityManagerInterface;
 use Psr\Log\LoggerInterface;
+use Symfony\Component\Lock\LockFactory;
 
 class ErpOrderExportService
 {
@@ -28,12 +32,106 @@ class ErpOrderExportService
     public function __construct(
         private readonly HubSpotClient $hubSpotClient,
         private readonly HubspotCompanyRepository $hubspotCompanyRepository,
+        private readonly ErpOrderExportRepository $erpOrderExportRepository,
+        private readonly EntityManagerInterface $entityManager,
         private readonly SageClient $sageClient,
+        private readonly LockFactory $lockFactory,
         private readonly LoggerInterface $logger,
     ) {
     }
 
     public function sendDealToErp(string $hubspotDealId): array
+    {
+        $hubspotDealId = trim($hubspotDealId);
+
+        if ($hubspotDealId === '') {
+            throw new \RuntimeException('Identifiant deal HubSpot manquant pour l export ERP.');
+        }
+
+        $lock = $this->lockFactory->createLock(sprintf('erp-order-export-%s', $hubspotDealId), 300);
+
+        if (!$lock->acquire()) {
+            return [
+                'skipped' => true,
+                'reason' => 'already_processing',
+                'dealHubspotId' => $hubspotDealId,
+            ];
+        }
+
+        try {
+            $reservation = $this->reserveExport($hubspotDealId);
+
+            if (($reservation['skipped'] ?? false) === true) {
+                return $reservation;
+            }
+
+            $export = $reservation['export'];
+
+            try {
+                return $this->sendReservedDealToErp($hubspotDealId, $export);
+            } catch (\Throwable $exception) {
+                if (!$export->isSent()) {
+                    $this->markExportFailed($export, $exception->getMessage());
+                }
+
+                throw $exception;
+            }
+        } finally {
+            $lock->release();
+        }
+    }
+
+    /**
+     * @return array{skipped: false, export: ErpOrderExport}|array{skipped: true, reason: string, payload: array<string, mixed>, response: ?array, dealHubspotId: string}
+     */
+    private function reserveExport(string $hubspotDealId): array
+    {
+        $export = $this->erpOrderExportRepository->findOneByHubspotDealId($hubspotDealId);
+
+        if ($export instanceof ErpOrderExport) {
+            if ($export->isSent()) {
+                return $this->skippedExportResult($export, 'already_sent', $hubspotDealId);
+            }
+
+            if ($export->isProcessing()) {
+                return $this->skippedExportResult($export, 'already_processing', $hubspotDealId);
+            }
+
+            $export->markProcessing();
+            $this->entityManager->flush();
+
+            return [
+                'skipped' => false,
+                'export' => $export,
+            ];
+        }
+
+        $export = new ErpOrderExport($hubspotDealId);
+
+        $this->entityManager->persist($export);
+        $this->entityManager->flush();
+
+        return [
+            'skipped' => false,
+            'export' => $export,
+        ];
+    }
+
+    /**
+     * @return array{skipped: true, reason: string, payload: array<string, mixed>, response: ?array, dealHubspotId: string}
+     */
+    private function skippedExportResult(ErpOrderExport $export, string $reason, string $hubspotDealId): array
+    {
+        return [
+            'skipped' => true,
+            'reason' => $reason,
+            'payload' => $export->getPayload() ?? [],
+            'response' => $export->getErpResponse(),
+            'dealHubspotId' => $hubspotDealId,
+        ];
+    }
+
+    private function sendReservedDealToErp(string $hubspotDealId, ErpOrderExport $export): array
     {
         $dealData = $this->hubSpotClient->getObject('deals', $hubspotDealId, [
             'properties' => [
@@ -74,12 +172,17 @@ class ErpOrderExportService
         try {
             $response = $this->sageClient->post('/order', $order);
         } catch (\Throwable $exception) {
-            throw new \RuntimeException(sprintf(
+            $wrappedException = new \RuntimeException(sprintf(
                 "%s\nERP order payload: %s",
                 $exception->getMessage(),
                 json_encode($order, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT)
             ), 0, $exception);
+
+            throw $wrappedException;
         }
+
+        $export->markSent($order, $response);
+        $this->entityManager->flush();
 
         return [
             'skipped' => false,
@@ -87,6 +190,19 @@ class ErpOrderExportService
             'response' => $response,
             'dealHubspotId' => $hubspotDealId,
         ];
+    }
+
+    private function markExportFailed(ErpOrderExport $export, string $errorMessage): void
+    {
+        try {
+            $export->markFailed($errorMessage);
+            $this->entityManager->flush();
+        } catch (\Throwable $exception) {
+            $this->logger->warning('ERP order export failure tracking failed', [
+                'dealHubspotId' => $export->getHubspotDealId(),
+                'message' => $exception->getMessage(),
+            ]);
+        }
     }
 
     private function extractFirstAssociatedCompanyId(array $dealData): ?string

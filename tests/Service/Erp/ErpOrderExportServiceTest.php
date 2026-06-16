@@ -2,15 +2,20 @@
 
 namespace App\Tests\Service\Erp;
 
+use App\Entity\ErpOrderExport;
+use App\Repository\ErpOrderExportRepository;
 use App\Repository\HubspotCompanyRepository;
 use App\Service\Erp\ErpOrderExportService;
 use App\Service\Erp\SageClient;
 use App\Service\HubSpot\HubSpotClient;
+use Doctrine\ORM\EntityManagerInterface;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\NullLogger;
 use Symfony\Component\DependencyInjection\ParameterBag\ParameterBag;
 use Symfony\Component\HttpClient\MockHttpClient;
 use Symfony\Component\HttpClient\Response\MockResponse;
+use Symfony\Component\Lock\LockFactory;
+use Symfony\Component\Lock\Store\InMemoryStore;
 
 class ErpOrderExportServiceTest extends TestCase
 {
@@ -153,11 +158,23 @@ class ErpOrderExportServiceTest extends TestCase
         ]);
         $companyRepository = $this->createMock(HubspotCompanyRepository::class);
         $companyRepository->expects($this->never())->method('findOneByHubspotId');
+        $exportRepository = $this->createMock(ErpOrderExportRepository::class);
+        $exportRepository
+            ->expects($this->once())
+            ->method('findOneByHubspotDealId')
+            ->with('12345')
+            ->willReturn(null);
+        $entityManager = $this->createMock(EntityManagerInterface::class);
+        $entityManager->expects($this->once())->method('persist')->with(self::isInstanceOf(ErpOrderExport::class));
+        $entityManager->expects($this->exactly(2))->method('flush');
 
         $service = new ErpOrderExportService(
             new HubSpotClient($hubSpotHttpClient, $parameters),
             $companyRepository,
+            $exportRepository,
+            $entityManager,
             new SageClient($sageHttpClient, $parameters),
+            new LockFactory(new InMemoryStore()),
             new NullLogger(),
         );
 
@@ -177,6 +194,100 @@ class ErpOrderExportServiceTest extends TestCase
         self::assertSame(['Sous-traitance' => 'OUI'], $sageOrderPayload['champsLibres']);
         self::assertSame('A 60 jours net', $sageOrderPayload['modeleReglement']);
         self::assertSame($sageOrderPayload, $result['payload']);
+    }
+
+    public function testSendDealSkipsAlreadySentExport(): void
+    {
+        $existingExport = (new ErpOrderExport('12345'))->markSent(
+            [
+                'referenceCommande' => 'REF-ORDER-2026',
+                'numClient' => 'CLI-001',
+                'orderLines' => [],
+            ],
+            ['success' => true]
+        );
+        $hubSpotHttpClient = new MockHttpClient(static function (): MockResponse {
+            self::fail('HubSpot must not be called for an already sent export.');
+        });
+        $sageHttpClient = new MockHttpClient(static function (): MockResponse {
+            self::fail('Sage must not be called for an already sent export.');
+        });
+        $parameters = new ParameterBag([
+            'base_uri_hubspot' => 'https://hubspot.test',
+            'hubspot_access' => 'hubspot-token',
+            'base_uri_sage' => 'https://sage.test',
+            'sage_username' => 'user',
+            'sage_password' => 'password',
+        ]);
+        $exportRepository = $this->createMock(ErpOrderExportRepository::class);
+        $exportRepository
+            ->expects($this->once())
+            ->method('findOneByHubspotDealId')
+            ->with('12345')
+            ->willReturn($existingExport);
+        $entityManager = $this->createMock(EntityManagerInterface::class);
+        $entityManager->expects($this->never())->method('persist');
+        $entityManager->expects($this->never())->method('flush');
+
+        $service = new ErpOrderExportService(
+            new HubSpotClient($hubSpotHttpClient, $parameters),
+            $this->createStub(HubspotCompanyRepository::class),
+            $exportRepository,
+            $entityManager,
+            new SageClient($sageHttpClient, $parameters),
+            new LockFactory(new InMemoryStore()),
+            new NullLogger(),
+        );
+
+        $result = $service->sendDealToErp('12345');
+
+        self::assertTrue($result['skipped']);
+        self::assertSame('already_sent', $result['reason']);
+        self::assertSame('12345', $result['dealHubspotId']);
+        self::assertSame('REF-ORDER-2026', $result['payload']['referenceCommande']);
+    }
+
+    public function testSendDealSkipsAlreadyProcessingExport(): void
+    {
+        $existingExport = new ErpOrderExport('12345');
+        $hubSpotHttpClient = new MockHttpClient(static function (): MockResponse {
+            self::fail('HubSpot must not be called for an already processing export.');
+        });
+        $sageHttpClient = new MockHttpClient(static function (): MockResponse {
+            self::fail('Sage must not be called for an already processing export.');
+        });
+        $parameters = new ParameterBag([
+            'base_uri_hubspot' => 'https://hubspot.test',
+            'hubspot_access' => 'hubspot-token',
+            'base_uri_sage' => 'https://sage.test',
+            'sage_username' => 'user',
+            'sage_password' => 'password',
+        ]);
+        $exportRepository = $this->createMock(ErpOrderExportRepository::class);
+        $exportRepository
+            ->expects($this->once())
+            ->method('findOneByHubspotDealId')
+            ->with('12345')
+            ->willReturn($existingExport);
+        $entityManager = $this->createMock(EntityManagerInterface::class);
+        $entityManager->expects($this->never())->method('persist');
+        $entityManager->expects($this->never())->method('flush');
+
+        $service = new ErpOrderExportService(
+            new HubSpotClient($hubSpotHttpClient, $parameters),
+            $this->createStub(HubspotCompanyRepository::class),
+            $exportRepository,
+            $entityManager,
+            new SageClient($sageHttpClient, $parameters),
+            new LockFactory(new InMemoryStore()),
+            new NullLogger(),
+        );
+
+        $result = $service->sendDealToErp('12345');
+
+        self::assertTrue($result['skipped']);
+        self::assertSame('already_processing', $result['reason']);
+        self::assertSame('12345', $result['dealHubspotId']);
     }
 
     /**
