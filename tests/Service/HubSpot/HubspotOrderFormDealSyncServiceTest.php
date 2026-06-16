@@ -81,6 +81,28 @@ class HubspotOrderFormDealSyncServiceTest extends TestCase
         self::assertSame('AR-NOVAT', $result['warnings'][0]['reference']);
     }
 
+    public function testSyncCreatesZeroPriceLineItemWhenQuantityIsPositive(): void
+    {
+        $createdDeals = [];
+        $createdLineItems = [];
+        $hubSpotClient = $this->createHubSpotClientForNewDeal('Germany', $createdLineItems, $createdDeals);
+
+        $service = $this->createService($hubSpotClient);
+        $result = $service->sync($this->createNewDealOrderForm(), [
+            [
+                'articleRef' => 'AR-20',
+                'quantity' => 4.0,
+                'unitPrice' => 0.0,
+            ],
+        ]);
+
+        self::assertTrue($result['success']);
+        self::assertSame('0.00', $createdDeals[0]['amount']);
+        self::assertCount(1, $createdLineItems);
+        self::assertSame(4.0, $createdLineItems[0]['quantity']);
+        self::assertSame(0.0, $createdLineItems[0]['price']);
+    }
+
     public function testSyncReplacesExistingDealLineItemsBeforeCreatingNewOnExistingDeal(): void
     {
         $createdLineItems = [];

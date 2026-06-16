@@ -348,7 +348,6 @@ class OrderFormSpreadsheetParser
             $quantityValue === ''
             || $unitPriceValue === ''
             || ($this->isNumericString($quantityValue) && $this->toFloat($quantityValue) === 0.0)
-            || ($this->isNumericString($unitPriceValue) && $this->toFloat($unitPriceValue) <= 0.0)
         ) {
             return [
                 'rowNumber' => $rowNumber,
@@ -371,6 +370,8 @@ class OrderFormSpreadsheetParser
 
         if (!$this->isNumericString($unitPriceValue)) {
             $errors[] = 'Unit price invalide.';
+        } elseif ($this->toFloat($unitPriceValue) < 0.0) {
+            $errors[] = 'Unit price doit etre positif ou egal a zero.';
         }
 
         if ($errors !== []) {

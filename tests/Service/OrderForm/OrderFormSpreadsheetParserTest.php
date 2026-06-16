@@ -39,7 +39,7 @@ class OrderFormSpreadsheetParserTest extends TestCase
         self::assertNotEmpty($result['errors']);
     }
 
-    public function testParseIgnoresRowsWithoutQuantityOrUnitPrice(): void
+    public function testParseKeepsZeroPriceRowsWithPositiveQuantity(): void
     {
         $filePath = $this->createXlsxFile([
             ['Art. ref', 'Description', 'EAN Unit', 'Units par / carton', 'Unit price'],
@@ -54,9 +54,13 @@ class OrderFormSpreadsheetParserTest extends TestCase
         $result = $parser->parse($filePath);
 
         self::assertTrue($result['success']);
-        self::assertCount(1, $result['lineItems']);
+        self::assertCount(2, $result['lineItems']);
         self::assertSame([], $result['failedRows']);
         self::assertSame('AR-100', $result['lineItems'][0]['articleRef']);
+        self::assertSame('AR-500', $result['lineItems'][1]['articleRef']);
+        self::assertSame(2.0, $result['lineItems'][1]['quantity']);
+        self::assertSame(0.0, $result['lineItems'][1]['unitPrice']);
+        self::assertSame(0.0, $result['lineItems'][1]['lineTotal']);
     }
 
     public function testParseIgnoresZeroQuantityButRejectsNegativeQuantity(): void
