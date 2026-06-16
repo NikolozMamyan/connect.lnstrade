@@ -172,13 +172,16 @@ class ErpOrderExportService
     {
         $properties = isset($dealData['properties']) && is_array($dealData['properties']) ? $dealData['properties'] : [];
         $dateCommande = $this->normalizeErpDate($properties['createdate'] ?? null) ?? (new \DateTimeImmutable())->format('Y-m-d');
+        $dateLivraison = $this->normalizeIsoDate($properties['expected_delivery_date'] ?? null)
+            ?? $this->normalizeIsoDate($properties['closedate'] ?? null)
+            ?? $dateCommande;
         $ownerFirstName = $owner['firstname'];
         $ownerName = $owner['lastname'];
 
         $order = [
             'numClient' => $numClient,
             'dateCommande' => $dateCommande,
-            'dateLivraison' => '',
+            'dateLivraison' => $dateLivraison,
             'referenceCommande' => trim((string) (($properties['order_reference'] ?? null) ?: '')),
             'statut' => 'Saisi',
             'modeExpedition' => 'Standard',
@@ -283,6 +286,19 @@ class ErpOrderExportService
         }
 
         return $lines;
+    }
+
+    private function normalizeIsoDate(mixed $value): ?string
+    {
+        if (!is_string($value) || trim($value) === '') {
+            return null;
+        }
+
+        try {
+            return (new \DateTimeImmutable($value))->format('Y-m-d');
+        } catch (\Throwable) {
+            return null;
+        }
     }
 
     private function normalizeErpDate(mixed $value): ?string

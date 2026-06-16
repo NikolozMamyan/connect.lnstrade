@@ -171,7 +171,7 @@ class ErpOrderExportServiceTest extends TestCase
         self::assertContains('payment_term', $requestedDealProperties);
         self::assertSame('Standard', $sageOrderPayload['modeExpedition']);
         self::assertSame('DDP - Rendu droits acquittés', $sageOrderPayload['condLivraison']);
-        self::assertSame('', $sageOrderPayload['dateLivraison']);
+        self::assertSame('2026-07-15', $sageOrderPayload['dateLivraison']);
         self::assertSame('REF-ORDER-2026', $sageOrderPayload['referenceCommande']);
         self::assertSame(str_repeat('A', 69), $sageOrderPayload['instructionDeLivraison']);
         self::assertSame(['Sous-traitance' => 'OUI'], $sageOrderPayload['champsLibres']);
