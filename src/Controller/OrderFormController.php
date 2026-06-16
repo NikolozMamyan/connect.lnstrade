@@ -15,6 +15,8 @@ use Symfony\Component\Validator\Validator\ValidatorInterface;
 
 class OrderFormController extends AbstractController
 {
+    private const SUBMIT_PASSWORD = '265602';
+
     #[Route('/order-form/submit', name: 'order_form_submit', methods: ['GET', 'POST'])]
     public function submit(
         Request $request,
@@ -26,6 +28,13 @@ class OrderFormController extends AbstractController
             return $this->render('order_form/submit.html.twig', [
                 'commerciaux' => $commercialRepository->findActiveOrdered(),
             ]);
+        }
+
+        if ((string) $request->request->get('orderFormPassword', '') !== self::SUBMIT_PASSWORD) {
+            return new JsonResponse([
+                'success' => false,
+                'errors' => [['field' => 'orderFormPassword', 'message' => 'Mot de passe invalide.']],
+            ], Response::HTTP_UNPROCESSABLE_ENTITY);
         }
 
         $orderForm = new OrderForm();

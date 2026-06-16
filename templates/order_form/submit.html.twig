@@ -484,11 +484,24 @@
                 }
 
                 clearErrors();
+
+                const orderFormPassword = window.prompt('Renseignez un mot de passe');
+                if (orderFormPassword === null) {
+                    flash('Soumission annulee.', 'warning');
+                    return;
+                }
+
+                if (orderFormPassword.trim() === '') {
+                    flash('Mot de passe obligatoire.', 'error');
+                    return;
+                }
+
                 setSubmitting(true);
 
                 const payload = new FormData();
                 payload.set('dealType', state.dealType);
                 payload.set('commercialId', state.selectedCommercialId);
+                payload.set('orderFormPassword', orderFormPassword.trim());
 
                 if (state.dealType === 'nouveau') {
                     payload.set('enterpriseId', state.enterpriseId);
