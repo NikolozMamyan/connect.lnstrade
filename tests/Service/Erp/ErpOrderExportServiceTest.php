@@ -68,6 +68,7 @@ class ErpOrderExportServiceTest extends TestCase
                         'id' => '12345',
                         'properties' => [
                             'dealname' => 'Commande test',
+                            'order_reference' => 'REF-ORDER-2026',
                             'createdate' => '2026-06-01T10:30:00Z',
                             'closedate' => '2026-06-30T00:00:00Z',
                             'hubspot_owner_id' => 'owner-1',
@@ -163,13 +164,15 @@ class ErpOrderExportServiceTest extends TestCase
         $result = $service->sendDealToErp('12345');
 
         self::assertContains('incoterm', $requestedDealProperties);
+        self::assertContains('order_reference', $requestedDealProperties);
         self::assertContains('expected_delivery_date', $requestedDealProperties);
         self::assertContains('delivery_information', $requestedDealProperties);
         self::assertContains('subcontracting', $requestedDealProperties);
         self::assertContains('payment_term', $requestedDealProperties);
         self::assertSame('Standard', $sageOrderPayload['modeExpedition']);
         self::assertSame('DDP - Rendu droits acquittés', $sageOrderPayload['condLivraison']);
-        self::assertSame('2026-07-15', $sageOrderPayload['dateLivraison']);
+        self::assertSame('', $sageOrderPayload['dateLivraison']);
+        self::assertSame('REF-ORDER-2026', $sageOrderPayload['referenceCommande']);
         self::assertSame(str_repeat('A', 69), $sageOrderPayload['instructionDeLivraison']);
         self::assertSame(['Sous-traitance' => 'OUI'], $sageOrderPayload['champsLibres']);
         self::assertSame('A 60 jours net', $sageOrderPayload['modeleReglement']);
