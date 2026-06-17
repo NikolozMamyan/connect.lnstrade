@@ -45,7 +45,7 @@ class FluxWebhookController extends AbstractController
 
         $events = $this->normalizeEvents($payload);
         $companyIds = $this->extractEligibleCompanyIds($events);
-        $dealIds = $this->extractEligibleDealIds($events);
+        $dealEvents = $this->extractEligibleDealEvents($events);
         $processed = 0;
         $skipped = 0;
         $errors = [];
@@ -57,7 +57,7 @@ class FluxWebhookController extends AbstractController
             [
                 'events' => count($events),
                 'companiesDetected' => count($companyIds),
-                'dealsDetected' => count($dealIds),
+                'dealsDetected' => count($dealEvents),
                 'sample' => $events[0] ?? null,
             ]
         );
@@ -123,12 +123,27 @@ class FluxWebhookController extends AbstractController
             }
         }
 
-        foreach ($dealIds as $dealId) {
+        foreach ($dealEvents as $dealEvent) {
+            $dealId = $dealEvent['dealId'];
+            $hubspotEventId = $dealEvent['eventId'];
+
             try {
-                $erpResult = $erpOrderExportService->sendDealToErp($dealId);
+                $erpResult = $erpOrderExportService->sendDealToErp($dealId, $hubspotEventId);
 
                 if (($erpResult['skipped'] ?? false) === true) {
                     ++$skipped;
+
+                    $syncLogService->warning(
+                        'webhook',
+                        'Webhook HubSpot deal ignore',
+                        'L evenement HubSpot deal a deja ete pris en compte.',
+                        [
+                            'dealHubspotId' => $dealId,
+                            'hubspotEventId' => $hubspotEventId,
+                            'reason' => $erpResult['reason'] ?? null,
+                        ]
+                    );
+
                     continue;
                 }
 
@@ -140,6 +155,7 @@ class FluxWebhookController extends AbstractController
                     'Le deal HubSpot a ete prepare pour envoi ERP.',
                     [
                         'dealHubspotId' => $dealId,
+                        'hubspotEventId' => $hubspotEventId,
                         'action' => $erpResult['action'] ?? null,
                         'referenceCommande' => $erpResult['payload']['referenceCommande'] ?? null,
                         'numClient' => $erpResult['payload']['numClient'] ?? null,
@@ -151,12 +167,12 @@ class FluxWebhookController extends AbstractController
                     true,
                     $dealId,
                     $erpResult['payload'] ?? [],
-                    null,
-                    (string) ($erpResult['action'] ?? 'create')
+                    null
                 );
             } catch (\Throwable $e) {
                 $errors[] = [
                     'dealHubspotId' => $dealId,
+                    'hubspotEventId' => $hubspotEventId,
                     'message' => $e->getMessage(),
                 ];
 
@@ -166,6 +182,7 @@ class FluxWebhookController extends AbstractController
                     'Le traitement du webhook HubSpot a echoue pour un deal.',
                     [
                         'dealHubspotId' => $dealId,
+                        'hubspotEventId' => $hubspotEventId,
                         'error' => $e->getMessage(),
                     ]
                 );
@@ -175,8 +192,7 @@ class FluxWebhookController extends AbstractController
                     false,
                     $dealId,
                     [],
-                    $e->getMessage(),
-                    'create'
+                    $e->getMessage()
                 );
             }
         }
@@ -189,7 +205,7 @@ class FluxWebhookController extends AbstractController
                 [
                     'events' => count($events),
                     'companiesDetected' => count($companyIds),
-                    'dealsDetected' => count($dealIds),
+                    'dealsDetected' => count($dealEvents),
                     'processed' => $processed,
                     'skipped' => $skipped,
                     'errors' => count($errors),
@@ -237,6 +253,8 @@ class FluxWebhookController extends AbstractController
         foreach ($events as $event) {
             $propertyName = mb_strtolower(trim((string) ($event['propertyName'] ?? '')));
             $propertyValue = mb_strtolower(trim((string) ($event['propertyValue'] ?? '')));
+            $objectType = mb_strtolower(trim((string) ($event['objectType'] ?? '')));
+            $subscriptionType = mb_strtolower(trim((string) ($event['subscriptionType'] ?? '')));
             $objectId = trim((string) ($event['objectId'] ?? ''));
 
             if ($propertyName !== 'sage_integration') {
@@ -268,18 +286,17 @@ class FluxWebhookController extends AbstractController
     /**
      * @param array<int, array<string, mixed>> $events
      *
-     * @return array<int, string>
+     * @return array<int, array{dealId: string, eventId: ?string}>
      */
-    private function extractEligibleDealIds(array $events): array
+    private function extractEligibleDealEvents(array $events): array
     {
-        $dealIds = [];
+        $dealEvents = [];
 
         foreach ($events as $event) {
             $propertyName = mb_strtolower(trim((string) ($event['propertyName'] ?? '')));
             $propertyValue = mb_strtolower(trim((string) ($event['propertyValue'] ?? '')));
-            $objectType = mb_strtolower(trim((string) ($event['objectType'] ?? '')));
-            $subscriptionType = mb_strtolower(trim((string) ($event['subscriptionType'] ?? '')));
             $objectId = trim((string) ($event['objectId'] ?? ''));
+            $eventId = trim((string) ($event['eventId'] ?? ''));
 
             if ($propertyName !== 'integrate_into_sage') {
                 continue;
@@ -293,10 +310,14 @@ class FluxWebhookController extends AbstractController
                 continue;
             }
 
-            $dealIds[$objectId] = $objectId;
+            $key = $eventId !== '' ? $eventId : $objectId;
+            $dealEvents[$key] = [
+                'dealId' => $objectId,
+                'eventId' => $eventId !== '' ? $eventId : null,
+            ];
         }
 
-        return array_values($dealIds);
+        return array_values($dealEvents);
     }
 
     private function isTruthyWebhookValue(string $propertyValue): bool
@@ -313,16 +334,14 @@ class FluxWebhookController extends AbstractController
         string $dealId,
         array $payload,
         ?string $errorMessage,
-        string $action = 'create',
     ): void {
-        $successVerb = $action === 'update' ? 'mis a jour' : 'cree';
         $subject = $success
-            ? sprintf('[LNS Connecteur] Bon de commande %s pour le deal %s', $successVerb, $dealId)
+            ? sprintf('[LNS Connecteur] Bon de commande cree pour le deal %s', $dealId)
             : sprintf('[LNS Connecteur] Echec creation bon de commande pour le deal %s', $dealId);
 
         $lines = [
             $success
-                ? sprintf('Le webhook deal HubSpot a %s le bon de commande ERP avec succes.', $successVerb)
+                ? 'Le webhook deal HubSpot a cree le bon de commande ERP avec succes.'
                 : 'Le webhook deal HubSpot a echoue lors de la creation du bon de commande ERP.',
             '',
             sprintf('Deal HubSpot: %s', $dealId),

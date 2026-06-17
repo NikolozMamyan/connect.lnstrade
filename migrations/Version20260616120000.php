@@ -18,6 +18,7 @@ final class Version20260616120000 extends AbstractMigration
     {
         $table = $schema->createTable('erp_order_export');
         $table->addColumn('id', 'integer', ['autoincrement' => true]);
+        $table->addColumn('hubspot_event_id', 'string', ['length' => 64]);
         $table->addColumn('hubspot_deal_id', 'string', ['length' => 64]);
         $table->addColumn('status', 'string', ['length' => 16]);
         $table->addColumn('reference_commande', 'string', ['length' => 255, 'notnull' => false]);
@@ -29,53 +30,9 @@ final class Version20260616120000 extends AbstractMigration
         $table->addColumn('created_at', 'datetime_immutable');
         $table->addColumn('updated_at', 'datetime_immutable');
         $table->setPrimaryKey(['id']);
-        $table->addUniqueIndex(['hubspot_deal_id'], 'uniq_erp_order_export_deal');
+        $table->addUniqueIndex(['hubspot_event_id'], 'uniq_erp_order_export_event');
+        $table->addIndex(['hubspot_deal_id', 'created_at'], 'idx_erp_order_export_deal_created');
         $table->addIndex(['status', 'updated_at'], 'idx_erp_order_export_status_updated');
-
-        $this->addSql(<<<'SQL'
-            INSERT IGNORE INTO erp_order_export (
-                hubspot_deal_id,
-                status,
-                reference_commande,
-                num_client,
-                payload,
-                erp_response,
-                error_message,
-                sent_at,
-                created_at,
-                updated_at
-            )
-            SELECT
-                exported.deal_id,
-                'sent',
-                exported.reference_commande,
-                exported.num_client,
-                JSON_OBJECT(
-                    'referenceCommande', exported.reference_commande,
-                    'numClient', exported.num_client
-                ),
-                JSON_OBJECT('backfilledFromSyncLog', true),
-                NULL,
-                exported.last_created_at,
-                exported.first_created_at,
-                exported.last_created_at
-            FROM (
-                SELECT
-                    JSON_UNQUOTE(JSON_EXTRACT(context, '$.dealHubspotId')) AS deal_id,
-                    MAX(JSON_UNQUOTE(JSON_EXTRACT(context, '$.referenceCommande'))) AS reference_commande,
-                    MAX(JSON_UNQUOTE(JSON_EXTRACT(context, '$.numClient'))) AS num_client,
-                    MIN(created_at) AS first_created_at,
-                    MAX(created_at) AS last_created_at
-                FROM sync_log
-                WHERE flux_key = 'webhook'
-                    AND level = 'success'
-                    AND title = 'Webhook HubSpot deal traite'
-                    AND context IS NOT NULL
-                    AND JSON_UNQUOTE(JSON_EXTRACT(context, '$.dealHubspotId')) IS NOT NULL
-                    AND JSON_UNQUOTE(JSON_EXTRACT(context, '$.dealHubspotId')) <> ''
-                GROUP BY deal_id
-            ) exported
-        SQL);
     }
 
     public function down(Schema $schema): void

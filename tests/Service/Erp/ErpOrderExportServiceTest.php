@@ -161,8 +161,8 @@ class ErpOrderExportServiceTest extends TestCase
         $exportRepository = $this->createMock(ErpOrderExportRepository::class);
         $exportRepository
             ->expects($this->once())
-            ->method('findOneByHubspotDealId')
-            ->with('12345')
+            ->method('findOneByHubspotEventId')
+            ->with('event-1')
             ->willReturn(null);
         $entityManager = $this->createMock(EntityManagerInterface::class);
         $entityManager->expects($this->once())->method('persist')->with(self::isInstanceOf(ErpOrderExport::class));
@@ -178,7 +178,7 @@ class ErpOrderExportServiceTest extends TestCase
             new NullLogger(),
         );
 
-        $result = $service->sendDealToErp('12345');
+        $result = $service->sendDealToErp('12345', 'event-1');
 
         self::assertContains('incoterm', $requestedDealProperties);
         self::assertContains('order_reference', $requestedDealProperties);
@@ -197,9 +197,9 @@ class ErpOrderExportServiceTest extends TestCase
         self::assertSame($sageOrderPayload, $result['payload']);
     }
 
-    public function testSendDealSkipsAlreadySentExport(): void
+    public function testSendDealSkipsAlreadyProcessedEvent(): void
     {
-        $existingExport = (new ErpOrderExport('12345'))->markSent(
+        $existingExport = (new ErpOrderExport('event-1', '12345'))->markSent(
             [
                 'referenceCommande' => 'REF-ORDER-2026',
                 'numClient' => 'CLI-001',
@@ -208,10 +208,10 @@ class ErpOrderExportServiceTest extends TestCase
             ['success' => true]
         );
         $hubSpotHttpClient = new MockHttpClient(static function (): MockResponse {
-            self::fail('HubSpot must not be called for an already sent export.');
+            self::fail('HubSpot must not be called for an already processed event.');
         });
         $sageHttpClient = new MockHttpClient(static function (): MockResponse {
-            self::fail('Sage must not be called for an already sent export.');
+            self::fail('Sage must not be called for an already processed event.');
         });
         $parameters = new ParameterBag([
             'base_uri_hubspot' => 'https://hubspot.test',
@@ -223,8 +223,8 @@ class ErpOrderExportServiceTest extends TestCase
         $exportRepository = $this->createMock(ErpOrderExportRepository::class);
         $exportRepository
             ->expects($this->once())
-            ->method('findOneByHubspotDealId')
-            ->with('12345')
+            ->method('findOneByHubspotEventId')
+            ->with('event-1')
             ->willReturn($existingExport);
         $entityManager = $this->createMock(EntityManagerInterface::class);
         $entityManager->expects($this->never())->method('persist');
@@ -240,22 +240,23 @@ class ErpOrderExportServiceTest extends TestCase
             new NullLogger(),
         );
 
-        $result = $service->sendDealToErp('12345');
+        $result = $service->sendDealToErp('12345', 'event-1');
 
         self::assertTrue($result['skipped']);
-        self::assertSame('already_sent', $result['reason']);
+        self::assertSame('event_already_processed', $result['reason']);
         self::assertSame('12345', $result['dealHubspotId']);
+        self::assertSame('event-1', $result['hubspotEventId']);
         self::assertSame('REF-ORDER-2026', $result['payload']['referenceCommande']);
     }
 
-    public function testSendDealSkipsAlreadyProcessingExport(): void
+    public function testSendDealSkipsFailedEventWithoutRetry(): void
     {
-        $existingExport = new ErpOrderExport('12345');
+        $existingExport = (new ErpOrderExport('event-1', '12345'))->markFailed('Erreur API Sage [400]');
         $hubSpotHttpClient = new MockHttpClient(static function (): MockResponse {
-            self::fail('HubSpot must not be called for an already processing export.');
+            self::fail('HubSpot must not be called for a failed event retry.');
         });
         $sageHttpClient = new MockHttpClient(static function (): MockResponse {
-            self::fail('Sage must not be called for an already processing export.');
+            self::fail('Sage must not be called for a failed event retry.');
         });
         $parameters = new ParameterBag([
             'base_uri_hubspot' => 'https://hubspot.test',
@@ -267,8 +268,8 @@ class ErpOrderExportServiceTest extends TestCase
         $exportRepository = $this->createMock(ErpOrderExportRepository::class);
         $exportRepository
             ->expects($this->once())
-            ->method('findOneByHubspotDealId')
-            ->with('12345')
+            ->method('findOneByHubspotEventId')
+            ->with('event-1')
             ->willReturn($existingExport);
         $entityManager = $this->createMock(EntityManagerInterface::class);
         $entityManager->expects($this->never())->method('persist');
@@ -284,17 +285,16 @@ class ErpOrderExportServiceTest extends TestCase
             new NullLogger(),
         );
 
-        $result = $service->sendDealToErp('12345');
+        $result = $service->sendDealToErp('12345', 'event-1');
 
         self::assertTrue($result['skipped']);
-        self::assertSame('already_processing', $result['reason']);
+        self::assertSame('event_already_processed', $result['reason']);
         self::assertSame('12345', $result['dealHubspotId']);
+        self::assertSame('event-1', $result['hubspotEventId']);
     }
 
-    public function testSendDealRetriesTimedOutProcessingExportAsCreate(): void
+    public function testSendDealAllowsNewEventForSameDealAsNewSageOrder(): void
     {
-        $existingExport = new ErpOrderExport('12345');
-        $this->setExportUpdatedAt($existingExport, new \DateTimeImmutable('-20 minutes'));
         $sageOrderPayload = [];
         $hubSpotHttpClient = $this->createHubSpotHttpClientForOrder();
         $sageHttpClient = new MockHttpClient(
@@ -317,65 +317,17 @@ class ErpOrderExportServiceTest extends TestCase
         $exportRepository = $this->createMock(ErpOrderExportRepository::class);
         $exportRepository
             ->expects($this->once())
-            ->method('findOneByHubspotDealId')
-            ->with('12345')
-            ->willReturn($existingExport);
+            ->method('findOneByHubspotEventId')
+            ->with('event-2')
+            ->willReturn(null);
         $entityManager = $this->createMock(EntityManagerInterface::class);
-        $entityManager->expects($this->never())->method('persist');
+        $entityManager->expects($this->once())->method('persist')->with(self::isInstanceOf(ErpOrderExport::class));
         $entityManager->expects($this->exactly(2))->method('flush');
 
         $service = $this->createOrderExportService($hubSpotHttpClient, $sageHttpClient, $exportRepository, $entityManager);
-        $result = $service->sendDealToErp('12345');
+        $result = $service->sendDealToErp('12345', 'event-2');
 
         self::assertSame('create', $result['action']);
-        self::assertSame('sent', $existingExport->getStatus());
-        self::assertSame('REF-ORDER-2026', $sageOrderPayload['referenceCommande']);
-    }
-
-    public function testSendDealUpdatesSageWhenPreviouslySentExportWasMarkedFailed(): void
-    {
-        $existingExport = (new ErpOrderExport('12345'))->markSent(
-            [
-                'referenceCommande' => 'REF-ORDER-2026',
-                'numClient' => 'CLI-001',
-            ],
-            ['success' => true]
-        );
-        $existingExport->markFailed('Deal HubSpot existant resoumis : export Sage a remplacer.');
-        $sageOrderPayload = [];
-        $hubSpotHttpClient = $this->createHubSpotHttpClientForOrder();
-        $sageHttpClient = new MockHttpClient(
-            static function (string $method, string $url, array $options) use (&$sageOrderPayload): MockResponse {
-                $path = parse_url($url, PHP_URL_PATH);
-
-                if ($method === 'POST' && $path === '/auth/login') {
-                    return self::jsonResponse(['accessToken' => 'test-token']);
-                }
-
-                if ($method === 'PATCH' && $path === '/order') {
-                    $sageOrderPayload = json_decode((string) ($options['body'] ?? ''), true, 512, JSON_THROW_ON_ERROR);
-
-                    return self::jsonResponse(['success' => true, 'updated' => true]);
-                }
-
-                self::fail(sprintf('Unexpected Sage request: %s %s', $method, $url));
-            }
-        );
-        $exportRepository = $this->createMock(ErpOrderExportRepository::class);
-        $exportRepository
-            ->expects($this->once())
-            ->method('findOneByHubspotDealId')
-            ->with('12345')
-            ->willReturn($existingExport);
-        $entityManager = $this->createMock(EntityManagerInterface::class);
-        $entityManager->expects($this->never())->method('persist');
-        $entityManager->expects($this->exactly(2))->method('flush');
-
-        $service = $this->createOrderExportService($hubSpotHttpClient, $sageHttpClient, $exportRepository, $entityManager);
-        $result = $service->sendDealToErp('12345');
-
-        self::assertSame('update', $result['action']);
-        self::assertSame('sent', $existingExport->getStatus());
         self::assertSame('REF-ORDER-2026', $sageOrderPayload['referenceCommande']);
     }
 
@@ -488,9 +440,4 @@ class ErpOrderExportServiceTest extends TestCase
         );
     }
 
-    private function setExportUpdatedAt(ErpOrderExport $export, \DateTimeImmutable $updatedAt): void
-    {
-        $property = new \ReflectionProperty(ErpOrderExport::class, 'updatedAt');
-        $property->setValue($export, $updatedAt);
-    }
 }

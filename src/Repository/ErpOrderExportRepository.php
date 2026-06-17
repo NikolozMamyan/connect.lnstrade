@@ -16,8 +16,8 @@ class ErpOrderExportRepository extends ServiceEntityRepository
         parent::__construct($registry, ErpOrderExport::class);
     }
 
-    public function findOneByHubspotDealId(string $hubspotDealId): ?ErpOrderExport
+    public function findOneByHubspotEventId(string $hubspotEventId): ?ErpOrderExport
     {
-        return $this->findOneBy(['hubspotDealId' => trim($hubspotDealId)]);
+        return $this->findOneBy(['hubspotEventId' => trim($hubspotEventId)]);
     }
 }

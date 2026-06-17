@@ -8,7 +8,8 @@ use Doctrine\ORM\Mapping as ORM;
 
 #[ORM\Entity(repositoryClass: ErpOrderExportRepository::class)]
 #[ORM\Table(name: 'erp_order_export')]
-#[ORM\UniqueConstraint(name: 'uniq_erp_order_export_deal', columns: ['hubspot_deal_id'])]
+#[ORM\UniqueConstraint(name: 'uniq_erp_order_export_event', columns: ['hubspot_event_id'])]
+#[ORM\Index(columns: ['hubspot_deal_id', 'created_at'], name: 'idx_erp_order_export_deal_created')]
 #[ORM\Index(columns: ['status', 'updated_at'], name: 'idx_erp_order_export_status_updated')]
 class ErpOrderExport
 {
@@ -20,6 +21,9 @@ class ErpOrderExport
     #[ORM\GeneratedValue]
     #[ORM\Column]
     private ?int $id = null;
+
+    #[ORM\Column(name: 'hubspot_event_id', length: 64)]
+    private string $hubspotEventId;
 
     #[ORM\Column(name: 'hubspot_deal_id', length: 64)]
     private string $hubspotDealId;
@@ -51,8 +55,9 @@ class ErpOrderExport
     #[ORM\Column(name: 'updated_at', type: Types::DATETIME_IMMUTABLE)]
     private \DateTimeImmutable $updatedAt;
 
-    public function __construct(string $hubspotDealId)
+    public function __construct(string $hubspotEventId, string $hubspotDealId)
     {
+        $this->hubspotEventId = trim($hubspotEventId);
         $this->hubspotDealId = trim($hubspotDealId);
         $this->createdAt = new \DateTimeImmutable();
         $this->updatedAt = new \DateTimeImmutable();
@@ -61,6 +66,11 @@ class ErpOrderExport
     public function getId(): ?int
     {
         return $this->id;
+    }
+
+    public function getHubspotEventId(): string
+    {
+        return $this->hubspotEventId;
     }
 
     public function getHubspotDealId(): string

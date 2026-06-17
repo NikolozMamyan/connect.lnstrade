@@ -13,8 +13,6 @@ use Symfony\Component\Lock\LockFactory;
 
 class ErpOrderExportService
 {
-    private const PROCESSING_TIMEOUT = '-15 minutes';
-
     private const DELIVERY_INSTRUCTION_MAX_LENGTH = 69;
 
     private const INCOTERM_TO_SAGE_DELIVERY_CONDITION = [
@@ -42,26 +40,31 @@ class ErpOrderExportService
     ) {
     }
 
-    public function sendDealToErp(string $hubspotDealId): array
+    public function sendDealToErp(string $hubspotDealId, ?string $hubspotEventId = null): array
     {
         $hubspotDealId = trim($hubspotDealId);
+        $hubspotEventId = trim((string) $hubspotEventId);
 
         if ($hubspotDealId === '') {
             throw new \RuntimeException('Identifiant deal HubSpot manquant pour l export ERP.');
         }
 
-        $lock = $this->lockFactory->createLock(sprintf('erp-order-export-%s', $hubspotDealId), 300);
+        $lockResource = $hubspotEventId !== ''
+            ? sprintf('erp-order-export-event-%s', $hubspotEventId)
+            : sprintf('erp-order-export-deal-%s', $hubspotDealId);
+        $lock = $this->lockFactory->createLock($lockResource, 300);
 
         if (!$lock->acquire()) {
             return [
                 'skipped' => true,
-                'reason' => 'already_processing',
+                'reason' => 'event_already_processing',
                 'dealHubspotId' => $hubspotDealId,
+                'hubspotEventId' => $hubspotEventId !== '' ? $hubspotEventId : null,
             ];
         }
 
         try {
-            $reservation = $this->reserveExport($hubspotDealId);
+            $reservation = $this->reserveExport($hubspotDealId, $hubspotEventId);
 
             if (($reservation['skipped'] ?? false) === true) {
                 return $reservation;
@@ -72,7 +75,7 @@ class ErpOrderExportService
             try {
                 return $this->sendReservedDealToErp($hubspotDealId, $export);
             } catch (\Throwable $exception) {
-                if (!$export->isSent()) {
+                if ($export instanceof ErpOrderExport && !$export->isSent()) {
                     $this->markExportFailed($export, $exception->getMessage());
                 }
 
@@ -84,35 +87,24 @@ class ErpOrderExportService
     }
 
     /**
-     * @return array{skipped: false, export: ErpOrderExport}|array{skipped: true, reason: string, payload: array<string, mixed>, response: ?array, dealHubspotId: string}
+     * @return array{skipped: false, export: ?ErpOrderExport}|array{skipped: true, reason: string, payload: array<string, mixed>, response: ?array, dealHubspotId: string, hubspotEventId: ?string}
      */
-    private function reserveExport(string $hubspotDealId): array
+    private function reserveExport(string $hubspotDealId, string $hubspotEventId): array
     {
-        $export = $this->erpOrderExportRepository->findOneByHubspotDealId($hubspotDealId);
-
-        if ($export instanceof ErpOrderExport) {
-            if ($export->isSent()) {
-                return $this->skippedExportResult($export, 'already_sent', $hubspotDealId);
-            }
-
-            if ($export->isProcessing()) {
-                if (!$this->isProcessingTimedOut($export)) {
-                    return $this->skippedExportResult($export, 'already_processing', $hubspotDealId);
-                }
-
-                $export->markFailed('Export ERP bloque en processing, relance automatique apres timeout.');
-            }
-
-            $export->markProcessing();
-            $this->entityManager->flush();
-
+        if ($hubspotEventId === '') {
             return [
                 'skipped' => false,
-                'export' => $export,
+                'export' => null,
             ];
         }
 
-        $export = new ErpOrderExport($hubspotDealId);
+        $export = $this->erpOrderExportRepository->findOneByHubspotEventId($hubspotEventId);
+
+        if ($export instanceof ErpOrderExport) {
+            return $this->skippedExportResult($export, 'event_already_processed', $hubspotDealId);
+        }
+
+        $export = new ErpOrderExport($hubspotEventId, $hubspotDealId);
 
         $this->entityManager->persist($export);
         $this->entityManager->flush();
@@ -124,7 +116,7 @@ class ErpOrderExportService
     }
 
     /**
-     * @return array{skipped: true, reason: string, payload: array<string, mixed>, response: ?array, dealHubspotId: string}
+     * @return array{skipped: true, reason: string, payload: array<string, mixed>, response: ?array, dealHubspotId: string, hubspotEventId: ?string}
      */
     private function skippedExportResult(ErpOrderExport $export, string $reason, string $hubspotDealId): array
     {
@@ -134,10 +126,11 @@ class ErpOrderExportService
             'payload' => $export->getPayload() ?? [],
             'response' => $export->getErpResponse(),
             'dealHubspotId' => $hubspotDealId,
+            'hubspotEventId' => $export->getHubspotEventId(),
         ];
     }
 
-    private function sendReservedDealToErp(string $hubspotDealId, ErpOrderExport $export): array
+    private function sendReservedDealToErp(string $hubspotDealId, ?ErpOrderExport $export): array
     {
         $dealData = $this->hubSpotClient->getObject('deals', $hubspotDealId, [
             'properties' => [
@@ -170,14 +163,14 @@ class ErpOrderExportService
             'dealHubspotId' => $hubspotDealId,
             'referenceCommande' => $order['referenceCommande'] ?? null,
             'numClient' => $order['numClient'] ?? null,
-            'action' => $export->getSentAt() instanceof \DateTimeImmutable ? 'update' : 'create',
+            'action' => 'create',
             'modeExpedition' => $order['modeExpedition'] ?? null,
             'condLivraison' => $order['condLivraison'] ?? null,
             'modeleReglement' => $order['modeleReglement'] ?? null,
         ]);
 
         try {
-            $sageResult = $this->sendOrderToSage($order, $export);
+            $sageResult = $this->sendOrderToSage($order);
             $response = $sageResult['response'];
         } catch (\Throwable $exception) {
             $wrappedException = new \RuntimeException(sprintf(
@@ -189,8 +182,10 @@ class ErpOrderExportService
             throw $wrappedException;
         }
 
-        $export->markSent($order, $response);
-        $this->entityManager->flush();
+        if ($export instanceof ErpOrderExport) {
+            $export->markSent($order, $response);
+            $this->entityManager->flush();
+        }
 
         return [
             'skipped' => false,
@@ -206,24 +201,13 @@ class ErpOrderExportService
      *
      * @return array{action: string, response: array<string, mixed>}
      */
-    private function sendOrderToSage(array $order, ErpOrderExport $export): array
+    private function sendOrderToSage(array $order): array
     {
-        if ($export->getSentAt() instanceof \DateTimeImmutable) {
-            return [
-                'action' => 'update',
-                'response' => $this->sageClient->patch('/order', $order),
-            ];
-        }
-
+        // TODO: when Sage exposes order update support, switch existing orders to PATCH here.
         return [
             'action' => 'create',
             'response' => $this->sageClient->post('/order', $order),
         ];
-    }
-
-    private function isProcessingTimedOut(ErpOrderExport $export): bool
-    {
-        return $export->getUpdatedAt() <= new \DateTimeImmutable(self::PROCESSING_TIMEOUT);
     }
 
     private function markExportFailed(ErpOrderExport $export, string $errorMessage): void
