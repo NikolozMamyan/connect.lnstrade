@@ -140,6 +140,7 @@ class FluxWebhookController extends AbstractController
                     'Le deal HubSpot a ete prepare pour envoi ERP.',
                     [
                         'dealHubspotId' => $dealId,
+                        'action' => $erpResult['action'] ?? null,
                         'referenceCommande' => $erpResult['payload']['referenceCommande'] ?? null,
                         'numClient' => $erpResult['payload']['numClient'] ?? null,
                     ]
@@ -150,7 +151,8 @@ class FluxWebhookController extends AbstractController
                     true,
                     $dealId,
                     $erpResult['payload'] ?? [],
-                    null
+                    null,
+                    (string) ($erpResult['action'] ?? 'create')
                 );
             } catch (\Throwable $e) {
                 $errors[] = [
@@ -173,7 +175,8 @@ class FluxWebhookController extends AbstractController
                     false,
                     $dealId,
                     [],
-                    $e->getMessage()
+                    $e->getMessage(),
+                    'create'
                 );
             }
         }
@@ -310,14 +313,16 @@ class FluxWebhookController extends AbstractController
         string $dealId,
         array $payload,
         ?string $errorMessage,
+        string $action = 'create',
     ): void {
+        $successVerb = $action === 'update' ? 'mis a jour' : 'cree';
         $subject = $success
-            ? sprintf('[LNS Connecteur] Bon de commande cree pour le deal %s', $dealId)
+            ? sprintf('[LNS Connecteur] Bon de commande %s pour le deal %s', $successVerb, $dealId)
             : sprintf('[LNS Connecteur] Echec creation bon de commande pour le deal %s', $dealId);
 
         $lines = [
             $success
-                ? 'Le webhook deal HubSpot a cree le bon de commande ERP avec succes.'
+                ? sprintf('Le webhook deal HubSpot a %s le bon de commande ERP avec succes.', $successVerb)
                 : 'Le webhook deal HubSpot a echoue lors de la creation du bon de commande ERP.',
             '',
             sprintf('Deal HubSpot: %s', $dealId),

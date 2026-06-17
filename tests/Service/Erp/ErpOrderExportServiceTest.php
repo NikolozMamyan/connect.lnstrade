@@ -193,6 +193,7 @@ class ErpOrderExportServiceTest extends TestCase
         self::assertSame(str_repeat('A', 69), $sageOrderPayload['instructionDeLivraison']);
         self::assertSame(['Sous-traitance' => 'OUI'], $sageOrderPayload['champsLibres']);
         self::assertSame('A 60 jours net', $sageOrderPayload['modeleReglement']);
+        self::assertSame('create', $result['action']);
         self::assertSame($sageOrderPayload, $result['payload']);
     }
 
@@ -290,6 +291,94 @@ class ErpOrderExportServiceTest extends TestCase
         self::assertSame('12345', $result['dealHubspotId']);
     }
 
+    public function testSendDealRetriesTimedOutProcessingExportAsCreate(): void
+    {
+        $existingExport = new ErpOrderExport('12345');
+        $this->setExportUpdatedAt($existingExport, new \DateTimeImmutable('-20 minutes'));
+        $sageOrderPayload = [];
+        $hubSpotHttpClient = $this->createHubSpotHttpClientForOrder();
+        $sageHttpClient = new MockHttpClient(
+            static function (string $method, string $url, array $options) use (&$sageOrderPayload): MockResponse {
+                $path = parse_url($url, PHP_URL_PATH);
+
+                if ($method === 'POST' && $path === '/auth/login') {
+                    return self::jsonResponse(['accessToken' => 'test-token']);
+                }
+
+                if ($method === 'POST' && $path === '/order') {
+                    $sageOrderPayload = json_decode((string) ($options['body'] ?? ''), true, 512, JSON_THROW_ON_ERROR);
+
+                    return self::jsonResponse(['success' => true]);
+                }
+
+                self::fail(sprintf('Unexpected Sage request: %s %s', $method, $url));
+            }
+        );
+        $exportRepository = $this->createMock(ErpOrderExportRepository::class);
+        $exportRepository
+            ->expects($this->once())
+            ->method('findOneByHubspotDealId')
+            ->with('12345')
+            ->willReturn($existingExport);
+        $entityManager = $this->createMock(EntityManagerInterface::class);
+        $entityManager->expects($this->never())->method('persist');
+        $entityManager->expects($this->exactly(2))->method('flush');
+
+        $service = $this->createOrderExportService($hubSpotHttpClient, $sageHttpClient, $exportRepository, $entityManager);
+        $result = $service->sendDealToErp('12345');
+
+        self::assertSame('create', $result['action']);
+        self::assertSame('sent', $existingExport->getStatus());
+        self::assertSame('REF-ORDER-2026', $sageOrderPayload['referenceCommande']);
+    }
+
+    public function testSendDealUpdatesSageWhenPreviouslySentExportWasMarkedFailed(): void
+    {
+        $existingExport = (new ErpOrderExport('12345'))->markSent(
+            [
+                'referenceCommande' => 'REF-ORDER-2026',
+                'numClient' => 'CLI-001',
+            ],
+            ['success' => true]
+        );
+        $existingExport->markFailed('Deal HubSpot existant resoumis : export Sage a remplacer.');
+        $sageOrderPayload = [];
+        $hubSpotHttpClient = $this->createHubSpotHttpClientForOrder();
+        $sageHttpClient = new MockHttpClient(
+            static function (string $method, string $url, array $options) use (&$sageOrderPayload): MockResponse {
+                $path = parse_url($url, PHP_URL_PATH);
+
+                if ($method === 'POST' && $path === '/auth/login') {
+                    return self::jsonResponse(['accessToken' => 'test-token']);
+                }
+
+                if ($method === 'PATCH' && $path === '/order') {
+                    $sageOrderPayload = json_decode((string) ($options['body'] ?? ''), true, 512, JSON_THROW_ON_ERROR);
+
+                    return self::jsonResponse(['success' => true, 'updated' => true]);
+                }
+
+                self::fail(sprintf('Unexpected Sage request: %s %s', $method, $url));
+            }
+        );
+        $exportRepository = $this->createMock(ErpOrderExportRepository::class);
+        $exportRepository
+            ->expects($this->once())
+            ->method('findOneByHubspotDealId')
+            ->with('12345')
+            ->willReturn($existingExport);
+        $entityManager = $this->createMock(EntityManagerInterface::class);
+        $entityManager->expects($this->never())->method('persist');
+        $entityManager->expects($this->exactly(2))->method('flush');
+
+        $service = $this->createOrderExportService($hubSpotHttpClient, $sageHttpClient, $exportRepository, $entityManager);
+        $result = $service->sendDealToErp('12345');
+
+        self::assertSame('update', $result['action']);
+        self::assertSame('sent', $existingExport->getStatus());
+        self::assertSame('REF-ORDER-2026', $sageOrderPayload['referenceCommande']);
+    }
+
     /**
      * @param array<string, mixed> $data
      */
@@ -299,5 +388,109 @@ class ErpOrderExportServiceTest extends TestCase
             json_encode($data, JSON_THROW_ON_ERROR),
             ['response_headers' => ['content-type' => 'application/json']]
         );
+    }
+
+    private function createOrderExportService(
+        MockHttpClient $hubSpotHttpClient,
+        MockHttpClient $sageHttpClient,
+        ErpOrderExportRepository $exportRepository,
+        EntityManagerInterface $entityManager,
+    ): ErpOrderExportService {
+        $parameters = new ParameterBag([
+            'base_uri_hubspot' => 'https://hubspot.test',
+            'hubspot_access' => 'hubspot-token',
+            'base_uri_sage' => 'https://sage.test',
+            'sage_username' => 'user',
+            'sage_password' => 'password',
+        ]);
+        $companyRepository = $this->createMock(HubspotCompanyRepository::class);
+        $companyRepository->expects($this->never())->method('findOneByHubspotId');
+
+        return new ErpOrderExportService(
+            new HubSpotClient($hubSpotHttpClient, $parameters),
+            $companyRepository,
+            $exportRepository,
+            $entityManager,
+            new SageClient($sageHttpClient, $parameters),
+            new LockFactory(new InMemoryStore()),
+            new NullLogger(),
+        );
+    }
+
+    private function createHubSpotHttpClientForOrder(): MockHttpClient
+    {
+        return new MockHttpClient(
+            static function (string $method, string $url): MockResponse {
+                self::assertSame('GET', $method);
+
+                $path = parse_url($url, PHP_URL_PATH);
+
+                if ($path === '/crm/objects/v3/deals/12345') {
+                    return self::jsonResponse([
+                        'id' => '12345',
+                        'properties' => [
+                            'dealname' => 'Commande test',
+                            'order_reference' => 'REF-ORDER-2026',
+                            'createdate' => '2026-06-01T10:30:00Z',
+                            'closedate' => '2026-06-30T00:00:00Z',
+                            'hubspot_owner_id' => 'owner-1',
+                            'incoterm' => 'DDP',
+                            'expected_delivery_date' => '2026-07-15',
+                            'delivery_information' => 'Instruction',
+                            'subcontracting' => 'Yes',
+                            'payment_term' => '60 days',
+                        ],
+                        'associations' => [
+                            'companies' => [
+                                'results' => [
+                                    ['id' => 'company-1'],
+                                ],
+                            ],
+                            'line_item' => [
+                                'results' => [
+                                    ['id' => 'line-1'],
+                                ],
+                            ],
+                        ],
+                    ]);
+                }
+
+                if ($path === '/crm/objects/v3/companies/company-1') {
+                    return self::jsonResponse([
+                        'id' => 'company-1',
+                        'properties' => [
+                            'id_erp' => 'CLI-001',
+                        ],
+                    ]);
+                }
+
+                if ($path === '/crm/v3/owners/owner-1') {
+                    return self::jsonResponse([
+                        'firstName' => 'Jean',
+                        'lastName' => 'Dupont',
+                    ]);
+                }
+
+                if ($path === '/crm/objects/v3/line_items/line-1') {
+                    return self::jsonResponse([
+                        'id' => 'line-1',
+                        'properties' => [
+                            'hs_sku' => 'ART-001',
+                            'name' => 'Article test',
+                            'price' => '12.50',
+                            'quantity' => '2',
+                        ],
+                    ]);
+                }
+
+                self::fail(sprintf('Unexpected HubSpot request: %s %s', $method, $url));
+            }
+        );
+    }
+
+    private function setExportUpdatedAt(ErpOrderExport $export, \DateTimeImmutable $updatedAt): void
+    {
+        $property = new \ReflectionProperty(ErpOrderExport::class, 'updatedAt');
+        $property->setValue($export, $updatedAt);
     }
 }

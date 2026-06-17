@@ -3,9 +3,12 @@
 namespace App\Tests\Service\HubSpot;
 
 use App\Entity\Commercial;
+use App\Entity\ErpOrderExport;
 use App\Entity\OrderForm;
+use App\Repository\ErpOrderExportRepository;
 use App\Service\HubSpot\HubSpotClient;
 use App\Service\HubSpot\HubspotOrderFormDealSyncService;
+use Doctrine\ORM\EntityManagerInterface;
 use PHPUnit\Framework\TestCase;
 
 class HubspotOrderFormDealSyncServiceTest extends TestCase
@@ -109,8 +112,23 @@ class HubspotOrderFormDealSyncServiceTest extends TestCase
         $deletedLineItemIds = [];
         $updatedDeals = [];
         $hubSpotClient = $this->createHubSpotClientForExistingDeal('France', $createdLineItems, $deletedLineItemIds, $updatedDeals);
+        $existingExport = (new ErpOrderExport('654321'))->markSent(
+            [
+                'referenceCommande' => 'REF-OLD',
+                'numClient' => 'ERP-123',
+            ],
+            ['success' => true]
+        );
+        $exportRepository = $this->createMock(ErpOrderExportRepository::class);
+        $exportRepository
+            ->expects($this->once())
+            ->method('findOneByHubspotDealId')
+            ->with('654321')
+            ->willReturn($existingExport);
+        $entityManager = $this->createMock(EntityManagerInterface::class);
+        $entityManager->expects($this->once())->method('flush');
 
-        $service = $this->createService($hubSpotClient);
+        $service = $this->createService($hubSpotClient, $exportRepository, $entityManager);
         $result = $service->sync($this->createExistingDealOrderForm(), [
             [
                 'articleRef' => 'AR-20',
@@ -125,6 +143,8 @@ class HubspotOrderFormDealSyncServiceTest extends TestCase
         self::assertCount(1, $createdLineItems);
         self::assertSame('115152086', $createdLineItems[0]['hs_tax_rate_group_id']);
         self::assertSame(3.0, $createdLineItems[0]['quantity']);
+        self::assertSame(ErpOrderExport::STATUS_FAILED, $existingExport->getStatus());
+        self::assertSame('Deal HubSpot existant resoumis : export Sage a remplacer.', $existingExport->getErrorMessage());
     }
 
     /**
@@ -360,7 +380,11 @@ class HubspotOrderFormDealSyncServiceTest extends TestCase
         return $hubSpotClient;
     }
 
-    private function createService(HubSpotClient $hubSpotClient): HubspotOrderFormDealSyncService
+    private function createService(
+        HubSpotClient $hubSpotClient,
+        ?ErpOrderExportRepository $erpOrderExportRepository = null,
+        ?EntityManagerInterface $entityManager = null,
+    ): HubspotOrderFormDealSyncService
     {
         return new HubspotOrderFormDealSyncService(
             $hubSpotClient,
@@ -371,6 +395,8 @@ class HubspotOrderFormDealSyncServiceTest extends TestCase
                 '5.5' => '115152085',
                 '20' => '115152086',
             ],
+            $erpOrderExportRepository ?? $this->createStub(ErpOrderExportRepository::class),
+            $entityManager ?? $this->createStub(EntityManagerInterface::class),
         );
     }
 

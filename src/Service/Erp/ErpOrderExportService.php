@@ -13,6 +13,8 @@ use Symfony\Component\Lock\LockFactory;
 
 class ErpOrderExportService
 {
+    private const PROCESSING_TIMEOUT = '-15 minutes';
+
     private const DELIVERY_INSTRUCTION_MAX_LENGTH = 69;
 
     private const INCOTERM_TO_SAGE_DELIVERY_CONDITION = [
@@ -94,7 +96,11 @@ class ErpOrderExportService
             }
 
             if ($export->isProcessing()) {
-                return $this->skippedExportResult($export, 'already_processing', $hubspotDealId);
+                if (!$this->isProcessingTimedOut($export)) {
+                    return $this->skippedExportResult($export, 'already_processing', $hubspotDealId);
+                }
+
+                $export->markFailed('Export ERP bloque en processing, relance automatique apres timeout.');
             }
 
             $export->markProcessing();
@@ -164,13 +170,15 @@ class ErpOrderExportService
             'dealHubspotId' => $hubspotDealId,
             'referenceCommande' => $order['referenceCommande'] ?? null,
             'numClient' => $order['numClient'] ?? null,
+            'action' => $export->getSentAt() instanceof \DateTimeImmutable ? 'update' : 'create',
             'modeExpedition' => $order['modeExpedition'] ?? null,
             'condLivraison' => $order['condLivraison'] ?? null,
             'modeleReglement' => $order['modeleReglement'] ?? null,
         ]);
 
         try {
-            $response = $this->sageClient->post('/order', $order);
+            $sageResult = $this->sendOrderToSage($order, $export);
+            $response = $sageResult['response'];
         } catch (\Throwable $exception) {
             $wrappedException = new \RuntimeException(sprintf(
                 "%s\nERP order payload: %s",
@@ -186,10 +194,36 @@ class ErpOrderExportService
 
         return [
             'skipped' => false,
+            'action' => $sageResult['action'],
             'payload' => $order,
             'response' => $response,
             'dealHubspotId' => $hubspotDealId,
         ];
+    }
+
+    /**
+     * @param array<string, mixed> $order
+     *
+     * @return array{action: string, response: array<string, mixed>}
+     */
+    private function sendOrderToSage(array $order, ErpOrderExport $export): array
+    {
+        if ($export->getSentAt() instanceof \DateTimeImmutable) {
+            return [
+                'action' => 'update',
+                'response' => $this->sageClient->patch('/order', $order),
+            ];
+        }
+
+        return [
+            'action' => 'create',
+            'response' => $this->sageClient->post('/order', $order),
+        ];
+    }
+
+    private function isProcessingTimedOut(ErpOrderExport $export): bool
+    {
+        return $export->getUpdatedAt() <= new \DateTimeImmutable(self::PROCESSING_TIMEOUT);
     }
 
     private function markExportFailed(ErpOrderExport $export, string $errorMessage): void

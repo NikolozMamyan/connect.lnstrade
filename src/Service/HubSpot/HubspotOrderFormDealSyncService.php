@@ -3,7 +3,10 @@
 namespace App\Service\HubSpot;
 
 use App\Entity\Commercial;
+use App\Entity\ErpOrderExport;
 use App\Entity\OrderForm;
+use App\Repository\ErpOrderExportRepository;
+use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Component\DependencyInjection\Attribute\Autowire;
 
 class HubspotOrderFormDealSyncService
@@ -24,6 +27,8 @@ class HubspotOrderFormDealSyncService
         private readonly string $configuredStageLabel,
         #[Autowire('%hubspot_order_form_tax_rate_group_ids%')]
         private readonly array $taxRateGroupIds,
+        private readonly ErpOrderExportRepository $erpOrderExportRepository,
+        private readonly EntityManagerInterface $entityManager,
     ) {
     }
 
@@ -116,6 +121,7 @@ class HubspotOrderFormDealSyncService
 
         if ($orderForm->getDealType() === OrderForm::DEAL_TYPE_EXISTANT) {
             $this->updateDealAmount((string) $hubspotDealId, $dealAmount);
+            $this->markExistingErpOrderForReplacement((string) $hubspotDealId);
         }
 
         return [
@@ -348,6 +354,18 @@ class HubspotOrderFormDealSyncService
         $this->hubSpotClient->updateObject(self::DEAL_OBJECT_TYPE, $hubspotDealId, [
             'amount' => $this->formatHubspotAmount($dealAmount),
         ]);
+    }
+
+    private function markExistingErpOrderForReplacement(string $hubspotDealId): void
+    {
+        $export = $this->erpOrderExportRepository->findOneByHubspotDealId($hubspotDealId);
+
+        if (!$export instanceof ErpOrderExport) {
+            return;
+        }
+
+        $export->markFailed('Deal HubSpot existant resoumis : export Sage a remplacer.');
+        $this->entityManager->flush();
     }
 
     private function formatHubspotAmount(float $amount): string
