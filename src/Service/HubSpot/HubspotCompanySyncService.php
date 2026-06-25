@@ -365,7 +365,7 @@ class HubspotCompanySyncService
             ->setCity($this->nullableString($properties['city'] ?? null))
             ->setCountry($this->nullableString($properties['country'] ?? null))
             ->setSageIntegration($this->nullableString($properties['sage_integration'] ?? null))
-            ->setIdErp($this->nullableString($properties['id_erp'] ?? $company->getIdErp()))
+            ->setIdErp($this->nullableString($properties['id_erp'] ?? null) ?? $company->getIdErp())
             ->setArchived((bool) ($companyData['archived'] ?? false))
             ->setHubspotUrl($this->nullableString($companyData['url'] ?? null))
             ->setRawProperties($properties)

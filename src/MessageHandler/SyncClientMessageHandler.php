@@ -39,11 +39,12 @@ class SyncClientMessageHandler
                 'client',
                 'Synchronisation client terminee',
                 sprintf(
-                    '%d companies, %d contacts, %d relations, %d exports ERP.',
+                    '%d companies, %d contacts, %d relations, %d exports ERP, %d id_erp HubSpot.',
                     $result['savedCompanies'] ?? 0,
                     $result['savedContacts'] ?? 0,
                     $result['savedRelations'] ?? 0,
                     $result['erpSent'] ?? 0,
+                    $result['hubspotUpdated'] ?? 0,
                 ),
                 $result
             );

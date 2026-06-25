@@ -385,6 +385,7 @@
     </div>
     <form method="post" action="{{ path('flux_client_sync') }}"
           onsubmit="this.querySelector('button[type=submit]').disabled = true;">
+        <input type="hidden" name="_token" value="{{ csrf_token('flux_client_sync') }}">
         {{ include('ui/button.html.twig', {
             label: 'Lancer la synchronisation',
             variant: 'primary',

@@ -95,15 +95,36 @@ class HubspotCompanyRepository extends ServiceEntityRepository
             ->getResult();
     }
 
-public function findAllWithContacts(): array
-{
-    return $this->createQueryBuilder('c')
-        ->leftJoin('c.companyContacts', 'cc')
-        ->addSelect('cc')
-        ->leftJoin('cc.contact', 'contact')
-        ->addSelect('contact')
-        ->orderBy('c.name', 'ASC')
-        ->getQuery()
-        ->getResult();
-}
+    /**
+     * @return HubspotCompany[]
+     */
+    public function findExportableWithContacts(): array
+    {
+        return $this->createQueryBuilder('c')
+            ->leftJoin('c.companyContacts', 'cc')
+            ->addSelect('cc')
+            ->leftJoin('cc.contact', 'contact')
+            ->addSelect('contact')
+            ->andWhere('LOWER(TRIM(c.sageIntegration)) = :sageIntegration')
+            ->andWhere('c.archived = false OR c.archived IS NULL')
+            ->setParameter('sageIntegration', 'yes')
+            ->orderBy('c.name', 'ASC')
+            ->getQuery()
+            ->getResult();
+    }
+
+    /**
+     * @return HubspotCompany[]
+     */
+    public function findAllWithContacts(): array
+    {
+        return $this->createQueryBuilder('c')
+            ->leftJoin('c.companyContacts', 'cc')
+            ->addSelect('cc')
+            ->leftJoin('cc.contact', 'contact')
+            ->addSelect('contact')
+            ->orderBy('c.name', 'ASC')
+            ->getQuery()
+            ->getResult();
+    }
 }

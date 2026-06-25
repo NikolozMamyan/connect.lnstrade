@@ -6,6 +6,7 @@ use App\Entity\HubspotCompany;
 use App\Entity\HubspotCompanyContact;
 use App\Entity\HubspotContact;
 use App\Repository\HubspotCompanyRepository;
+use App\Service\HubSpot\HubSpotClient;
 use Psr\Log\LoggerInterface;
 
 class ErpCompanyExportService
@@ -13,18 +14,20 @@ class ErpCompanyExportService
     public function __construct(
         private readonly HubspotCompanyRepository $hubspotCompanyRepository,
         private readonly SageClient $sageClient,
+        private readonly HubSpotClient $hubSpotClient,
         private readonly LoggerInterface $logger,
     ) {
     }
 
     public function sendCompaniesToErp(): array
     {
-        $companies = $this->hubspotCompanyRepository->findAllWithContacts();
+        $companies = $this->hubspotCompanyRepository->findExportableWithContacts();
 
         $sent = 0;
         $skipped = 0;
         $updated = 0;
         $created = 0;
+        $hubspotUpdated = 0;
         $errors = [];
         $payloads = [];
 
@@ -43,6 +46,7 @@ class ErpCompanyExportService
 
                 $payloads[] = $result['payload'];
                 ++$sent;
+                $hubspotUpdated += ($result['hubspotUpdated'] ?? false) ? 1 : 0;
 
                 if (($result['action'] ?? null) === 'create') {
                     ++$created;
@@ -66,6 +70,7 @@ class ErpCompanyExportService
             'sent' => $sent,
             'created' => $created,
             'updated' => $updated,
+            'hubspotUpdated' => $hubspotUpdated,
             'skipped' => $skipped,
             'errors' => $errors,
             'payloads' => $payloads,
@@ -79,7 +84,7 @@ class ErpCompanyExportService
 
     private function buildErpPayload(HubspotCompany $company): ?array
     {
-        $reference = $this->ensureCompanyReference($company);
+        $reference = $this->resolveReference($company);
 
         if ($reference === null || $reference === '') {
             return null;
@@ -113,27 +118,17 @@ class ErpCompanyExportService
         return $this->removeNulls($payload);
     }
 
-    private function ensureCompanyReference(HubspotCompany $company): ?string
-    {
-        $reference = $this->resolveReference($company);
-
-        if ($reference === null || $reference === '') {
-            return null;
-        }
-
-        if ($company->getIdErp() !== $reference) {
-            $company
-                ->setIdErp($reference)
-                ->setUpdatedAt(new \DateTimeImmutable());
-
-            $this->hubspotCompanyRepository->save($company, true);
-        }
-
-        return $reference;
-    }
-
     private function exportCompany(HubspotCompany $company): array
     {
+        if (!$this->isEligibleForExport($company)) {
+            return [
+                'skipped' => true,
+                'reason' => 'company_not_eligible',
+                'companyHubspotId' => $company->getHubspotId(),
+                'companyName' => $company->getName(),
+            ];
+        }
+
         $payload = $this->buildErpPayload($company);
 
         if ($payload === null) {
@@ -145,12 +140,17 @@ class ErpCompanyExportService
         }
 
         $result = $this->sendToErpApi($payload);
+        $reference = (string) ($payload['reference'] ?? '');
+
+        $this->saveErpReference($company, $reference);
+        $this->syncErpReferenceToHubSpot($company, $reference);
 
         $this->logger->info('ERP company sent', [
             'companyHubspotId' => $company->getHubspotId(),
             'companyName' => $company->getName(),
             'action' => $result['action'] ?? null,
-            'reference' => $payload['reference'] ?? null,
+            'reference' => $reference,
+            'hubspotUpdated' => true,
         ]);
 
         return [
@@ -158,10 +158,43 @@ class ErpCompanyExportService
             'action' => $result['action'] ?? null,
             'payload' => $payload,
             'response' => $result['response'] ?? null,
-            'reference' => $payload['reference'] ?? null,
+            'reference' => $reference,
+            'hubspotUpdated' => true,
             'companyHubspotId' => $company->getHubspotId(),
             'companyName' => $company->getName(),
         ];
+    }
+
+    private function saveErpReference(HubspotCompany $company, string $reference): void
+    {
+        if ($reference === '' || $company->getIdErp() === $reference) {
+            return;
+        }
+
+        $company
+            ->setIdErp($reference)
+            ->setUpdatedAt(new \DateTimeImmutable());
+
+        $this->hubspotCompanyRepository->save($company, true);
+    }
+
+    private function syncErpReferenceToHubSpot(HubspotCompany $company, string $reference): void
+    {
+        $companyHubspotId = trim((string) $company->getHubspotId());
+
+        if ($companyHubspotId === '' || $reference === '') {
+            throw new \RuntimeException('Impossible de synchroniser id_erp vers HubSpot : identifiant manquant.');
+        }
+
+        $this->hubSpotClient->updateObject('companies', $companyHubspotId, [
+            'id_erp' => $reference,
+        ]);
+    }
+
+    private function isEligibleForExport(HubspotCompany $company): bool
+    {
+        return $company->isArchived() !== true
+            && mb_strtolower(trim((string) $company->getSageIntegration())) === 'yes';
     }
 
     private function sendToErpApi(array $payload): array
@@ -302,22 +335,22 @@ class ErpCompanyExportService
     }
 
     private function resolveReference(HubspotCompany $company): ?string
-{
-    $reference = $company->getIdErp();
+    {
+        $reference = $company->getIdErp();
 
-    if (!empty($reference)) {
-        return $reference;
+        if (!empty($reference)) {
+            return $reference;
+        }
+
+        $name = $company->getName();
+
+        if (empty($name)) {
+            return null;
+        }
+
+        $normalizedName = preg_replace('/[^a-zA-Z]/', '', $name) ?? '';
+        $prefix = strtoupper(substr($normalizedName, 0, 4));
+
+        return '9' . str_pad($prefix, 4, 'X');
     }
-
-    $name = $company->getName();
-
-    if (empty($name)) {
-        return null;
-    }
-
-    // Nettoyage + récupération des 4 premières lettres
-    $prefix = strtoupper(substr(preg_replace('/[^a-zA-Z]/', '', $name), 0, 4));
-
-    return '9' . str_pad($prefix, 4, 'X'); // fallback si < 4 lettres
-}
 }

@@ -38,10 +38,17 @@ class FluxClientController extends AbstractController
 
     #[Route('/sync', name: 'sync', methods: ['POST'])]
     public function sync(
+        Request $request,
         MessageBusInterface $bus,
         SyncLogService $syncLogService,
         NotificationManager $notificationManager,
     ): Response {
+        if (!$this->isCsrfTokenValid('flux_client_sync', (string) $request->request->get('_token'))) {
+            $this->addFlash('error', 'Jeton CSRF invalide.');
+
+            return $this->redirectToRoute('flux_client_index');
+        }
+
         $bus->dispatch(new SyncClientMessage());
 
         $syncLogService->info(

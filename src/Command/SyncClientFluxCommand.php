@@ -9,6 +9,7 @@ use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\Style\SymfonyStyle;
+use Symfony\Component\Lock\LockFactory;
 
 #[AsCommand(
     name: 'app:sync:client-flux',
@@ -19,6 +20,7 @@ class SyncClientFluxCommand extends Command
     public function __construct(
         private readonly ClientFluxOrchestrator $clientFluxOrchestrator,
         private readonly SyncLogService $syncLogService,
+        private readonly LockFactory $lockFactory,
     ) {
         parent::__construct();
     }
@@ -28,6 +30,18 @@ class SyncClientFluxCommand extends Command
         $io = new SymfonyStyle($input, $output);
 
         $io->title('Lancement de la synchronisation du flux client');
+        $lock = $this->lockFactory->createLock('sync-client-lock', 3600);
+
+        if (!$lock->acquire()) {
+            $this->syncLogService->warning(
+                'client',
+                'Synchronisation deja en cours',
+                'La commande a ete ignoree car un traitement client est deja actif.'
+            );
+            $io->warning('Une synchronisation client est deja en cours.');
+
+            return Command::SUCCESS;
+        }
 
         try {
             $this->syncLogService->info(
@@ -42,21 +56,23 @@ class SyncClientFluxCommand extends Command
                 'client',
                 'Synchronisation client terminee via commande',
                 sprintf(
-                    '%d companies, %d contacts, %d relations, %d exports ERP.',
+                    '%d companies, %d contacts, %d relations, %d exports ERP, %d id_erp HubSpot.',
                     $result['savedCompanies'] ?? 0,
                     $result['savedContacts'] ?? 0,
                     $result['savedRelations'] ?? 0,
                     $result['erpSent'] ?? 0,
+                    $result['hubspotUpdated'] ?? 0,
                 ),
                 $result
             );
 
             $io->success(sprintf(
-                'Synchronisation terminee : %d company(s), %d contact(s), %d relation(s), %d export(s) ERP prepares.',
+                'Synchronisation terminee : %d company(s), %d contact(s), %d relation(s), %d export(s) ERP, %d id_erp HubSpot.',
                 $result['savedCompanies'] ?? 0,
                 $result['savedContacts'] ?? 0,
                 $result['savedRelations'] ?? 0,
                 $result['erpSent'] ?? 0,
+                $result['hubspotUpdated'] ?? 0,
             ));
 
             if (($result['erpSkipped'] ?? 0) > 0) {
@@ -107,6 +123,8 @@ class SyncClientFluxCommand extends Command
             $io->error('Erreur lors de la synchronisation : ' . $e->getMessage());
 
             return Command::FAILURE;
+        } finally {
+            $lock->release();
         }
     }
 }
