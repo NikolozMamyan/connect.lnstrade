@@ -16,6 +16,7 @@ class HubspotOrderFormDealSyncService
 
     public function __construct(
         private readonly HubSpotClient $hubSpotClient,
+        private readonly CompanyErpProvisioningService $companyErpProvisioningService,
         #[Autowire('%hubspot_order_form_pipeline_label%')]
         private readonly string $configuredPipelineLabel,
         #[Autowire('%hubspot_order_form_pipeline_value%')]
@@ -138,6 +139,7 @@ class HubspotOrderFormDealSyncService
         $hubspotOwnerId = null;
         $companyName = null;
         $companyCountry = null;
+        $pendingCompanyProvisioning = [];
 
         if (!$commercial instanceof Commercial) {
             $errors[] = $this->error('commercial', 'Aucun commercial valide n est associe a la soumission.');
@@ -168,10 +170,12 @@ class HubspotOrderFormDealSyncService
                     $companyErpId = trim((string) (($company['properties']['id_erp'] ?? null) ?: ''));
 
                     if ($companyErpId === '') {
-                        $errors[] = $this->error(
-                            'enterpriseId',
-                            'Cette entreprise HubSpot n a pas de id_erp. La soumission du formulaire est refusee.'
-                        );
+                        $pendingCompanyProvisioning[] = [
+                            'companyId' => $enterpriseId,
+                            'field' => 'enterpriseId',
+                            'failureMessage' => 'Cette entreprise HubSpot n a pas de id_erp et sa creation Sage a echoue. La soumission du formulaire est refusee.',
+                            'deferredMessage' => 'Cette entreprise HubSpot n a pas de id_erp. Corrigez les autres erreurs puis relancez la soumission pour lancer la creation Sage.',
+                        ];
                     }
                 } catch (\Throwable $exception) {
                     $errors[] = $this->error(
@@ -217,10 +221,12 @@ class HubspotOrderFormDealSyncService
                             $companyErpId = trim((string) (($company['properties']['id_erp'] ?? null) ?: ''));
 
                             if ($companyErpId === '') {
-                                $errors[] = $this->error(
-                                    'dealId',
-                                    'L entreprise associee a ce deal HubSpot n a pas de id_erp. La soumission du formulaire est refusee.'
-                                );
+                                $pendingCompanyProvisioning[] = [
+                                    'companyId' => $companyId,
+                                    'field' => 'dealId',
+                                    'failureMessage' => 'L entreprise associee a ce deal HubSpot n a pas de id_erp et sa creation Sage a echoue. La soumission du formulaire est refusee.',
+                                    'deferredMessage' => 'L entreprise associee a ce deal HubSpot n a pas de id_erp. Corrigez les autres erreurs puis relancez la soumission pour lancer la creation Sage.',
+                                ];
                             }
                         }
                     }
@@ -263,6 +269,30 @@ class HubspotOrderFormDealSyncService
             }
 
             $productsByReference[$reference] = $product;
+        }
+
+        if ($pendingCompanyProvisioning !== []) {
+            foreach ($pendingCompanyProvisioning as $provisioningRequest) {
+                if ($errors !== []) {
+                    $errors[] = $this->error(
+                        (string) $provisioningRequest['field'],
+                        (string) $provisioningRequest['deferredMessage'],
+                        ['companyHubspotId' => $provisioningRequest['companyId']]
+                    );
+
+                    continue;
+                }
+
+                $provisioningError = $this->provisionMissingCompanyErpId(
+                    (string) $provisioningRequest['companyId'],
+                    (string) $provisioningRequest['field'],
+                    (string) $provisioningRequest['failureMessage']
+                );
+
+                if ($provisioningError !== null) {
+                    $errors[] = $provisioningError;
+                }
+            }
         }
 
         if ($errors !== []) {
@@ -552,6 +582,20 @@ class HubspotOrderFormDealSyncService
     private function looksLikeHubspotId(?string $value): bool
     {
         return $value !== null && preg_match('/^\d+$/', trim($value)) === 1;
+    }
+
+    private function provisionMissingCompanyErpId(string $companyId, string $field, string $message): ?array
+    {
+        try {
+            $this->companyErpProvisioningService->ensureCompanyHasErpId($companyId);
+
+            return null;
+        } catch (\Throwable $exception) {
+            return $this->error($field, $message, [
+                'companyHubspotId' => $companyId,
+                'details' => $exception->getMessage(),
+            ]);
+        }
     }
 
     private function resolveHubspotOwnerId(Commercial $commercial): string

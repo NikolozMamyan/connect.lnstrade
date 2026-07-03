@@ -4,6 +4,7 @@ namespace App\Tests\Service\HubSpot;
 
 use App\Entity\Commercial;
 use App\Entity\OrderForm;
+use App\Service\HubSpot\CompanyErpProvisioningService;
 use App\Service\HubSpot\HubSpotClient;
 use App\Service\HubSpot\HubspotOrderFormDealSyncService;
 use PHPUnit\Framework\TestCase;
@@ -103,6 +104,61 @@ class HubspotOrderFormDealSyncServiceTest extends TestCase
         self::assertSame(0.0, $createdLineItems[0]['price']);
     }
 
+    public function testSyncProvisionsCompanyWhenNewDealHasNoErpId(): void
+    {
+        $createdDeals = [];
+        $createdLineItems = [];
+        $hubSpotClient = $this->createHubSpotClientForNewDeal('Germany', $createdLineItems, $createdDeals, '');
+        $provisioningService = $this->createMock(CompanyErpProvisioningService::class);
+        $provisioningService
+            ->expects($this->once())
+            ->method('ensureCompanyHasErpId')
+            ->with('123456')
+            ->willReturn('9ACME');
+
+        $service = $this->createService($hubSpotClient, $provisioningService);
+        $result = $service->sync($this->createNewDealOrderForm(), [
+            [
+                'articleRef' => 'AR-20',
+                'quantity' => 2.0,
+                'unitPrice' => 15.0,
+            ],
+        ]);
+
+        self::assertTrue($result['success']);
+        self::assertSame('987654', $result['hubspotDealId']);
+        self::assertCount(1, $createdDeals);
+        self::assertSame('30.00', $createdDeals[0]['amount']);
+        self::assertCount(1, $createdLineItems);
+    }
+
+    public function testSyncDoesNotProvisionCompanyWhenAnotherValidationErrorExists(): void
+    {
+        $createdDeals = [];
+        $createdLineItems = [];
+        $hubSpotClient = $this->createHubSpotClientForNewDeal('Germany', $createdLineItems, $createdDeals, '', ['AR-MISSING'], 1, false);
+        $provisioningService = $this->createMock(CompanyErpProvisioningService::class);
+        $provisioningService
+            ->expects($this->never())
+            ->method('ensureCompanyHasErpId');
+
+        $service = $this->createService($hubSpotClient, $provisioningService);
+        $result = $service->sync($this->createNewDealOrderForm(), [
+            [
+                'articleRef' => 'AR-MISSING',
+                'quantity' => 2.0,
+                'unitPrice' => 15.0,
+            ],
+        ]);
+
+        self::assertFalse($result['success']);
+        self::assertNull($result['hubspotDealId']);
+        self::assertSame('articleRef', $result['errors'][0]['field']);
+        self::assertSame('enterpriseId', $result['errors'][1]['field']);
+        self::assertCount(0, $createdDeals);
+        self::assertCount(0, $createdLineItems);
+    }
+
     public function testSyncReplacesExistingDealLineItemsBeforeCreatingNewOnExistingDeal(): void
     {
         $createdLineItems = [];
@@ -127,16 +183,52 @@ class HubspotOrderFormDealSyncServiceTest extends TestCase
         self::assertSame(3.0, $createdLineItems[0]['quantity']);
     }
 
+    public function testSyncProvisionsAssociatedCompanyWhenExistingDealHasNoErpId(): void
+    {
+        $createdLineItems = [];
+        $deletedLineItemIds = [];
+        $updatedDeals = [];
+        $hubSpotClient = $this->createHubSpotClientForExistingDeal('Germany', $createdLineItems, $deletedLineItemIds, $updatedDeals, '');
+        $provisioningService = $this->createMock(CompanyErpProvisioningService::class);
+        $provisioningService
+            ->expects($this->once())
+            ->method('ensureCompanyHasErpId')
+            ->with('123456')
+            ->willReturn('9ACME');
+
+        $service = $this->createService($hubSpotClient, $provisioningService);
+        $result = $service->sync($this->createExistingDealOrderForm(), [
+            [
+                'articleRef' => 'AR-20',
+                'quantity' => 3.0,
+                'unitPrice' => 12.0,
+            ],
+        ]);
+
+        self::assertTrue($result['success']);
+        self::assertSame(['old-line-1', 'old-line-2'], $deletedLineItemIds);
+        self::assertSame(['amount' => '36.00'], $updatedDeals['654321']);
+        self::assertCount(1, $createdLineItems);
+    }
+
     /**
      * @param array<int, array<string, mixed>> $createdLineItems
      * @param array<int, array<string, mixed>> $createdDeals
      */
-    private function createHubSpotClientForNewDeal(string $companyCountry, array &$createdLineItems, array &$createdDeals): HubSpotClient
+    private function createHubSpotClientForNewDeal(
+        string $companyCountry,
+        array &$createdLineItems,
+        array &$createdDeals,
+        string $companyErpId = 'ERP-123',
+        array $missingProductReferences = [],
+        int $expectedGetCalls = 2,
+        bool $expectsObjectCreation = true,
+    ): HubSpotClient
     {
         $hubSpotClient = $this->createMock(HubSpotClient::class);
 
         $hubSpotClient
-            ->expects($this->exactly(2))
+            ->expects($this->exactly($expectedGetCalls))
             ->method('get')
             ->willReturnCallback(static function (string $path): array {
                 if ($path === '/crm/owners/2026-03') {
@@ -164,7 +256,7 @@ class HubspotOrderFormDealSyncServiceTest extends TestCase
         $hubSpotClient
             ->expects($this->once())
             ->method('getObject')
-            ->willReturnCallback(static function (string $objectType, string $objectId, array $query) use ($companyCountry): array {
+            ->willReturnCallback(static function (string $objectType, string $objectId, array $query) use ($companyCountry, $companyErpId): array {
                 self::assertSame('companies', $objectType);
                 self::assertSame('123456', $objectId);
                 self::assertContains('company_country_en', $query['properties'] ?? []);
@@ -173,7 +265,7 @@ class HubspotOrderFormDealSyncServiceTest extends TestCase
                     'id' => $objectId,
                     'properties' => [
                         'name' => 'LNS France',
-                        'id_erp' => 'ERP-123',
+                        'id_erp' => $companyErpId,
                         'company_country_en' => $companyCountry,
                     ],
                 ];
@@ -181,11 +273,17 @@ class HubspotOrderFormDealSyncServiceTest extends TestCase
 
         $hubSpotClient
             ->method('searchObjects')
-            ->willReturnCallback(static function (string $objectType, array $payload): array {
+            ->willReturnCallback(static function (string $objectType, array $payload) use ($missingProductReferences): array {
                 self::assertSame('products', $objectType);
                 self::assertContains('vat', $payload['properties'] ?? []);
 
                 $reference = (string) ($payload['filterGroups'][0]['filters'][0]['value'] ?? '');
+
+                if (in_array($reference, $missingProductReferences, true)) {
+                    return [
+                        'results' => [],
+                    ];
+                }
 
                 return [
                     'results' => [
@@ -209,8 +307,12 @@ class HubspotOrderFormDealSyncServiceTest extends TestCase
                 ];
             });
 
+        $createObjectExpectation = $expectsObjectCreation
+            ? $this->atLeast(2)
+            : $this->never();
+
         $hubSpotClient
-            ->expects($this->atLeast(2))
+            ->expects($createObjectExpectation)
             ->method('createObject')
             ->willReturnCallback(static function (string $objectType, array $properties) use (&$createdLineItems, &$createdDeals): array {
                 if ($objectType === 'deals') {
@@ -241,6 +343,7 @@ class HubspotOrderFormDealSyncServiceTest extends TestCase
         array &$createdLineItems,
         array &$deletedLineItemIds,
         array &$updatedDeals,
+        string $companyErpId = 'ERP-123',
     ): HubSpotClient {
         $hubSpotClient = $this->createMock(HubSpotClient::class);
 
@@ -271,7 +374,7 @@ class HubspotOrderFormDealSyncServiceTest extends TestCase
         $hubSpotClient
             ->expects($this->exactly(2))
             ->method('getObject')
-            ->willReturnCallback(static function (string $objectType, string $objectId, array $query) use ($companyCountry): array {
+            ->willReturnCallback(static function (string $objectType, string $objectId, array $query) use ($companyCountry, $companyErpId): array {
                 if ($objectType === 'deals') {
                     self::assertSame('654321', $objectId);
                     self::assertContains('companies', $query['associations'] ?? []);
@@ -299,7 +402,7 @@ class HubspotOrderFormDealSyncServiceTest extends TestCase
                         'id' => $objectId,
                         'properties' => [
                             'name' => 'LNS France',
-                            'id_erp' => 'ERP-123',
+                            'id_erp' => $companyErpId,
                             'company_country_en' => $companyCountry,
                         ],
                     ];
@@ -360,10 +463,14 @@ class HubspotOrderFormDealSyncServiceTest extends TestCase
         return $hubSpotClient;
     }
 
-    private function createService(HubSpotClient $hubSpotClient): HubspotOrderFormDealSyncService
+    private function createService(
+        HubSpotClient $hubSpotClient,
+        ?CompanyErpProvisioningService $provisioningService = null,
+    ): HubspotOrderFormDealSyncService
     {
         return new HubspotOrderFormDealSyncService(
             $hubSpotClient,
+            $provisioningService ?? $this->createStub(CompanyErpProvisioningService::class),
             'Pipeline sales',
             'default',
             'Sending the offer',
