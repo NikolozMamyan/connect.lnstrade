@@ -17,13 +17,13 @@ class CompanyErpProvisioningServiceTest extends TestCase
         $company = (new HubspotCompany())
             ->setHubspotId('company-123')
             ->setName('ACME France')
-            ->setSageIntegration('yes');
+            ->setSageIntegration('Yes');
 
         $hubSpotClient = $this->createMock(HubSpotClient::class);
         $hubSpotClient
             ->expects($this->once())
             ->method('updateObject')
-            ->with('companies', 'company-123', ['sage_integration' => 'yes'])
+            ->with('companies', 'company-123', ['sage_integration' => 'Yes'])
             ->willReturn(['id' => 'company-123']);
 
         $companySyncService = $this->createMock(HubspotCompanySyncService::class);
@@ -72,14 +72,14 @@ class CompanyErpProvisioningServiceTest extends TestCase
         $company = (new HubspotCompany())
             ->setHubspotId('company-123')
             ->setName('ACME France')
-            ->setSageIntegration('yes')
+            ->setSageIntegration('Yes')
             ->setIdErp('CLI-001');
 
         $hubSpotClient = $this->createMock(HubSpotClient::class);
         $hubSpotClient
             ->expects($this->once())
             ->method('updateObject')
-            ->with('companies', 'company-123', ['sage_integration' => 'yes'])
+            ->with('companies', 'company-123', ['sage_integration' => 'Yes'])
             ->willReturn(['id' => 'company-123']);
 
         $companySyncService = $this->createMock(HubspotCompanySyncService::class);

@@ -8,7 +8,7 @@ use App\Service\Erp\ErpCompanyExportService;
 
 class CompanyErpProvisioningService
 {
-    private const SAGE_INTEGRATION_ENABLED = 'yes';
+    private const SAGE_INTEGRATION_ENABLED = 'Yes';
 
     public function __construct(
         private readonly HubSpotClient $hubSpotClient,
