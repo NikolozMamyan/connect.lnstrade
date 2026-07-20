@@ -15,6 +15,11 @@ final class Version20260720140000 extends AbstractMigration
         return 'Create Messenger and lock infrastructure and track the last HubSpot stock sync.';
     }
 
+    public function isTransactional(): bool
+    {
+        return false;
+    }
+
     public function up(Schema $schema): void
     {
         $this->abortIf(!$this->connection->getDatabasePlatform() instanceof AbstractMySQLPlatform, 'Migration compatible MySQL/MariaDB uniquement.');
