@@ -39,10 +39,11 @@ class SyncInvoiceMessageHandler
                 'invoice',
                 'Synchronisation factures terminee',
                 sprintf(
-                    '%d facture(s) importee(s), %d creee(s), %d mise(s) a jour.',
+                    '%d facture(s) importee(s), %d creee(s), %d mise(s) a jour, %d inchangee(s).',
                     $result['imported'] ?? 0,
                     $result['created'] ?? 0,
                     $result['updated'] ?? 0,
+                    $result['skipped'] ?? 0,
                 ),
                 $result
             );

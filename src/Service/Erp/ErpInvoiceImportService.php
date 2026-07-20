@@ -24,6 +24,7 @@ class ErpInvoiceImportService
         $invoices = $this->sageClient->get('/invoices');
         $created = 0;
         $updated = 0;
+        $skipped = 0;
         $errors = [];
         $processed = 0;
 
@@ -64,6 +65,11 @@ class ErpInvoiceImportService
                         $existingInvoices[$invoiceNumber] = $invoice;
                         ++$created;
                     } else {
+                        if ($invoice->getRawPayload() === $invoiceData) {
+                            ++$skipped;
+                            continue;
+                        }
+
                         ++$updated;
                     }
 
@@ -87,6 +93,7 @@ class ErpInvoiceImportService
             'imported' => $processed,
             'created' => $created,
             'updated' => $updated,
+            'skipped' => $skipped,
             'errors' => $errors,
         ];
     }
