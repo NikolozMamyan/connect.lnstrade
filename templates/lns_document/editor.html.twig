@@ -11,12 +11,12 @@
 {% endblock %}
 
 {% block page_actions %}
-    <a href="{{ path('lns_documents_index') }}" class="btn btn-secondary btn-md">
+    <a href="{{ path('lns_documents_index') }}" class="btn btn-secondary btn-md" data-turbo="false">
         <i class="fas fa-arrow-left"></i>
         Retour
     </a>
     {% if not isNew %}
-        <a href="{{ path('lns_documents_show', {id: document.id}) }}" class="btn btn-secondary btn-md">Aperçu</a>
+        <a href="{{ path('lns_documents_show', {id: document.id}) }}" class="btn btn-secondary btn-md" data-turbo="false">Aperçu</a>
     {% endif %}
     <div class="lns-save-split" data-save-menu>
         <button type="submit" name="document_action" value="save" form="lns-document-form" class="btn btn-primary btn-md lns-save-main">
@@ -40,7 +40,7 @@
         {% endfor %}
     {% endfor %}
 
-    {{ form_start(form, {attr: {id: 'lns-document-form', class: 'lns-document-form', novalidate: 'novalidate', enctype: 'multipart/form-data'}}) }}
+    {{ form_start(form, {attr: {id: 'lns-document-form', class: 'lns-document-form', novalidate: 'novalidate', enctype: 'multipart/form-data', 'data-turbo': 'false'}}) }}
         {% if not form.vars.valid %}
             <div class="alert alert-error lns-document-flash">
                 Certains champs doivent être corrigés avant l’enregistrement.
