@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>{{ document.title }}</title>
+    <style>
+        @page { size: A4 portrait; margin: 0; }
+        * { box-sizing: border-box; }
+        html, body { margin: 0; padding: 0; color: #1c2128; font-family: DejaVu Sans, sans-serif; }
+        .page { position: relative; width: 210mm; min-height: 297mm; page-break-after: always; background: #faf9f5; overflow: hidden; }
+        .page:last-child { page-break-after: auto; }
+        .side-track { position: absolute; top: 0; right: 0; width: 10mm; height: 100%; border-left: 1px solid #dedad0; }
+        .side-tab { position: absolute; z-index: 2; right: 0; width: 10mm; height: 46mm; color: #fff; font-size: 8px; text-align: center; text-transform: uppercase; }
+        .side-tab span { display: block; padding: 7mm 2mm 0; }
+        .side-tab.bronze { top: 10mm; background: #b9863e; }
+        .side-tab.navy { top: 68mm; background: #181f29; color: #e4c793; }
+        .cover-dark { position: relative; height: 118mm; padding-top: 43mm; background: #10141b; border-bottom: 3px solid #b9863e; color: #fff; text-align: center; }
+        .logo-large { display: block; width: auto; height: 20mm; margin: 0 auto 8mm; }
+        .eyebrow { display: inline-block; padding: 2mm 5mm; border: 1px solid #806f52; border-radius: 12mm; color: #e4c793; font-size: 10px; letter-spacing: 2px; text-transform: uppercase; }
+        .cover-body { position: relative; min-height: 179mm; padding: 20mm 22mm 16mm; }
+        .cover-title { margin: 0 0 5mm; font-family: DejaVu Serif, serif; font-size: 36px; font-weight: normal; line-height: 1.12; }
+        .cover-description { color: #767a82; font-size: 14px; line-height: 1.65; }
+        .meta { position: absolute; right: 22mm; bottom: 18mm; left: 22mm; width: 156mm; border-top: 2px solid #b9863e; border-collapse: collapse; }
+        .meta td { width: 33.33%; padding: 4mm 5mm 0 0; vertical-align: top; }
+        .meta-label { margin-bottom: 2mm; color: #767a82; font-size: 8px; letter-spacing: 1px; text-transform: uppercase; }
+        .meta-value { font-size: 10px; }
+        .band { height: 26mm; padding: 8mm 20mm 0 16mm; background: #10141b; color: #fff; }
+        .band-logo { float: left; width: auto; height: 9mm; }
+        .running { float: right; max-width: 100mm; padding-top: 3mm; overflow: hidden; font-size: 8px; letter-spacing: 1px; text-align: right; text-transform: uppercase; white-space: nowrap; }
+        .content { padding: 16mm 20mm 26mm 16mm; }
+        h2 { margin: 0; font-family: DejaVu Serif, serif; font-size: 24px; font-weight: normal; }
+        h3 { margin: 7mm 0 3mm; color: #8c6429; font-size: 11px; letter-spacing: .6px; text-transform: uppercase; }
+        p { margin: 0 0 4mm; color: #3c4450; font-size: 11px; line-height: 1.65; }
+        .rule { width: 15mm; height: 1px; margin: 3mm 0 7mm; background: #b9863e; }
+        .footer { position: absolute; right: 10mm; bottom: 0; left: 0; height: 14mm; padding: 5mm 20mm 0 16mm; border-top: 1px solid #dedad0; color: #767a82; font-size: 8px; }
+        .footer-right { float: right; }
+        .toc-row { width: 100%; padding: 3mm 0; border-bottom: 1px solid #dedad0; font-size: 11px; }
+        .toc-index { display: inline-block; width: 10mm; color: #8c6429; font-size: 9px; }
+        .toc-title { display: inline-block; width: 115mm; }
+        .toc-page { float: right; color: #767a82; font-size: 9px; }
+        .block { margin-top: 7mm; page-break-inside: avoid; }
+        .content-image { margin: 4mm 0 0; text-align: center; page-break-inside: avoid; }
+        .content-image img { display: block; max-width: 100%; max-height: 125mm; margin: 0 auto; }
+        .content-image-caption { margin-top: 2mm; color: #767a82; font-size: 9px; font-style: italic; }
+        table.content-table { width: 100%; margin-top: 4mm; border-collapse: collapse; table-layout: fixed; font-size: 10px; }
+        .content-table th { padding: 2.5mm 3mm; border-bottom: 2px solid #b9863e; color: #767a82; font-size: 8px; font-weight: normal; letter-spacing: .5px; text-align: left; text-transform: uppercase; }
+        .content-table td { padding: 3mm; border-bottom: 1px solid #dedad0; color: #3c4450; vertical-align: top; word-wrap: break-word; }
+        .empty { color: #767a82; font-style: italic; text-align: center; }
+        .closing { padding-top: 102mm; background: #10141b; color: #fff; text-align: center; }
+        .closing-rule { width: 17mm; height: 1px; margin: 7mm auto; background: #e4c793; }
+        .contact { color: #c5c6ca; font-size: 9px; line-height: 1.8; }
+    </style>
+</head>
+<body>
+{% set totalPages = document.pageCount + 2 + (document.autoGenerateToc ? 1 : 0) %}
+
+<section class="page">
+    <div class="side-track"></div>
+    <div class="side-tab bronze"><span>Couverture</span></div>
+    <div class="cover-dark">
+        <img class="logo-large" src="https://lnstrade.fr/wp-content/uploads/2024/07/LOGO_LNS_WHITE.png" alt="LNS Trade">
+        <span class="eyebrow">Document LNS</span>
+    </div>
+    <div class="cover-body">
+        <h1 class="cover-title">{{ document.title }}</h1>
+        <div class="cover-description">{{ document.description|nl2br }}</div>
+        <table class="meta">
+            <tr>
+                <td><div class="meta-label">Date de création</div><div class="meta-value">{{ document.createdAt|date('d/m/Y') }}</div></td>
+                <td><div class="meta-label">Dernière modification</div><div class="meta-value">{{ document.updatedAt|date('d/m/Y') }}</div></td>
+                <td><div class="meta-label">Auteur</div><div class="meta-value">{{ document.createdBy ? document.createdBy.fullName : 'LNS Trade' }}</div></td>
+            </tr>
+        </table>
+    </div>
+</section>
+
+{% if document.autoGenerateToc %}
+    <section class="page">
+        <div class="side-track"></div>
+        <div class="side-tab navy"><span>Sommaire</span></div>
+        <header class="band">
+            <img class="band-logo" src="https://lnstrade.fr/wp-content/uploads/2024/07/LOGO_LNS_WHITE.png" alt="LNS Trade">
+            <div class="running">{{ document.title }}</div>
+        </header>
+        <div class="content">
+            <h2>Sommaire</h2>
+            <div class="rule"></div>
+            {% for page in document.content %}
+                <div class="toc-row">
+                    <span class="toc-index">{{ '%02d'|format(loop.index) }}</span>
+                    <span class="toc-title">{{ page.title }}</span>
+                    <span class="toc-page">{{ loop.index + 2 }}</span>
+                </div>
+            {% endfor %}
+        </div>
+        <footer class="footer"><span>LNS Trade</span><span class="footer-right">Page 2 / {{ totalPages }}</span></footer>
+    </section>
+{% endif %}
+
+{% for page in document.content %}
+    {% set pageNumber = loop.index + 1 + (document.autoGenerateToc ? 1 : 0) %}
+    <section class="page">
+        <div class="side-track"></div>
+        <div class="side-tab navy"><span>Contenu</span></div>
+        <header class="band">
+            <img class="band-logo" src="https://lnstrade.fr/wp-content/uploads/2024/07/LOGO_LNS_WHITE.png" alt="LNS Trade">
+            <div class="running">{{ document.title }}</div>
+        </header>
+        <div class="content">
+            <h2>{{ page.title }}</h2>
+            <div class="rule"></div>
+            {% if page.description %}<p>{{ page.description|nl2br }}</p>{% endif %}
+
+            {% for block in page.blocks %}
+                <div class="block">
+                    <h3>{{ block.title }}</h3>
+                    {% if block.type == 'text' %}
+                        {% if block.description %}<p>{{ block.description|nl2br }}</p>{% endif %}
+                    {% elseif block.type == 'image' %}
+                        <div class="content-image">
+                            <img src="{{ block.data }}" alt="{{ block.title }}">
+                            {% if block.caption %}<div class="content-image-caption">{{ block.caption }}</div>{% endif %}
+                        </div>
+                    {% elseif block.type == 'table' %}
+                        <table class="content-table">
+                            <thead><tr>{% for header in block.headers %}<th>{{ header }}</th>{% endfor %}</tr></thead>
+                            <tbody>
+                                {% for row in block.rows %}
+                                    <tr>{% for cell in row %}<td>{{ cell|nl2br }}</td>{% endfor %}</tr>
+                                {% else %}
+                                    <tr><td colspan="3" class="empty">Aucune ligne.</td></tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    {% endif %}
+                </div>
+            {% endfor %}
+        </div>
+        <footer class="footer"><span>LNS Trade</span><span class="footer-right">Page {{ pageNumber }} / {{ totalPages }}</span></footer>
+    </section>
+{% endfor %}
+
+<section class="page closing">
+    <div class="side-track"></div>
+    <div class="side-tab bronze" style="top: 242mm;"><span>Clôture</span></div>
+    <img class="logo-large" src="https://lnstrade.fr/wp-content/uploads/2024/07/LOGO_LNS_WHITE.png" alt="LNS Trade">
+    <div class="closing-rule"></div>
+    <div class="contact">
+        LNS Trade — 13 Quai Kléber, 67000 Strasbourg<br>
+        lnstrade.fr<br>
+        contact@lnstrade.fr
+    </div>
+</section>
+</body>
+</html>

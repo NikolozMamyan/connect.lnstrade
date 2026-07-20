@@ -1,0 +1,110 @@
+{% set totalPages = document.pageCount + 2 + (document.autoGenerateToc ? 1 : 0) %}
+
+<div class="lns-document-pages lns-document-pages--readonly">
+    <section class="lns-paper lns-cover-page">
+        <div class="lns-side-track"></div>
+        <div class="lns-side-tab lns-side-tab--bronze" style="top: 10mm;">Couverture</div>
+        <div class="lns-cover-dark">
+            <img src="https://lnstrade.fr/wp-content/uploads/2024/07/LOGO_LNS_WHITE.png" alt="LNS Trade" class="lns-logo lns-logo--large">
+            <span class="lns-eyebrow">Document LNS</span>
+        </div>
+        <div class="lns-cover-body">
+            <h1>{{ document.title }}</h1>
+            <p class="lns-cover-description">{{ document.description|nl2br }}</p>
+            <div class="lns-meta-grid">
+                <div><span>Date de création</span><strong>{{ document.createdAt|date('d/m/Y') }}</strong></div>
+                <div><span>Dernière modification</span><strong>{{ document.updatedAt|date('d/m/Y') }}</strong></div>
+                <div><span>Auteur</span><strong>{{ document.createdBy ? document.createdBy.fullName : 'LNS Trade' }}</strong></div>
+            </div>
+        </div>
+    </section>
+
+    {% if document.autoGenerateToc %}
+        <section class="lns-paper lns-inner-page">
+            <div class="lns-side-track"></div>
+            <div class="lns-side-tab lns-side-tab--navy" style="top: 68mm;">Sommaire</div>
+            {% include 'lns_document/_page_header.html.twig' %}
+            <div class="lns-page-content">
+                <h2>Sommaire</h2>
+                <div class="lns-bronze-rule"></div>
+                <div class="lns-toc-list">
+                    {% for page in document.content %}
+                        <div class="lns-toc-row">
+                            <span class="lns-toc-index">{{ '%02d'|format(loop.index) }}</span>
+                            <span class="lns-toc-title">{{ page.title }}</span>
+                            <span class="lns-toc-leader"></span>
+                            <span class="lns-toc-page">{{ loop.index + 2 }}</span>
+                        </div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% include 'lns_document/_page_footer.html.twig' with {pageNumber: 2, totalPages: totalPages} %}
+        </section>
+    {% endif %}
+
+    {% for page in document.content %}
+        {% set pageNumber = loop.index + 1 + (document.autoGenerateToc ? 1 : 0) %}
+        <section class="lns-paper lns-inner-page">
+            <div class="lns-side-track"></div>
+            <div class="lns-side-tab lns-side-tab--navy" style="top: 126mm;">Contenu</div>
+            {% include 'lns_document/_page_header.html.twig' %}
+            <div class="lns-page-content">
+                <h2>{{ page.title }}</h2>
+                <div class="lns-bronze-rule"></div>
+                {% if page.description %}
+                    <p>{{ page.description|nl2br }}</p>
+                {% endif %}
+
+                {% for block in page.blocks %}
+                    {% if block.type == 'text' %}
+                        <section class="lns-readonly-block">
+                            <h3>{{ block.title }}</h3>
+                            {% if block.description %}<p>{{ block.description|nl2br }}</p>{% endif %}
+                        </section>
+                    {% elseif block.type == 'image' %}
+                        <section class="lns-readonly-block">
+                            <h3>{{ block.title }}</h3>
+                            <figure class="lns-content-image">
+                                <img src="{{ block.data }}" alt="{{ block.title }}">
+                                {% if block.caption %}<figcaption>{{ block.caption }}</figcaption>{% endif %}
+                            </figure>
+                        </section>
+                    {% elseif block.type == 'table' %}
+                        <section class="lns-readonly-block">
+                            <h3>{{ block.title }}</h3>
+                            <div class="lns-content-table-wrap">
+                                <table class="lns-content-table">
+                                    <thead>
+                                        <tr>
+                                            {% for header in block.headers %}<th>{{ header }}</th>{% endfor %}
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for row in block.rows %}
+                                            <tr>{% for cell in row %}<td>{{ cell|nl2br }}</td>{% endfor %}</tr>
+                                        {% else %}
+                                            <tr><td colspan="3" class="lns-empty-table">Aucune ligne.</td></tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </section>
+                    {% endif %}
+                {% endfor %}
+            </div>
+            {% include 'lns_document/_page_footer.html.twig' with {pageNumber: pageNumber, totalPages: totalPages} %}
+        </section>
+    {% endfor %}
+
+    <section class="lns-paper lns-closing-page">
+        <div class="lns-side-track"></div>
+        <div class="lns-side-tab lns-side-tab--bronze" style="top: 242mm;">Clôture</div>
+        <img src="https://lnstrade.fr/wp-content/uploads/2024/07/LOGO_LNS_WHITE.png" alt="LNS Trade" class="lns-logo lns-logo--large">
+        <div class="lns-closing-rule"></div>
+        <div class="lns-contact-block">
+            <span>LNS Trade — 13 Quai Kléber, 67000 Strasbourg</span>
+            <span>lnstrade.fr</span>
+            <span>contact@lnstrade.fr</span>
+        </div>
+    </section>
+</div>

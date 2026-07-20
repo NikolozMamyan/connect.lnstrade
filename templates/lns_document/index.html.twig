@@ -1,0 +1,94 @@
+{% extends 'layout/app.html.twig' %}
+
+{% block title %}Documents LNS · lnstrade{% endblock %}
+{% block page_title %}Documents LNS{% endblock %}
+{% block page_subtitle %}Créez, structurez et exportez les documents internes LNS Trade.{% endblock %}
+
+{% block page_actions %}
+    <a href="{{ path('lns_documents_new') }}" class="btn btn-primary btn-md">
+        <i class="fas fa-plus"></i>
+        Créer un document
+    </a>
+{% endblock %}
+
+{% block content %}
+    {% for label, messages in app.flashes %}
+        {% for message in messages %}
+            <div class="alert alert-{{ label }} lns-document-flash">{{ message }}</div>
+        {% endfor %}
+    {% endfor %}
+
+    <div class="card dashboard-table-card">
+        <div class="card-header lns-document-list-header">
+            <div>
+                <span class="card-title">Bibliothèque de documents</span>
+                <span class="tag tag-info">{{ documents|length }} document(s)</span>
+            </div>
+            <form method="get" action="{{ path('lns_documents_index') }}" class="lns-document-search">
+                <label for="document-search" class="sr-only">Rechercher un document</label>
+                <input id="document-search" type="search" name="q" value="{{ searchQuery }}" placeholder="Rechercher par titre ou description">
+                <button type="submit" class="btn btn-secondary btn-sm">
+                    <i class="fas fa-search"></i>
+                    Rechercher
+                </button>
+                {% if searchQuery %}
+                    <a href="{{ path('lns_documents_index') }}" class="btn btn-ghost btn-sm">Effacer</a>
+                {% endif %}
+            </form>
+        </div>
+        <div class="card-body card-body-flush">
+            <div class="table-responsive">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Document</th>
+                            <th>Pages</th>
+                            <th>Sommaire</th>
+                            <th>Auteur</th>
+                            <th>Dernière modification</th>
+                            <th style="text-align: right;">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for document in documents %}
+                            <tr>
+                                <td>
+                                    <div class="client-name">{{ document.title }}</div>
+                                    <div class="client-email lns-document-description-preview">{{ document.description }}</div>
+                                </td>
+                                <td><span class="tag tag-muted">{{ document.pageCount }}</span></td>
+                                <td>
+                                    <span class="tag {{ document.autoGenerateToc ? 'tag-success' : 'tag-muted' }}">
+                                        {{ document.autoGenerateToc ? 'Automatique' : 'Désactivé' }}
+                                    </span>
+                                </td>
+                                <td>{{ document.createdBy ? document.createdBy.fullName : 'Utilisateur supprimé' }}</td>
+                                <td class="date-cell">{{ document.updatedAt|date('d/m/Y H:i') }}</td>
+                                <td style="text-align: right;">
+                                    <div class="lns-document-row-actions">
+                                        <a href="{{ path('lns_documents_show', {id: document.id}) }}" class="btn btn-secondary btn-sm">Voir</a>
+                                        <a href="{{ path('lns_documents_edit', {id: document.id}) }}" class="btn btn-secondary btn-sm">Modifier</a>
+                                        <form method="post" action="{{ path('lns_documents_delete', {id: document.id}) }}" onsubmit="return confirm('Supprimer définitivement ce document ?');">
+                                            <input type="hidden" name="_token" value="{{ csrf_token('delete_lns_document_' ~ document.id) }}">
+                                            <button type="submit" class="btn btn-danger btn-sm">Supprimer</button>
+                                        </form>
+                                    </div>
+                                </td>
+                            </tr>
+                        {% else %}
+                            <tr>
+                                <td colspan="6" class="lns-document-empty">
+                                    {% if searchQuery %}
+                                        Aucun document ne correspond à « {{ searchQuery }} ».
+                                    {% else %}
+                                        Aucun document LNS n’a encore été créé.
+                                    {% endif %}
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+{% endblock %}

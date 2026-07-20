@@ -1,0 +1,30 @@
+{% extends 'layout/app.html.twig' %}
+
+{% block title %}{{ document.title }} · Documents LNS{% endblock %}
+{% block page_title %}{{ document.title }}{% endblock %}
+{% block page_subtitle %}Aperçu en lecture seule du document LNS.{% endblock %}
+
+{% block stylesheets %}
+    {{ parent() }}
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Serif:wght@400;500;600&display=swap" rel="stylesheet">
+{% endblock %}
+
+{% block page_actions %}
+    <a href="{{ path('lns_documents_index') }}" class="btn btn-secondary btn-md">
+        <i class="fas fa-arrow-left"></i>
+        Retour
+    </a>
+    <a href="{{ path('lns_documents_edit', {id: document.id}) }}" class="btn btn-secondary btn-md">
+        <i class="fas fa-pen"></i>
+        Modifier
+    </a>
+    <a href="{{ path('lns_documents_pdf', {id: document.id}) }}" class="btn btn-primary btn-md">
+        <i class="fas fa-file-pdf"></i>
+        Générer le PDF
+    </a>
+{% endblock %}
+
+{% block content %}
+    {% include 'lns_document/_document.html.twig' %}
+{% endblock %}

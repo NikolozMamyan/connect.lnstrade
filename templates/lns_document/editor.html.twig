@@ -1,0 +1,235 @@
+{% extends 'layout/app.html.twig' %}
+
+{% block title %}{{ isNew ? 'Créer un document LNS' : 'Modifier ' ~ document.title }}{% endblock %}
+{% block page_title %}{{ isNew ? 'Créer un document LNS' : 'Modifier le document' }}{% endblock %}
+{% block page_subtitle %}Composez les pages, les blocs texte et les tableaux puis enregistrez ou exportez en PDF.{% endblock %}
+
+{% block stylesheets %}
+    {{ parent() }}
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Serif:wght@400;500;600&display=swap" rel="stylesheet">
+{% endblock %}
+
+{% block page_actions %}
+    <a href="{{ path('lns_documents_index') }}" class="btn btn-secondary btn-md">
+        <i class="fas fa-arrow-left"></i>
+        Retour
+    </a>
+    {% if not isNew %}
+        <a href="{{ path('lns_documents_show', {id: document.id}) }}" class="btn btn-secondary btn-md">Aperçu</a>
+    {% endif %}
+    <div class="lns-save-split" data-save-menu>
+        <button type="submit" name="document_action" value="save" form="lns-document-form" class="btn btn-primary btn-md lns-save-main">
+            <i class="fas fa-save"></i>
+            Enregistrer
+        </button>
+        <button type="button" class="btn btn-primary btn-md lns-save-toggle" data-action="toggle-save-menu" aria-expanded="false" aria-label="Ouvrir les actions d’enregistrement">›</button>
+        <div class="lns-save-menu" data-save-menu-panel hidden>
+            <button type="submit" name="document_action" value="save_pdf" form="lns-document-form">
+                <i class="fas fa-file-pdf"></i>
+                Enregistrer et générer le PDF
+            </button>
+        </div>
+    </div>
+{% endblock %}
+
+{% block content %}
+    {% for label, messages in app.flashes %}
+        {% for message in messages %}
+            <div class="alert alert-{{ label }} lns-document-flash">{{ message }}</div>
+        {% endfor %}
+    {% endfor %}
+
+    {{ form_start(form, {attr: {id: 'lns-document-form', class: 'lns-document-form', novalidate: 'novalidate', enctype: 'multipart/form-data'}}) }}
+        {% if not form.vars.valid %}
+            <div class="alert alert-error lns-document-flash">
+                Certains champs doivent être corrigés avant l’enregistrement.
+                {{ form_errors(form) }}
+                {{ form_errors(form.contentJson) }}
+            </div>
+        {% endif %}
+
+        <section class="lns-editor-settings">
+            <strong title="Construit automatiquement depuis les titres des pages">
+                <i class="fas fa-list-ul"></i>
+                Sommaire automatique
+            </strong>
+            <div class="lns-toc-choice">{{ form_widget(form.autoGenerateToc) }}</div>
+            {{ form_errors(form.autoGenerateToc) }}
+        </section>
+
+        <div
+            class="lns-document-editor"
+            data-lns-document-editor
+            data-initial-content="{{ form.contentJson.vars.value|e('html_attr') }}"
+            data-max-pages="50"
+            data-max-blocks="30"
+            data-max-rows="100"
+        >
+            <section class="lns-paper lns-cover-page">
+                <div class="lns-side-track"></div>
+                <div class="lns-side-tab lns-side-tab--bronze" style="top: 10mm;">Couverture</div>
+                <div class="lns-cover-dark">
+                    <img src="https://lnstrade.fr/wp-content/uploads/2024/07/LOGO_LNS_WHITE.png" alt="LNS Trade" class="lns-logo lns-logo--large">
+                    <span class="lns-eyebrow">Document LNS</span>
+                </div>
+                <div class="lns-cover-body">
+                    <div class="lns-editor-field lns-editor-field--title">
+                        {{ form_label(form.title) }}
+                        {{ form_widget(form.title, {attr: {class: 'lns-cover-title-input', 'data-document-title': ''}}) }}
+                        {{ form_errors(form.title) }}
+                    </div>
+                    <div class="lns-editor-field lns-editor-field--description">
+                        {{ form_label(form.description) }}
+                        {{ form_widget(form.description, {attr: {class: 'lns-cover-description-input'}}) }}
+                        {{ form_errors(form.description) }}
+                    </div>
+                    <div class="lns-meta-grid">
+                        <div><span>Création</span><strong>{{ document.createdAt|date('d/m/Y') }}</strong></div>
+                        <div><span>Mise à jour</span><strong>{{ document.updatedAt|date('d/m/Y') }}</strong></div>
+                        <div><span>Auteur</span><strong>{{ document.createdBy ? document.createdBy.fullName : app.user.fullName }}</strong></div>
+                    </div>
+                </div>
+            </section>
+
+            <section class="lns-paper lns-inner-page" data-toc-page>
+                <div class="lns-side-track"></div>
+                <div class="lns-side-tab lns-side-tab--navy" style="top: 68mm;">Sommaire</div>
+                <header class="lns-page-band">
+                    <img src="https://lnstrade.fr/wp-content/uploads/2024/07/LOGO_LNS_WHITE.png" alt="LNS Trade" class="lns-logo">
+                    <div class="lns-running-title" data-document-title-echo></div>
+                </header>
+                <div class="lns-page-content">
+                    <h2>Sommaire</h2>
+                    <div class="lns-bronze-rule"></div>
+                    <div class="lns-toc-list" data-toc-list></div>
+                </div>
+                <footer class="lns-page-footer"><span>LNS Trade</span><span data-page-number></span></footer>
+            </section>
+
+            <div class="lns-editor-pages" data-pages-container></div>
+
+            <div class="lns-add-page-wrap">
+                <button type="button" class="btn btn-primary btn-md" data-action="add-page">
+                    <i class="fas fa-plus"></i>
+                    Ajouter une page
+                </button>
+            </div>
+
+            <section class="lns-paper lns-closing-page">
+                <div class="lns-side-track"></div>
+                <div class="lns-side-tab lns-side-tab--bronze" style="top: 242mm;">Clôture</div>
+                <img src="https://lnstrade.fr/wp-content/uploads/2024/07/LOGO_LNS_WHITE.png" alt="LNS Trade" class="lns-logo lns-logo--large">
+                <div class="lns-closing-rule"></div>
+                <div class="lns-contact-block">
+                    <span>LNS Trade — 13 Quai Kléber, 67000 Strasbourg</span>
+                    <span>lnstrade.fr</span>
+                    <span>contact@lnstrade.fr</span>
+                </div>
+            </section>
+
+            <template data-page-template>
+                <section class="lns-paper lns-inner-page lns-editable-page" data-page>
+                    <div class="lns-side-track"></div>
+                    <div class="lns-side-tab lns-side-tab--navy" style="top: 126mm;">Contenu</div>
+                    <header class="lns-page-band">
+                        <img src="https://lnstrade.fr/wp-content/uploads/2024/07/LOGO_LNS_WHITE.png" alt="LNS Trade" class="lns-logo">
+                        <div class="lns-running-title" data-document-title-echo></div>
+                    </header>
+                    <button type="button" class="lns-remove-page" data-action="remove-page">Supprimer la page ×</button>
+                    <div class="lns-page-content">
+                        <label class="lns-inline-label">Titre de la page</label>
+                        <input type="text" maxlength="180" placeholder="Titre de la section" class="lns-page-title-input" data-field="page-title">
+                        <div class="lns-bronze-rule"></div>
+                        <label class="lns-inline-label">Description</label>
+                        <textarea maxlength="50000" rows="4" placeholder="Développez le contenu de cette page…" data-field="page-description"></textarea>
+                        <div class="lns-block-list" data-block-list></div>
+                        <div class="lns-add-block-actions">
+                            <button type="button" class="lns-outline-action" data-action="add-text-block">+ Bloc texte</button>
+                            <button type="button" class="lns-outline-action" data-action="add-table-block">+ Tableau</button>
+                            <button type="button" class="lns-outline-action" data-action="add-image-block">+ Image</button>
+                        </div>
+                    </div>
+                    <footer class="lns-page-footer"><span>LNS Trade</span><span data-page-number></span></footer>
+                </section>
+            </template>
+
+            <template data-text-block-template>
+                <section class="lns-edit-block" data-block data-block-type="text">
+                    <div class="lns-block-toolbar">
+                        <span>Bloc texte</span>
+                        <button type="button" data-action="remove-block" aria-label="Supprimer ce bloc">Supprimer ×</button>
+                    </div>
+                    <label class="lns-inline-label">Titre du bloc</label>
+                    <input type="text" maxlength="180" placeholder="Sous-titre" data-field="block-title">
+                    <label class="lns-inline-label">Description du bloc</label>
+                    <textarea maxlength="50000" rows="4" placeholder="Texte du bloc…" data-field="block-description"></textarea>
+                </section>
+            </template>
+
+            <template data-table-block-template>
+                <section class="lns-edit-block lns-edit-table-block" data-block data-block-type="table">
+                    <div class="lns-block-toolbar">
+                        <span>Tableau</span>
+                        <button type="button" data-action="remove-block" aria-label="Supprimer ce tableau">Supprimer ×</button>
+                    </div>
+                    <label class="lns-inline-label">Titre du tableau</label>
+                    <input type="text" maxlength="180" placeholder="Titre du tableau" data-field="block-title">
+                    <div class="lns-content-table-wrap">
+                        <table class="lns-content-table lns-edit-table">
+                            <thead>
+                                <tr>
+                                    <th><input type="text" maxlength="80" data-field="table-header" aria-label="En-tête de colonne 1"></th>
+                                    <th><input type="text" maxlength="80" data-field="table-header" aria-label="En-tête de colonne 2"></th>
+                                    <th><input type="text" maxlength="80" data-field="table-header" aria-label="En-tête de colonne 3"></th>
+                                    <th class="lns-table-action-column"></th>
+                                </tr>
+                            </thead>
+                            <tbody data-table-rows></tbody>
+                        </table>
+                    </div>
+                    <button type="button" class="lns-outline-action" data-action="add-table-row">+ Ajouter une ligne</button>
+                </section>
+            </template>
+
+            <template data-image-block-template>
+                <section class="lns-edit-block lns-edit-image-block" data-block data-block-type="image" data-has-image="false">
+                    <div class="lns-block-toolbar">
+                        <span>Image</span>
+                        <button type="button" data-action="remove-block" aria-label="Supprimer ce bloc image">Supprimer ×</button>
+                    </div>
+                    <label class="lns-inline-label">Titre de l’image</label>
+                    <input type="text" maxlength="180" placeholder="Titre de l’image" data-field="block-title">
+                    <div class="lns-image-drop" data-image-drop>
+                        <img data-image-preview alt="Aperçu de l’image" hidden>
+                        <div class="lns-image-placeholder" data-image-placeholder>
+                            <i class="fas fa-image"></i>
+                            <strong>Choisir une image</strong>
+                            <span>JPEG, PNG ou WebP — l’image sera optimisée automatiquement</span>
+                        </div>
+                        <div class="lns-image-actions">
+                            <button type="button" data-action="choose-image">Choisir / remplacer</button>
+                            <button type="button" data-action="remove-image">Retirer l’image</button>
+                        </div>
+                    </div>
+                    <input type="file" accept="image/jpeg,image/png,image/webp" data-image-file hidden>
+                    <input type="hidden" data-field="image-data">
+                    <label class="lns-inline-label">Légende</label>
+                    <textarea maxlength="5000" rows="2" placeholder="Légende de l’image" data-field="image-caption"></textarea>
+                </section>
+            </template>
+
+            <template data-table-row-template>
+                <tr data-table-row>
+                    <td><textarea rows="2" maxlength="5000" data-field="table-cell" aria-label="Cellule colonne 1"></textarea></td>
+                    <td><textarea rows="2" maxlength="5000" data-field="table-cell" aria-label="Cellule colonne 2"></textarea></td>
+                    <td><textarea rows="2" maxlength="5000" data-field="table-cell" aria-label="Cellule colonne 3"></textarea></td>
+                    <td class="lns-table-action-column"><button type="button" data-action="remove-table-row" aria-label="Supprimer cette ligne">×</button></td>
+                </tr>
+            </template>
+        </div>
+
+        {{ form_widget(form.contentJson) }}
+        {{ form_rest(form) }}
+    {{ form_end(form, {render_rest: false}) }}
+{% endblock %}
