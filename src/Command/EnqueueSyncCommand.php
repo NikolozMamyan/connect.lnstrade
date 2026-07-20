@@ -61,7 +61,7 @@ final class EnqueueSyncCommand extends Command
             );
         }
 
-        $io->success(sprintf('Synchronisation(s) ajoutee(s) : %s.', implode(', ', $types)));
+        $io->success(sprintf('Demande(s) de synchronisation prise(s) en compte : %s.', implode(', ', $types)));
 
         return Command::SUCCESS;
     }

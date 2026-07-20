@@ -50,7 +50,7 @@ class FluxProduitsController extends AbstractController
 
         $notificationManager->notify(
             'Synchronisation produits lancee',
-            'Le catalogue produits a ete ajoute a la file de traitement.',
+            'La demande catalogue produits a ete prise en compte par la file de traitement.',
             Notification::LEVEL_INFO,
             'flux_produits_logs'
         );
@@ -103,7 +103,7 @@ class FluxProduitsController extends AbstractController
 
         $notificationManager->notify(
             'Synchronisation stock lancee',
-            'Le flux de stocks produits a ete ajoute a la file de traitement.',
+            'La demande de stocks produits a ete prise en compte par la file de traitement.',
             Notification::LEVEL_INFO,
             'flux_produits_logs'
         );

@@ -58,7 +58,7 @@ class FluxClientController extends AbstractController
 
         $notificationManager->notify(
             'Synchronisation clients lancee',
-            'Le flux clients a ete ajoute a la file de traitement.',
+            'La demande clients a ete prise en compte par la file de traitement.',
             Notification::LEVEL_INFO,
             'flux_client_logs'
         );

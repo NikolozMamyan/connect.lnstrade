@@ -81,7 +81,7 @@ class FluxFacturesController extends AbstractController
             'Synchronisation factures demandee',
             'Le message Messenger a ete envoye pour rafraichir les factures Sage en base.'
         );
-        $this->addFlash('success', 'Synchronisation factures ajoutee a la file de traitement.');
+        $this->addFlash('success', 'Demande de synchronisation factures prise en compte.');
 
         return $this->redirectToRoute('flux_factures_index', [
             'watchSince' => $requestedAt->format(\DateTimeInterface::ATOM),
