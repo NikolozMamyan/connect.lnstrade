@@ -33,7 +33,7 @@ final class Version20260720140000 extends AbstractMigration
         }
 
         if ($schema->hasTable('erp_product') && !$schema->getTable('erp_product')->hasColumn('stock_synced_at')) {
-            $this->addSql('ALTER TABLE erp_product ADD stock_synced_at DATETIME DEFAULT NULL COMMENT \'(DC2Type:datetime_immutable)\'');
+            $this->addSql('ALTER TABLE erp_product ADD stock_synced_at DATETIME DEFAULT NULL');
         }
     }
 
