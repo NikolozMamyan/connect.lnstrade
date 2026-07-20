@@ -49,4 +49,28 @@ class NotificationRepository extends ServiceEntityRepository
             ->getQuery()
             ->execute();
     }
+
+    public function countReadOlderThan(\DateTimeImmutable $before): int
+    {
+        return (int) $this->createQueryBuilder('n')
+            ->select('COUNT(n.id)')
+            ->andWhere('n.isRead = :isRead')
+            ->andWhere('n.createdAt < :before')
+            ->setParameter('isRead', true)
+            ->setParameter('before', $before)
+            ->getQuery()
+            ->getSingleScalarResult();
+    }
+
+    public function deleteReadOlderThan(\DateTimeImmutable $before): int
+    {
+        return $this->createQueryBuilder('n')
+            ->delete()
+            ->andWhere('n.isRead = :isRead')
+            ->andWhere('n.createdAt < :before')
+            ->setParameter('isRead', true)
+            ->setParameter('before', $before)
+            ->getQuery()
+            ->execute();
+    }
 }

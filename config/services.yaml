@@ -35,3 +35,7 @@ services:
         arguments:
             $defaultFrom: '%mailer_from%'
             $defaultRecipients: '%erp_order_notification_recipients%'
+
+    App\Service\Monitoring\CronHeartbeatService:
+        arguments:
+            $projectDir: '%kernel.project_dir%'

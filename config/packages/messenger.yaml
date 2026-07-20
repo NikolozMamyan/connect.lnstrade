@@ -5,9 +5,15 @@ framework:
         transports:
             async:
                 dsn: '%env(MESSENGER_TRANSPORT_DSN)%'
+                options:
+                    auto_setup: false
+                    redeliver_timeout: 14400
                 retry_strategy:
-                    max_retries: 3
+                    max_retries: 5
+                    delay: 30000
                     multiplier: 2
+                    max_delay: 900000
+                    jitter: 0.1
 
             failed: 'doctrine://default?queue_name=failed'
 

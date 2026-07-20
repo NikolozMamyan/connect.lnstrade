@@ -22,7 +22,7 @@ class SyncClientMessageHandler
 
     public function __invoke(SyncClientMessage $message): void
     {
-        $lock = $this->lockFactory->createLock('sync-client-lock', 3600);
+        $lock = $this->lockFactory->createLock('sync-client-lock', 14400);
 
         if (!$lock->acquire()) {
             $this->logger->warning('Une synchronisation client est deja en cours. Message ignore.');

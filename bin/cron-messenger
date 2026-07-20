@@ -1,0 +1,29 @@
+#!/bin/sh
+
+set -u
+
+PROJECT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+PHP_BIN=${PHP_BIN:-/usr/local/bin/php}
+LOG_DIR="$PROJECT_DIR/var/log"
+LOG_FILE="$LOG_DIR/messenger-cron-$(date +%Y-%m-%d).log"
+
+mkdir -p "$LOG_DIR"
+find "$LOG_DIR" -maxdepth 1 -type f -name 'messenger-cron-*.log' -mtime +14 -delete
+exec >> "$LOG_FILE" 2>&1
+
+cd "$PROJECT_DIR" || exit 1
+
+"$PHP_BIN" bin/console app:cron:heartbeat --status=running --env=prod --no-debug
+"$PHP_BIN" bin/console messenger:consume async \
+    --env=prod \
+    --no-debug \
+    --time-limit=50 \
+    --memory-limit=256M \
+    --limit=20 \
+    --failure-limit=3 \
+    --sleep=2 \
+    --keepalive=10
+EXIT_CODE=$?
+"$PHP_BIN" bin/console app:cron:heartbeat --status=finished --exit-code="$EXIT_CODE" --env=prod --no-debug
+
+exit "$EXIT_CODE"

@@ -27,7 +27,7 @@ class HubspotProductSyncService
 
     public function syncProducts(): array
     {
-        $products = $this->erpProductRepository->findActiveProductsForSync();
+        $products = $this->erpProductRepository->findProductsForCatalogSync();
 
         $sent = 0;
         $created = 0;
@@ -45,27 +45,36 @@ class HubspotProductSyncService
             }
 
             try {
-                $existing = $this->findHubspotProductBySku((string) $payload['hs_sku']);
+                $hubspotId = trim((string) $product->getHubspotObjectId());
+                $existing = null;
 
-                if ($existing !== null) {
-                    $response = $this->hubSpotClient->updateObject('products', (string) $existing['id'], $payload);
+                if ($hubspotId === '') {
+                    $existing = $this->findHubspotProductBySku((string) $payload['hs_sku']);
+                    $hubspotId = trim((string) ($existing['id'] ?? ''));
+                }
+
+                if ($hubspotId !== '') {
+                    $response = $this->hubSpotClient->updateObject('products', $hubspotId, $payload);
                     ++$updated;
                 } else {
                     $response = $this->hubSpotClient->createObject('products', $payload);
                     ++$created;
                 }
 
+                $resolvedHubspotId = (string) ($response['id'] ?? ($hubspotId !== '' ? $hubspotId : $product->getHubspotObjectId()));
+
                 $product
-                    ->setHubspotObjectId((string) ($response['id'] ?? $existing['id'] ?? $product->getHubspotObjectId()))
-                    ->setLastSyncedAt(new \DateTimeImmutable())
-                    ->setUpdatedAt(new \DateTimeImmutable());
+                    ->setHubspotObjectId($resolvedHubspotId)
+                    ->setLastSyncedAt(new \DateTimeImmutable());
 
                 $this->entityManager->persist($product);
 
-                $payloads[] = [
-                    'reference' => $product->getReference(),
-                    'properties' => $payload,
-                ];
+                if (count($payloads) < 20) {
+                    $payloads[] = [
+                        'reference' => $product->getReference(),
+                        'properties' => $payload,
+                    ];
+                }
 
                 ++$sent;
             } catch (\Throwable $e) {

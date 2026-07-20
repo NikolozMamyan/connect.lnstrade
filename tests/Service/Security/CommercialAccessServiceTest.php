@@ -12,7 +12,7 @@ class CommercialAccessServiceTest extends TestCase
 {
     public function testDetectsCommercialUserWithoutAdminRole(): void
     {
-        $service = new CommercialAccessService($this->createMock(CommercialRepository::class));
+        $service = new CommercialAccessService($this->createStub(CommercialRepository::class));
         $user = (new User())->setEmail('com@example.test')->setRoles(['ROLE_COM']);
 
         self::assertTrue($service->isCommercialUser($user));
@@ -20,7 +20,7 @@ class CommercialAccessServiceTest extends TestCase
 
     public function testDoesNotTreatAdminAsRestrictedCommercialUser(): void
     {
-        $service = new CommercialAccessService($this->createMock(CommercialRepository::class));
+        $service = new CommercialAccessService($this->createStub(CommercialRepository::class));
         $user = (new User())->setEmail('admin@example.test')->setRoles(['ROLE_ADMIN', 'ROLE_COM']);
 
         self::assertFalse($service->isCommercialUser($user));

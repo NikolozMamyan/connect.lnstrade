@@ -26,6 +26,35 @@ class ErpInvoiceRepository extends ServiceEntityRepository
     }
 
     /**
+     * @param list<string> $invoiceNumbers
+     *
+     * @return array<string, ErpInvoice>
+     */
+    public function findIndexedByInvoiceNumbers(array $invoiceNumbers): array
+    {
+        if ($invoiceNumbers === []) {
+            return [];
+        }
+
+        $invoices = $this->createQueryBuilder('i')
+            ->andWhere('i.invoiceNumber IN (:invoiceNumbers)')
+            ->setParameter('invoiceNumbers', array_values(array_unique($invoiceNumbers)))
+            ->getQuery()
+            ->getResult();
+        $indexed = [];
+
+        foreach ($invoices as $invoice) {
+            $invoiceNumber = $invoice->getInvoiceNumber();
+
+            if ($invoiceNumber !== null) {
+                $indexed[$invoiceNumber] = $invoice;
+            }
+        }
+
+        return $indexed;
+    }
+
+    /**
      * @return ErpInvoice[]
      */
     public function findPaginated(string $search = '', string $clientId = '', string $documentType = '', int $page = 1, int $perPage = 25): array

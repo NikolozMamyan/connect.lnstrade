@@ -1,2 +1,4 @@
 framework:
-    lock: '%env(LOCK_DSN)%'
+    # A database-backed store keeps Messenger deduplication locks alive between
+    # the HTTP request that dispatches a message and the cron worker that handles it.
+    lock: doctrine.dbal.default_connection

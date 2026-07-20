@@ -20,16 +20,10 @@ class ErpProductStockUpdateService
 
     public function updateStocksFromErp(): array
     {
-        $products = $this->erpProductRepository->findActiveProductsForSync();
-
         $updated = 0;
         $skipped = 0;
         $errors = [];
-
-        $references = array_values(array_filter(array_map(
-            static fn ($product) => $product->getReference(),
-            $products
-        )));
+        $references = $this->erpProductRepository->findActiveProductReferences();
 
         $total = count($references);
         $totalPages = (int) ceil($total / self::BATCH_SIZE);
@@ -58,6 +52,8 @@ class ErpProductStockUpdateService
                 continue;
             }
 
+            $productsByReference = $this->erpProductRepository->findIndexedByReferences($batchReferences);
+
             foreach ($response as $row) {
                 if (!\is_array($row)) {
                     ++$skipped;
@@ -71,20 +67,33 @@ class ErpProductStockUpdateService
                     continue;
                 }
 
-                $product = $this->erpProductRepository->findOneByReference($reference);
+                $product = $productsByReference[$reference] ?? null;
 
                 if ($product === null) {
                     ++$skipped;
                     continue;
                 }
 
+                $stockReel = $this->nullableFloat($row['stockReel'] ?? null);
+                $stockDispo = $this->nullableFloat($row['stockDispo'] ?? null);
+                $stockATerme = $this->nullableFloat($row['stockATerme'] ?? null);
+
+                if (
+                    $product->getStockReel() === $stockReel
+                    && $product->getStockDispo() === $stockDispo
+                    && $product->getStockATerme() === $stockATerme
+                    && $product->getRawStockPayload() === $row
+                ) {
+                    ++$skipped;
+                    continue;
+                }
+
                 $product
-                    ->setStockReel($this->nullableFloat($row['stockReel'] ?? null))
-                    ->setStockDispo($this->nullableFloat($row['stockDispo'] ?? null))
-                    ->setStockATerme($this->nullableFloat($row['stockATerme'] ?? null))
+                    ->setStockReel($stockReel)
+                    ->setStockDispo($stockDispo)
+                    ->setStockATerme($stockATerme)
                     ->setRawStockPayload($row)
-                    ->setStockUpdatedAt(new \DateTimeImmutable())
-                    ->setUpdatedAt(new \DateTimeImmutable());
+                    ->setStockUpdatedAt(new \DateTimeImmutable());
 
                 $this->entityManager->persist($product);
                 ++$updated;

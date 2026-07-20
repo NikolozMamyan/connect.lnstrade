@@ -12,6 +12,8 @@ use App\Repository\HubspotContactRepository;
 use App\Repository\SyncLogRepository;
 use App\Entity\SyncLog;
 use App\Service\Security\CommercialAccessService;
+use App\Service\Monitoring\CronHeartbeatService;
+use App\Service\Monitoring\MessengerHealthService;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Attribute\Route;
@@ -28,6 +30,8 @@ final class DashboardController extends AbstractController
         DealRepository $dealRepository,
         DealLineItemRepository $dealLineItemRepository,
         CommercialAccessService $commercialAccessService,
+        CronHeartbeatService $cronHeartbeatService,
+        MessengerHealthService $messengerHealthService,
     ): Response {
         /** @var User|null $user */
         $user = $this->getUser();
@@ -110,6 +114,13 @@ final class DashboardController extends AbstractController
             $this->buildFluxStatusCard('product_stock', 'Stocks produits', $syncLogRepository),
             $this->buildFluxStatusCard('webhook', 'Webhook HubSpot', $syncLogRepository),
         ];
+        $workerHealth = $cronHeartbeatService->read();
+
+        try {
+            $workerHealth['queue'] = $messengerHealthService->getSnapshot();
+        } catch (\Throwable) {
+            // Le dernier snapshot du heartbeat reste disponible si la base est momentanement indisponible.
+        }
 
         return $this->render('dashboard/index.html.twig', [
             'dashboardScope' => 'global',
@@ -132,10 +143,12 @@ final class DashboardController extends AbstractController
             'recentLogs' => $recentLogs,
             'alertLogs' => array_slice($alertLogs, 0, 8),
             'fluxStatusCards' => $fluxStatusCards,
+            'workerHealth' => $workerHealth,
             'syncSchedule' => [
                 ['label' => 'Clients', 'time' => '18:00', 'frequency' => '1 fois / jour'],
                 ['label' => 'Produits', 'time' => '18:00', 'frequency' => '1 fois / jour'],
                 ['label' => 'Stocks', 'time' => '09:00, 14:00, 20:00', 'frequency' => '3 fois / jour'],
+                ['label' => 'Factures', 'time' => 'Toutes les 15 min', 'frequency' => 'Automatique'],
             ],
         ]);
     }

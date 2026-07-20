@@ -3,16 +3,14 @@
 namespace App\Controller\Flux;
 
 use App\Entity\Notification;
-use App\Message\SyncProductMessage;
-use App\Message\SyncProductStockMessage;
 use App\Repository\ErpProductRepository;
 use App\Repository\SyncLogRepository;
+use App\Service\Flux\SyncJobDispatcher;
 use App\Service\Log\SyncLogService;
 use App\Service\Ui\NotificationManager;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
-use Symfony\Component\Messenger\MessageBusInterface;
 use Symfony\Component\Routing\Attribute\Route;
 
 #[Route('/flux/produits', name: 'flux_produits_')]
@@ -31,11 +29,18 @@ class FluxProduitsController extends AbstractController
 
     #[Route('/sync', name: 'sync', methods: ['POST'])]
     public function sync(
-        MessageBusInterface $bus,
+        Request $request,
+        SyncJobDispatcher $syncJobDispatcher,
         SyncLogService $syncLogService,
         NotificationManager $notificationManager,
     ): Response {
-        $bus->dispatch(new SyncProductMessage());
+        if (!$this->isCsrfTokenValid('flux_product_sync', (string) $request->request->get('_token'))) {
+            $this->addFlash('error', 'Jeton CSRF invalide.');
+
+            return $this->redirectToRoute('flux_produits_index');
+        }
+
+        $syncJobDispatcher->dispatch(SyncJobDispatcher::PRODUCT);
 
         $syncLogService->info(
             'product',
@@ -77,11 +82,18 @@ class FluxProduitsController extends AbstractController
 
     #[Route('/mapping/logistique/sync-stock', name: 'sync_stock', methods: ['POST'])]
     public function syncStock(
-        MessageBusInterface $bus,
+        Request $request,
+        SyncJobDispatcher $syncJobDispatcher,
         SyncLogService $syncLogService,
         NotificationManager $notificationManager,
     ): Response {
-        $bus->dispatch(new SyncProductStockMessage());
+        if (!$this->isCsrfTokenValid('flux_product_stock_sync', (string) $request->request->get('_token'))) {
+            $this->addFlash('error', 'Jeton CSRF invalide.');
+
+            return $this->redirectToRoute('flux_produits_mapping_logistique');
+        }
+
+        $syncJobDispatcher->dispatch(SyncJobDispatcher::PRODUCT_STOCK);
 
         $syncLogService->info(
             'product_stock',

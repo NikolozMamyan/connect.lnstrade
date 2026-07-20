@@ -385,6 +385,35 @@
         <aside class="dashboard-main-grid__aside">
             <div class="card dashboard-side-card">
                 <div class="card-header">
+                    <span class="card-title">Worker Messenger</span>
+                    <span class="tag {{ workerHealth.fresh and workerHealth.queue.failed == 0 ? 'tag-accent' : 'tag-warning' }}">
+                        {{ workerHealth.fresh ? 'Actif' : 'A verifier' }}
+                    </span>
+                </div>
+                <div class="card-body">
+                    <div class="dashboard-metric-stack">
+                        <div class="dashboard-metric-stack__item">
+                            <span>Dernier passage cron</span>
+                            <strong>{{ workerHealth.updatedAt ? workerHealth.updatedAt|date('d/m H:i:s') : 'Jamais' }}</strong>
+                        </div>
+                        <div class="dashboard-metric-stack__item">
+                            <span>Messages en file</span>
+                            <strong>{{ workerHealth.queue.pending }}</strong>
+                        </div>
+                        <div class="dashboard-metric-stack__item">
+                            <span>Messages en traitement</span>
+                            <strong>{{ workerHealth.queue.inProgress }}</strong>
+                        </div>
+                        <div class="dashboard-metric-stack__item">
+                            <span>Messages en echec</span>
+                            <strong>{{ workerHealth.queue.failed }}</strong>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card dashboard-side-card">
+                <div class="card-header">
                     <span class="card-title">Planning des flux</span>
                     <span class="tag tag-info">Cron</span>
                 </div>

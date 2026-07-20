@@ -110,4 +110,24 @@ class SyncLogRepository extends ServiceEntityRepository
 
         return $counts;
     }
+
+    public function countOlderThan(\DateTimeImmutable $before): int
+    {
+        return (int) $this->createQueryBuilder('l')
+            ->select('COUNT(l.id)')
+            ->andWhere('l.createdAt < :before')
+            ->setParameter('before', $before)
+            ->getQuery()
+            ->getSingleScalarResult();
+    }
+
+    public function deleteOlderThan(\DateTimeImmutable $before): int
+    {
+        return $this->createQueryBuilder('l')
+            ->delete()
+            ->andWhere('l.createdAt < :before')
+            ->setParameter('before', $before)
+            ->getQuery()
+            ->execute();
+    }
 }

@@ -22,7 +22,7 @@ class SyncInvoiceMessageHandler
 
     public function __invoke(SyncInvoiceMessage $message): void
     {
-        $lock = $this->lockFactory->createLock('sync-invoice-lock', 3600);
+        $lock = $this->lockFactory->createLock('sync-invoice-lock', 14400);
 
         if (!$lock->acquire()) {
             $this->logger->warning('Une synchronisation facture est deja en cours. Message ignore.');

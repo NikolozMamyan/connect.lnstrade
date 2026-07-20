@@ -27,48 +27,61 @@ class ErpInvoiceImportService
         $errors = [];
         $processed = 0;
 
-        foreach (array_values($invoices) as $index => $invoiceData) {
-            if (!\is_array($invoiceData)) {
-                continue;
-            }
+        foreach (array_chunk(array_values($invoices), self::BATCH_SIZE) as $batch) {
+            $invoiceNumbers = [];
 
-            try {
+            foreach ($batch as $invoiceData) {
+                if (!\is_array($invoiceData)) {
+                    continue;
+                }
+
                 $invoiceNumber = trim((string) ($invoiceData['numero_facture'] ?? ''));
 
-                if ($invoiceNumber === '') {
-                    throw new \RuntimeException('Numero de facture manquant.');
+                if ($invoiceNumber !== '') {
+                    $invoiceNumbers[] = $invoiceNumber;
                 }
-
-                $invoice = $this->erpInvoiceRepository->findOneByInvoiceNumber($invoiceNumber);
-
-                if (!$invoice instanceof ErpInvoice) {
-                    $invoice = new ErpInvoice();
-                    $invoice->setInvoiceNumber($invoiceNumber);
-                    ++$created;
-                } else {
-                    ++$updated;
-                }
-
-                $this->hydrateInvoice($invoice, $invoiceData);
-                $this->entityManager->persist($invoice);
-                ++$processed;
-            } catch (\Throwable $e) {
-                $errors[] = [
-                    'invoiceNumber' => $invoiceData['numero_facture'] ?? null,
-                    'message' => $e->getMessage(),
-                ];
             }
 
-            if ((($index + 1) % self::BATCH_SIZE) === 0) {
-                $this->entityManager->flush();
-                $this->entityManager->clear();
-                gc_collect_cycles();
+            $existingInvoices = $this->erpInvoiceRepository->findIndexedByInvoiceNumbers($invoiceNumbers);
+
+            foreach ($batch as $invoiceData) {
+                if (!\is_array($invoiceData)) {
+                    continue;
+                }
+
+                try {
+                    $invoiceNumber = trim((string) ($invoiceData['numero_facture'] ?? ''));
+
+                    if ($invoiceNumber === '') {
+                        throw new \RuntimeException('Numero de facture manquant.');
+                    }
+
+                    $invoice = $existingInvoices[$invoiceNumber] ?? null;
+
+                    if (!$invoice instanceof ErpInvoice) {
+                        $invoice = new ErpInvoice();
+                        $invoice->setInvoiceNumber($invoiceNumber);
+                        $existingInvoices[$invoiceNumber] = $invoice;
+                        ++$created;
+                    } else {
+                        ++$updated;
+                    }
+
+                    $this->hydrateInvoice($invoice, $invoiceData);
+                    $this->entityManager->persist($invoice);
+                    ++$processed;
+                } catch (\Throwable $e) {
+                    $errors[] = [
+                        'invoiceNumber' => $invoiceData['numero_facture'] ?? null,
+                        'message' => $e->getMessage(),
+                    ];
+                }
             }
+
+            $this->entityManager->flush();
+            $this->entityManager->clear();
+            gc_collect_cycles();
         }
-
-        $this->entityManager->flush();
-        $this->entityManager->clear();
-        gc_collect_cycles();
 
         return [
             'imported' => $processed,

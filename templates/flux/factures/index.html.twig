@@ -95,7 +95,7 @@
 
     <div class="flux-header">
         <span class="flux-direction-badge flux-direction-badge--sage-hs">Sage -> Extranet</span>
-        {% if not synced %}
+        {% if watchSince %}
             <span id="invoiceSyncIndicator" class="invoice-sync-indicator">
                 <span class="invoice-sync-indicator__spinner"></span>
                 <span class="invoice-sync-indicator__check">✓</span>
@@ -105,7 +105,7 @@
             <span class="invoice-sync-indicator invoice-sync-indicator--success">
                 <span class="invoice-sync-indicator__spinner"></span>
                 <span class="invoice-sync-indicator__check">✓</span>
-                <span>Synchronisation terminee</span>
+                <span>Dernieres donnees disponibles</span>
             </span>
         {% endif %}
     </div>
@@ -145,10 +145,13 @@
                     <i class="fas fa-filter"></i>
                     Filtrer
                 </button>
-                <a href="{{ path('flux_factures_index') }}" class="btn btn-secondary btn-md">
+            </form>
+            <form method="post" action="{{ path('flux_factures_sync') }}" style="margin-top: var(--space-3);">
+                <input type="hidden" name="_token" value="{{ csrf_token('flux_invoice_sync') }}">
+                <button type="submit" class="btn btn-secondary btn-md">
                     <i class="fas fa-rotate"></i>
                     Relancer la sync
-                </a>
+                </button>
             </form>
         </div>
     </div>
@@ -236,10 +239,10 @@
                 <span>Page {{ page }} / {{ totalPages }}</span>
                 <div style="display:flex;gap:var(--space-2);">
                     {% if page > 1 %}
-                        <a class="btn btn-secondary btn-sm" href="{{ path('flux_factures_index', { page: page - 1, q: filters.q, clientId: filters.clientId, type: filters.type, synced: synced ? 1 : 0 }) }}">Precedent</a>
+                        <a class="btn btn-secondary btn-sm" href="{{ path('flux_factures_index', { page: page - 1, q: filters.q, clientId: filters.clientId, type: filters.type }) }}">Precedent</a>
                     {% endif %}
                     {% if page < totalPages %}
-                        <a class="btn btn-secondary btn-sm" href="{{ path('flux_factures_index', { page: page + 1, q: filters.q, clientId: filters.clientId, type: filters.type, synced: synced ? 1 : 0 }) }}">Suivant</a>
+                        <a class="btn btn-secondary btn-sm" href="{{ path('flux_factures_index', { page: page + 1, q: filters.q, clientId: filters.clientId, type: filters.type }) }}">Suivant</a>
                     {% endif %}
                 </div>
             </div>
@@ -276,7 +279,7 @@
                                 label.textContent = 'Synchronisation terminee';
                             }
 
-                            currentUrl.searchParams.set('synced', '1');
+                            currentUrl.searchParams.delete('watchSince');
                             window.setTimeout(() => {
                                 window.location.href = currentUrl.toString();
                             }, 900);

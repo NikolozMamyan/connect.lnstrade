@@ -22,7 +22,7 @@ class SyncProductStockMessageHandler
 
     public function __invoke(SyncProductStockMessage $message): void
     {
-        $lock = $this->lockFactory->createLock('sync-product-stock-lock', 3600);
+        $lock = $this->lockFactory->createLock('sync-product-stock-lock', 14400);
 
         if (!$lock->acquire()) {
             $this->logger->warning('Une synchronisation de stock produit est deja en cours. Message ignore.');

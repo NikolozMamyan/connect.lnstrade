@@ -2,16 +2,15 @@
 
 namespace App\Controller\Flux;
 
-use App\Message\SyncInvoiceMessage;
 use App\Repository\ErpInvoiceRepository;
 use App\Repository\SyncLogRepository;
+use App\Service\Flux\SyncJobDispatcher;
 use App\Service\Log\SyncLogService;
 use App\Service\Pdf\InvoicePdfGenerator;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
-use Symfony\Component\Messenger\MessageBusInterface;
 use Symfony\Component\Routing\Attribute\Route;
 
 #[Route('/flux/factures', name: 'flux_factures_')]
@@ -24,25 +23,21 @@ class FluxFacturesController extends AbstractController
         Request $request,
         ErpInvoiceRepository $erpInvoiceRepository,
         SyncLogRepository $syncLogRepository,
-        MessageBusInterface $bus,
-        SyncLogService $syncLogService,
     ): Response
     {
         $clientId = trim((string) $request->query->get('clientId', ''));
         $search = trim((string) $request->query->get('q', ''));
         $documentType = trim((string) $request->query->get('type', ''));
         $page = max(1, $request->query->getInt('page', 1));
-        $synced = $request->query->getBoolean('synced', false);
         $watchSince = null;
+        $watchSinceValue = trim((string) $request->query->get('watchSince', ''));
 
-        if (!$synced) {
-            $bus->dispatch(new SyncInvoiceMessage());
-            $watchSince = new \DateTimeImmutable();
-            $syncLogService->info(
-                'invoice',
-                'Synchronisation factures demandee',
-                'Le message Messenger a ete envoye pour rafraichir les factures Sage en base.'
-            );
+        if ($watchSinceValue !== '') {
+            try {
+                $watchSince = new \DateTimeImmutable($watchSinceValue);
+            } catch (\Throwable) {
+                $watchSince = null;
+            }
         }
 
         $invoiceEntities = $erpInvoiceRepository->findPaginated($search, $clientId, $documentType, $page, self::PER_PAGE);
@@ -64,7 +59,32 @@ class FluxFacturesController extends AbstractController
             ],
             'latestInvoiceLogs' => $latestLogs,
             'watchSince' => $watchSince?->format(\DateTimeInterface::ATOM),
-            'synced' => $synced,
+        ]);
+    }
+
+    #[Route('/refresh', name: 'sync', methods: ['POST'])]
+    public function sync(
+        Request $request,
+        SyncJobDispatcher $syncJobDispatcher,
+        SyncLogService $syncLogService,
+    ): Response {
+        if (!$this->isCsrfTokenValid('flux_invoice_sync', (string) $request->request->get('_token'))) {
+            $this->addFlash('error', 'Jeton CSRF invalide.');
+
+            return $this->redirectToRoute('flux_factures_index');
+        }
+
+        $requestedAt = new \DateTimeImmutable();
+        $syncJobDispatcher->dispatch(SyncJobDispatcher::INVOICE);
+        $syncLogService->info(
+            'invoice',
+            'Synchronisation factures demandee',
+            'Le message Messenger a ete envoye pour rafraichir les factures Sage en base.'
+        );
+        $this->addFlash('success', 'Synchronisation factures ajoutee a la file de traitement.');
+
+        return $this->redirectToRoute('flux_factures_index', [
+            'watchSince' => $requestedAt->format(\DateTimeInterface::ATOM),
         ]);
     }
 

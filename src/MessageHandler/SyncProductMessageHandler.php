@@ -22,7 +22,7 @@ class SyncProductMessageHandler
 
     public function __invoke(SyncProductMessage $message): void
     {
-        $lock = $this->lockFactory->createLock('sync-product-lock', 3600);
+        $lock = $this->lockFactory->createLock('sync-product-lock', 14400);
 
         if (!$lock->acquire()) {
             $this->logger->warning('Une synchronisation produit est deja en cours. Message ignore.');

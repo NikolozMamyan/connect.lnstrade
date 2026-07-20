@@ -1,0 +1,5 @@
+framework:
+    http_client:
+        default_options:
+            timeout: 30
+            max_duration: 60

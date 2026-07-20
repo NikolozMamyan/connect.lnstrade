@@ -30,7 +30,7 @@ class SyncClientFluxCommand extends Command
         $io = new SymfonyStyle($input, $output);
 
         $io->title('Lancement de la synchronisation du flux client');
-        $lock = $this->lockFactory->createLock('sync-client-lock', 3600);
+        $lock = $this->lockFactory->createLock('sync-client-lock', 14400);
 
         if (!$lock->acquire()) {
             $this->syncLogService->warning(

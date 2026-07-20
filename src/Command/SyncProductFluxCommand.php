@@ -9,6 +9,7 @@ use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\Style\SymfonyStyle;
+use Symfony\Component\Lock\LockFactory;
 
 #[AsCommand(
     name: 'app:sync:product-flux',
@@ -19,6 +20,7 @@ class SyncProductFluxCommand extends Command
     public function __construct(
         private readonly ClientFluxOrchestrator $clientFluxOrchestrator,
         private readonly SyncLogService $syncLogService,
+        private readonly LockFactory $lockFactory,
     ) {
         parent::__construct();
     }
@@ -28,6 +30,18 @@ class SyncProductFluxCommand extends Command
         $io = new SymfonyStyle($input, $output);
 
         $io->title('Lancement de la synchronisation du flux produit');
+        $lock = $this->lockFactory->createLock('sync-product-lock', 14400);
+
+        if (!$lock->acquire()) {
+            $this->syncLogService->warning(
+                'product',
+                'Synchronisation deja en cours',
+                'La commande a ete ignoree car un traitement produit est deja actif.'
+            );
+            $io->warning('Une synchronisation produit est deja en cours.');
+
+            return Command::SUCCESS;
+        }
 
         try {
             $this->syncLogService->info(
@@ -138,6 +152,8 @@ class SyncProductFluxCommand extends Command
             $io->error('Erreur lors de la synchronisation : ' . $e->getMessage());
 
             return Command::FAILURE;
+        } finally {
+            $lock->release();
         }
     }
 }

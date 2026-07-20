@@ -112,6 +112,9 @@ class ErpProduct
     #[ORM\Column(name: 'stock_updated_at', type: Types::DATETIME_IMMUTABLE, nullable: true)]
     private ?\DateTimeImmutable $stockUpdatedAt = null;
 
+    #[ORM\Column(name: 'stock_synced_at', type: Types::DATETIME_IMMUTABLE, nullable: true)]
+    private ?\DateTimeImmutable $stockSyncedAt = null;
+
     #[ORM\Column(name: 'last_synced_at', type: Types::DATETIME_IMMUTABLE, nullable: true)]
     private ?\DateTimeImmutable $lastSyncedAt = null;
 
@@ -529,6 +532,18 @@ class ErpProduct
     public function setStockUpdatedAt(?\DateTimeImmutable $stockUpdatedAt): static
     {
         $this->stockUpdatedAt = $stockUpdatedAt;
+
+        return $this;
+    }
+
+    public function getStockSyncedAt(): ?\DateTimeImmutable
+    {
+        return $this->stockSyncedAt;
+    }
+
+    public function setStockSyncedAt(?\DateTimeImmutable $stockSyncedAt): static
+    {
+        $this->stockSyncedAt = $stockSyncedAt;
 
         return $this;
     }

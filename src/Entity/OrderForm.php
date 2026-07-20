@@ -32,7 +32,7 @@ class OrderForm
     #[Assert\Choice(choices: [self::DEAL_TYPE_NOUVEAU, self::DEAL_TYPE_EXISTANT])]
     private ?string $dealType = null;
 
-    #[ORM\ManyToOne(targetEntity: Commercial::class)]
+    #[ORM\ManyToOne(targetEntity: Commercial::class, inversedBy: 'orderForms')]
     #[ORM\JoinColumn(nullable: false, onDelete: 'RESTRICT')]
     #[Assert\NotNull]
     private ?Commercial $commercial = null;

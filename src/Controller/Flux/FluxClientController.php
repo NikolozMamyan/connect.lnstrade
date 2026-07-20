@@ -3,15 +3,14 @@
 namespace App\Controller\Flux;
 
 use App\Entity\Notification;
-use App\Message\SyncClientMessage;
 use App\Repository\HubspotCompanyRepository;
 use App\Repository\SyncLogRepository;
+use App\Service\Flux\SyncJobDispatcher;
 use App\Service\Log\SyncLogService;
 use App\Service\Ui\NotificationManager;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
-use Symfony\Component\Messenger\MessageBusInterface;
 use Symfony\Component\Routing\Attribute\Route;
 
 #[Route('/flux/client', name: 'flux_client_')]
@@ -39,7 +38,7 @@ class FluxClientController extends AbstractController
     #[Route('/sync', name: 'sync', methods: ['POST'])]
     public function sync(
         Request $request,
-        MessageBusInterface $bus,
+        SyncJobDispatcher $syncJobDispatcher,
         SyncLogService $syncLogService,
         NotificationManager $notificationManager,
     ): Response {
@@ -49,7 +48,7 @@ class FluxClientController extends AbstractController
             return $this->redirectToRoute('flux_client_index');
         }
 
-        $bus->dispatch(new SyncClientMessage());
+        $syncJobDispatcher->dispatch(SyncJobDispatcher::CLIENT);
 
         $syncLogService->info(
             'client',

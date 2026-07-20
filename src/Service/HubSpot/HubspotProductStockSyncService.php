@@ -25,7 +25,7 @@ class HubspotProductStockSyncService
 
     public function syncStocks(): array
     {
-        $products = $this->erpProductRepository->findActiveProductsForSync();
+        $products = $this->erpProductRepository->findProductsForStockSync();
 
         $sent = 0;
         $updated = 0;
@@ -42,15 +42,15 @@ class HubspotProductStockSyncService
             }
 
             try {
-                $hubspotId = $product->getHubspotObjectId();
+                $hubspotId = trim((string) $product->getHubspotObjectId());
                 $sku = $product->getReference();
 
-                if ($hubspotId === null && $sku !== null) {
+                if ($hubspotId === '' && $sku !== null) {
                     $existing = $this->findHubspotProductBySku($sku);
-                    $hubspotId = \is_array($existing) ? (string) ($existing['id'] ?? '') : null;
+                    $hubspotId = \is_array($existing) ? trim((string) ($existing['id'] ?? '')) : '';
                 }
 
-                if ($hubspotId === null || $hubspotId === '') {
+                if ($hubspotId === '') {
                     ++$skipped;
                     continue;
                 }
@@ -59,15 +59,16 @@ class HubspotProductStockSyncService
 
                 $product
                     ->setHubspotObjectId($hubspotId)
-                    ->setLastSyncedAt(new \DateTimeImmutable())
-                    ->setUpdatedAt(new \DateTimeImmutable());
+                    ->setStockSyncedAt(new \DateTimeImmutable());
 
                 $this->entityManager->persist($product);
 
-                $payloads[] = [
-                    'reference' => $product->getReference(),
-                    'properties' => $payload,
-                ];
+                if (count($payloads) < 20) {
+                    $payloads[] = [
+                        'reference' => $product->getReference(),
+                        'properties' => $payload,
+                    ];
+                }
 
                 ++$sent;
                 ++$updated;

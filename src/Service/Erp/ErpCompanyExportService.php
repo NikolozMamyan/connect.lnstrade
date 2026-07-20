@@ -44,7 +44,9 @@ class ErpCompanyExportService
                     continue;
                 }
 
-                $payloads[] = $result['payload'];
+                if (count($payloads) < 20) {
+                    $payloads[] = $result['payload'];
+                }
                 ++$sent;
                 $hubspotUpdated += ($result['hubspotUpdated'] ?? false) ? 1 : 0;
 

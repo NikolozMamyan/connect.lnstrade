@@ -39,6 +39,11 @@ class ErpProductExportService
         for ($page = 1; $page <= $totalPages; ++$page) {
             $offset = ($page - 1) * self::BATCH_SIZE;
             $batch = array_slice($activeArticles, $offset, self::BATCH_SIZE);
+            $references = array_values(array_filter(array_map(
+                fn (array $article): ?string => $this->nullableString($article['reference'] ?? null),
+                $batch
+            )));
+            $existingProducts = $this->erpProductRepository->findIndexedByReferences($references);
 
             foreach ($batch as $article) {
                 $reference = $this->nullableString($article['reference'] ?? null);
@@ -49,13 +54,19 @@ class ErpProductExportService
                 }
 
                 try {
-                    $product = $this->erpProductRepository->findOneByReference($reference);
+                    $product = $existingProducts[$reference] ?? null;
 
                     if (!$product instanceof ErpProduct) {
                         $product = new ErpProduct();
                         $product->setReference($reference);
+                        $existingProducts[$reference] = $product;
                         ++$created;
                     } else {
+                        if ($product->getRawPayload() === $article) {
+                            ++$skipped;
+                            continue;
+                        }
+
                         ++$updated;
                     }
 

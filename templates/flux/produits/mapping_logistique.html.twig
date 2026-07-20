@@ -187,6 +187,7 @@
 
         <div class="sync-header__actions">
             <form method="post" action="{{ path('flux_produits_sync_stock') }}" onsubmit="this.querySelector('button[type=submit]').disabled = true;">
+                <input type="hidden" name="_token" value="{{ csrf_token('flux_product_stock_sync') }}">
                 {{ include('ui/button.html.twig', {
                     label: 'Lancer la synchro stock',
                     variant: 'primary',
