@@ -8,6 +8,9 @@ use App\Service\Erp\ErpInvoiceImportService;
 use App\Service\Erp\SageClient;
 use Doctrine\ORM\EntityManagerInterface;
 use PHPUnit\Framework\TestCase;
+use Symfony\Component\DependencyInjection\ParameterBag\ParameterBag;
+use Symfony\Component\HttpClient\MockHttpClient;
+use Symfony\Component\HttpClient\Response\MockResponse;
 
 final class ErpInvoiceImportServiceTest extends TestCase
 {
@@ -22,11 +25,20 @@ final class ErpInvoiceImportServiceTest extends TestCase
             ->setInvoiceNumber('FA001')
             ->setRawPayload($payload);
 
-        $sageClient = $this->createMock(SageClient::class);
-        $sageClient->expects(self::once())
-            ->method('get')
-            ->with('/invoices')
-            ->willReturn([$payload]);
+        $sageHttpClient = new MockHttpClient(static function (string $method, string $url) use ($payload): MockResponse {
+            $data = str_ends_with($url, '/auth/login')
+                ? ['accessToken' => 'sage-token']
+                : [$payload];
+
+            return new MockResponse(json_encode($data, JSON_THROW_ON_ERROR), [
+                'response_headers' => ['content-type' => 'application/json'],
+            ]);
+        });
+        $sageClient = new SageClient($sageHttpClient, new ParameterBag([
+            'base_uri_sage' => 'https://sage.test',
+            'sage_username' => 'user',
+            'sage_password' => 'password',
+        ]));
 
         $repository = $this->createMock(ErpInvoiceRepository::class);
         $repository->expects(self::once())
