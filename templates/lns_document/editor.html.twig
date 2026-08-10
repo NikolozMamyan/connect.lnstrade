@@ -103,7 +103,7 @@
                 data-lns-document-editor
                 data-initial-content="{{ form.contentJson.vars.value|e('html_attr') }}"
                 data-autosave-url="{{ isNew ? path('lns_documents_autosave_new') : path('lns_documents_autosave', {id: document.id}) }}"
-                data-autosave-method="{{ isNew ? 'POST' : 'PATCH' }}"
+                data-autosave-method="POST"
                 data-autosave-token="{{ csrf_token('lns_document_autosave') }}"
                 data-document-id="{{ document.id }}"
                 data-revision="{{ document.editVersion }}"

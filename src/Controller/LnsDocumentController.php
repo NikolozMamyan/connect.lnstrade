@@ -130,7 +130,7 @@ class LnsDocumentController extends AbstractController
     }
 
     #[Route('/autosave', name: 'autosave_new', methods: ['POST'])]
-    #[Route('/{id}/autosave', name: 'autosave', methods: ['PATCH'], requirements: ['id' => '\\d+'])]
+    #[Route('/{id}/autosave', name: 'autosave', methods: ['POST'], requirements: ['id' => '\\d+'])]
     public function autosave(
         Request $request,
         LnsDocumentRepository $documentRepository,

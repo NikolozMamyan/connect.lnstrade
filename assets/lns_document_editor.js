@@ -127,7 +127,7 @@ const initializeEditor = (editor) => {
     const maxBlocks = Number(editor.dataset.maxBlocks || 30);
     const maxRows = Number(editor.dataset.maxRows || 100);
     let autosaveUrl = editor.dataset.autosaveUrl;
-    let autosaveMethod = editor.dataset.autosaveMethod || 'PATCH';
+    let autosaveMethod = editor.dataset.autosaveMethod || 'POST';
     let documentId = editor.dataset.documentId || '';
     let revision = Number(editor.dataset.revision || revisionField?.value || 1);
     let autosaveTimer = null;
@@ -668,7 +668,7 @@ const initializeEditor = (editor) => {
             documentId = String(payload.documentId);
             editor.dataset.documentId = documentId;
             autosaveUrl = payload.autosaveUrl;
-            autosaveMethod = 'PATCH';
+            autosaveMethod = 'POST';
             form.action = payload.editUrl;
 
             const previewLink = form.closest('.page-content')?.querySelector('[data-preview-link]')
