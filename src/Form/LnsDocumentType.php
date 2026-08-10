@@ -18,6 +18,7 @@ class LnsDocumentType extends AbstractType
         $builder
             ->add('title', TextType::class, [
                 'label' => 'Titre du document',
+                'empty_data' => '',
                 'attr' => [
                     'maxlength' => 180,
                     'placeholder' => 'Titre du document',
@@ -26,6 +27,7 @@ class LnsDocumentType extends AbstractType
             ])
             ->add('description', TextareaType::class, [
                 'label' => 'Description',
+                'empty_data' => '',
                 'attr' => [
                     'maxlength' => 20000,
                     'rows' => 3,

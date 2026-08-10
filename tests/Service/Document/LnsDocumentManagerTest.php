@@ -65,6 +65,7 @@ class LnsDocumentManagerTest extends TestCase
         $manager = new LnsDocumentManager(new LnsDocumentContentManager(), $entityManager);
 
         $this->expectException(LnsDocumentVersionConflict::class);
+        $this->expectExceptionMessage('Votre travail local est conservé');
 
         $manager->autosave(new LnsDocument(), [
             'title' => '',

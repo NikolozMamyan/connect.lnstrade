@@ -66,6 +66,24 @@
             <span></span>
         </div>
 
+        <dialog class="lns-missing-title-dialog" data-missing-title-dialog aria-labelledby="lns-missing-title-heading">
+            <div class="lns-missing-title-dialog-header">
+                <div>
+                    <span class="lns-missing-title-eyebrow">Enregistrement</span>
+                    <h2 id="lns-missing-title-heading">Titre manquant</h2>
+                </div>
+                <button type="button" data-missing-title-cancel aria-label="Fermer">×</button>
+            </div>
+            <p data-missing-title-message></p>
+            <label for="lns-missing-title-input">Titre proposé</label>
+            <input id="lns-missing-title-input" type="text" maxlength="180" data-missing-title-input autocomplete="off">
+            <small class="lns-missing-title-error" data-missing-title-error hidden>Renseignez un titre pour continuer.</small>
+            <div class="lns-missing-title-dialog-actions">
+                <button type="button" class="btn btn-secondary btn-md" data-missing-title-cancel>Annuler</button>
+                <button type="button" class="btn btn-primary btn-md" data-missing-title-confirm>Enregistrer et continuer</button>
+            </div>
+        </dialog>
+
         <div class="lns-editor-workspace">
             <aside class="lns-page-navigator" data-page-navigator>
                 <div class="lns-page-navigator-header">

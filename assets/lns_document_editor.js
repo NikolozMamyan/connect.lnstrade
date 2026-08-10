@@ -112,6 +112,12 @@ const initializeEditor = (editor) => {
     const retryAutosaveButton = autosaveStatus?.querySelector('[data-action="retry-autosave"]');
     const orderFeedback = form.querySelector('[data-order-feedback]');
     const orderFeedbackText = orderFeedback?.querySelector('span');
+    const missingTitleDialog = form.querySelector('[data-missing-title-dialog]');
+    const missingTitleMessage = missingTitleDialog?.querySelector('[data-missing-title-message]');
+    const missingTitleInput = missingTitleDialog?.querySelector('[data-missing-title-input]');
+    const missingTitleError = missingTitleDialog?.querySelector('[data-missing-title-error]');
+    const missingTitleConfirm = missingTitleDialog?.querySelector('[data-missing-title-confirm]');
+    const missingTitleCancelButtons = missingTitleDialog?.querySelectorAll('[data-missing-title-cancel]') || [];
     const pageTemplate = editor.querySelector('[data-page-template]');
     const textBlockTemplate = editor.querySelector('[data-text-block-template]');
     const tableBlockTemplate = editor.querySelector('[data-table-block-template]');
@@ -131,6 +137,7 @@ const initializeEditor = (editor) => {
     let dirty = false;
     let autosavePaused = false;
     let manualSubmitting = false;
+    let submitPreparing = false;
     let draggedPage = null;
     let draggedNavigatorItem = null;
     let pointerDragHandle = null;
@@ -501,6 +508,160 @@ const initializeEditor = (editor) => {
         scheduleAutosave(immediate ? 0 : 900);
     };
 
+    const askForMissingTitle = (label, suggestedTitle) => {
+        const message = `${label} n’a pas de titre. Saisissez-en un pour continuer l’enregistrement.`;
+
+        if (!missingTitleDialog || typeof missingTitleDialog.showModal !== 'function') {
+            const title = window.prompt(message, suggestedTitle);
+
+            return Promise.resolve(title === null ? null : title.trim());
+        }
+
+        missingTitleMessage.textContent = message;
+        missingTitleInput.value = suggestedTitle;
+        missingTitleError.hidden = true;
+
+        return new Promise((resolve) => {
+            let settled = false;
+
+            const cleanup = () => {
+                missingTitleConfirm.removeEventListener('click', confirm);
+                missingTitleCancelButtons.forEach((button) => button.removeEventListener('click', cancel));
+                missingTitleDialog.removeEventListener('cancel', cancel);
+                missingTitleInput.removeEventListener('keydown', submitWithEnter);
+            };
+            const finish = (title) => {
+                if (settled) {
+                    return;
+                }
+
+                settled = true;
+                cleanup();
+                missingTitleDialog.close();
+                resolve(title);
+            };
+            const confirm = () => {
+                const title = missingTitleInput.value.trim();
+
+                if (title === '') {
+                    missingTitleError.hidden = false;
+                    missingTitleInput.focus();
+                    return;
+                }
+
+                finish(title);
+            };
+            const cancel = (event) => {
+                event?.preventDefault();
+                finish(null);
+            };
+            const submitWithEnter = (event) => {
+                if (event.key === 'Enter') {
+                    event.preventDefault();
+                    confirm();
+                }
+            };
+
+            missingTitleConfirm.addEventListener('click', confirm);
+            missingTitleCancelButtons.forEach((button) => button.addEventListener('click', cancel));
+            missingTitleDialog.addEventListener('cancel', cancel);
+            missingTitleInput.addEventListener('keydown', submitWithEnter);
+            missingTitleDialog.showModal();
+            requestAnimationFrame(() => {
+                missingTitleInput.focus();
+                missingTitleInput.select();
+            });
+        });
+    };
+
+    const completeMissingTitles = async () => {
+        const missingTitles = [];
+        const pages = Array.from(pagesContainer.querySelectorAll(':scope > [data-page]'));
+
+        if (titleField.value.trim() === '') {
+            missingTitles.push({
+                field: titleField,
+                label: 'Le document',
+                suggestedTitle: 'Document LNS',
+                target: titleField.closest('.lns-paper'),
+            });
+        }
+
+        pages.forEach((page, pageIndex) => {
+            const pageNumber = pageIndex + 1;
+            const pageTitle = page.querySelector('[data-field="page-title"]');
+
+            if (pageTitle.value.trim() === '') {
+                missingTitles.push({
+                    field: pageTitle,
+                    label: `La page ${pageNumber}`,
+                    suggestedTitle: `Page ${pageNumber}`,
+                    target: page,
+                });
+            }
+
+            page.querySelectorAll('[data-block-list] > [data-block]').forEach((block, blockIndex) => {
+                const blockTitle = block.querySelector('[data-field="block-title"]');
+
+                if (!blockTitle || blockTitle.value.trim() !== '') {
+                    return;
+                }
+
+                const blockNumber = blockIndex + 1;
+                const blockType = block.dataset.blockType;
+                const typeLabel = blockType === 'table' ? 'tableau' : blockType === 'image' ? 'image' : 'bloc';
+                const suggestedLabel = blockType === 'table' ? 'Tableau' : blockType === 'image' ? 'Image' : 'Bloc';
+                missingTitles.push({
+                    field: blockTitle,
+                    label: `Le ${typeLabel} ${blockNumber} de la page ${pageNumber}`,
+                    suggestedTitle: `${suggestedLabel} ${blockNumber}`,
+                    target: page,
+                });
+            });
+        });
+
+        let changed = false;
+
+        for (const missingTitle of missingTitles) {
+            const title = await askForMissingTitle(missingTitle.label, missingTitle.suggestedTitle);
+
+            if (title === null) {
+                if (changed) {
+                    refresh();
+                    markDirty(true);
+                }
+
+                missingTitle.target?.scrollIntoView({behavior: 'smooth', block: 'start'});
+                missingTitle.field.focus();
+                return false;
+            }
+
+            missingTitle.field.value = title;
+            changed = true;
+        }
+
+        if (changed) {
+            refresh();
+            markDirty(true);
+        }
+
+        return true;
+    };
+
+    const updateRevision = (value) => {
+        const nextRevision = Number(value);
+
+        if (!Number.isInteger(nextRevision) || nextRevision < 1) {
+            return false;
+        }
+
+        revision = nextRevision;
+        editor.dataset.revision = String(revision);
+        revisionField.value = String(revision);
+
+        return true;
+    };
+
     const applyServerIdentity = (payload) => {
         if (!documentId && payload.documentId) {
             const previousStorageKey = localStorageKey();
@@ -521,12 +682,10 @@ const initializeEditor = (editor) => {
             localStorage.removeItem(previousStorageKey);
         }
 
-        revision = Number(payload.revision || revision);
-        editor.dataset.revision = String(revision);
-        revisionField.value = String(revision);
+        updateRevision(payload.revision);
     };
 
-    const performAutosave = async () => {
+    const performAutosave = async (canRecoverConflict = true) => {
         if (autosavePaused || !dirty) {
             return !autosavePaused;
         }
@@ -550,10 +709,22 @@ const initializeEditor = (editor) => {
             const result = await response.json().catch(() => ({}));
 
             if (response.status === 409) {
-                autosavePaused = true;
+                const previousRevision = revision;
+                const receivedCurrentRevision = updateRevision(result.revision);
                 dirty = true;
                 persistLocalSnapshot();
-                updateAutosaveStatus('conflict', result.message || 'Conflit détecté. Rechargez la page.', false);
+
+                if (canRecoverConflict && receivedCurrentRevision && revision !== previousRevision) {
+                    updateAutosaveStatus('saving', 'Resynchronisation du brouillon…');
+                    return performAutosave(false);
+                }
+
+                autosavePaused = true;
+                updateAutosaveStatus(
+                    'conflict',
+                    'La synchronisation a été interrompue. Votre travail est conservé sur cet appareil.',
+                    true,
+                );
                 return false;
             }
 
@@ -634,9 +805,11 @@ const initializeEditor = (editor) => {
         form.querySelectorAll('input[name$="[autoGenerateToc]"]').forEach((choice) => {
             choice.checked = ['1', 'true'].includes(choice.value) === Boolean(localSnapshot.payload.autoGenerateToc);
         });
-        revision = Number(localSnapshot.payload.revision || revision);
-        revisionField.value = String(revision);
+        // The current server revision is authoritative. A local snapshot only
+        // restores content and must never make the editor stale after reload.
     }
+
+    revisionField.value = String(revision);
 
     if (!Array.isArray(initialContent) || initialContent.length === 0) {
         initialContent = [{title: '', description: '', blocks: []}];
@@ -1000,22 +1173,41 @@ const initializeEditor = (editor) => {
     form.addEventListener('submit', async (event) => {
         refresh();
 
-        if (manualSubmitting || (!dirty && !activeSave)) {
+        if (manualSubmitting) {
             return;
         }
 
         event.preventDefault();
+
+        if (submitPreparing) {
+            return;
+        }
+
+        submitPreparing = true;
         const submitter = event.submitter;
-        const ready = await flushPendingAutosave();
 
-        if (ready) {
+        try {
+            const titlesComplete = await completeMissingTitles();
+
+            if (!titlesComplete) {
+                return;
+            }
+
+            const ready = await flushPendingAutosave();
+
+            if (!ready) {
+                return;
+            }
+
             manualSubmitting = true;
+            dirty = false;
+            clearTimeout(autosaveTimer);
+            clearTimeout(localBackupTimer);
             localStorage.removeItem(localStorageKey());
-
-            if (submitter) {
-                form.requestSubmit(submitter);
-            } else {
-                form.requestSubmit();
+            form.requestSubmit(submitter || undefined);
+        } finally {
+            if (!manualSubmitting) {
+                submitPreparing = false;
             }
         }
     });
@@ -1027,7 +1219,7 @@ const initializeEditor = (editor) => {
     });
 
     window.addEventListener('beforeunload', (event) => {
-        if (!dirty && !activeSave) {
+        if (manualSubmitting || (!dirty && !activeSave)) {
             return;
         }
 
