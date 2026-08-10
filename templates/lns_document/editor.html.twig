@@ -1,6 +1,6 @@
 {% extends 'layout/app.html.twig' %}
 
-{% block title %}{{ isNew ? 'Créer un document LNS' : 'Modifier ' ~ document.title }}{% endblock %}
+{% block title %}{{ isNew ? 'Créer un document LNS' : 'Modifier ' ~ document.displayTitle }}{% endblock %}
 {% block page_title %}{{ isNew ? 'Créer un document LNS' : 'Modifier le document' }}{% endblock %}
 {% block page_subtitle %}Composez les pages, les blocs texte et les tableaux puis enregistrez ou exportez en PDF.{% endblock %}
 
@@ -15,9 +15,7 @@
         <i class="fas fa-arrow-left"></i>
         Retour
     </a>
-    {% if not isNew %}
-        <a href="{{ path('lns_documents_show', {id: document.id}) }}" class="btn btn-secondary btn-md" data-turbo="false">Aperçu</a>
-    {% endif %}
+    <a href="{{ isNew ? '#' : path('lns_documents_show', {id: document.id}) }}" class="btn btn-secondary btn-md" data-preview-link data-turbo="false" {% if isNew %}hidden{% endif %}>Aperçu</a>
     <div class="lns-save-split" data-save-menu>
         <button type="submit" name="document_action" value="save" form="lns-document-form" class="btn btn-primary btn-md lns-save-main">
             <i class="fas fa-save"></i>
@@ -56,16 +54,45 @@
             </strong>
             <div class="lns-toc-choice">{{ form_widget(form.autoGenerateToc) }}</div>
             {{ form_errors(form.autoGenerateToc) }}
+            <div class="lns-autosave-status" data-autosave-state="saved" data-autosave-status role="status" aria-live="polite">
+                <i class="fas fa-cloud"></i>
+                <span>{{ document.draft ? 'Brouillon prêt à être modifié' : 'Tout est enregistré' }}</span>
+                <button type="button" data-action="retry-autosave" hidden>Réessayer</button>
+            </div>
         </section>
 
-        <div
-            class="lns-document-editor"
-            data-lns-document-editor
-            data-initial-content="{{ form.contentJson.vars.value|e('html_attr') }}"
-            data-max-pages="50"
-            data-max-blocks="30"
-            data-max-rows="100"
-        >
+        <div class="lns-order-feedback" data-order-feedback role="status" aria-live="polite" hidden>
+            <i class="fas fa-check-circle"></i>
+            <span></span>
+        </div>
+
+        <div class="lns-editor-workspace">
+            <aside class="lns-page-navigator" data-page-navigator>
+                <div class="lns-page-navigator-header">
+                    <strong>Pages</strong>
+                    <span data-page-count></span>
+                </div>
+                <div class="lns-page-navigation-list" data-page-navigation-list></div>
+                <button type="button" class="lns-navigator-add" data-action="add-page">
+                    <i class="fas fa-plus"></i>
+                    Ajouter une page
+                </button>
+                <small>Utilisez la poignée à gauche pour changer l’ordre.</small>
+            </aside>
+
+            <div
+                class="lns-document-editor"
+                data-lns-document-editor
+                data-initial-content="{{ form.contentJson.vars.value|e('html_attr') }}"
+                data-autosave-url="{{ isNew ? path('lns_documents_autosave_new') : path('lns_documents_autosave', {id: document.id}) }}"
+                data-autosave-method="{{ isNew ? 'POST' : 'PATCH' }}"
+                data-autosave-token="{{ csrf_token('lns_document_autosave') }}"
+                data-document-id="{{ document.id }}"
+                data-revision="{{ document.editVersion }}"
+                data-max-pages="50"
+                data-max-blocks="30"
+                data-max-rows="100"
+            >
             <section class="lns-paper lns-cover-page">
                 <div class="lns-side-track"></div>
                 <div class="lns-side-tab lns-side-tab--bronze" style="top: 10mm;">Couverture</div>
@@ -136,7 +163,12 @@
                         <img src="https://lnstrade.fr/wp-content/uploads/2024/07/LOGO_LNS_WHITE.png" alt="LNS Trade" class="lns-logo">
                         <div class="lns-running-title" data-document-title-echo></div>
                     </header>
-                    <button type="button" class="lns-remove-page" data-action="remove-page">Supprimer la page ×</button>
+                    <div class="lns-page-toolbar">
+                        <button type="button" data-action="move-page-up" aria-label="Monter cette page" title="Monter"><i class="fas fa-arrow-up"></i></button>
+                        <button type="button" data-action="move-page-down" aria-label="Descendre cette page" title="Descendre"><i class="fas fa-arrow-down"></i></button>
+                        <button type="button" data-action="duplicate-page">Dupliquer</button>
+                        <button type="button" class="lns-remove-page" data-action="remove-page">Supprimer</button>
+                    </div>
                     <div class="lns-page-content">
                         <label class="lns-inline-label">Titre de la page</label>
                         <input type="text" maxlength="180" placeholder="Titre de la section" class="lns-page-title-input" data-field="page-title">
@@ -204,7 +236,7 @@
                         <img data-image-preview alt="Aperçu de l’image" hidden>
                         <div class="lns-image-placeholder" data-image-placeholder>
                             <i class="fas fa-image"></i>
-                            <strong>Choisir une image</strong>
+                            <strong>Glissez-déposez ou choisissez une image</strong>
                             <span>JPEG, PNG ou WebP — l’image sera optimisée automatiquement</span>
                         </div>
                         <div class="lns-image-actions">
@@ -227,6 +259,7 @@
                     <td class="lns-table-action-column"><button type="button" data-action="remove-table-row" aria-label="Supprimer cette ligne">×</button></td>
                 </tr>
             </template>
+            </div>
         </div>
 
         {{ form_widget(form.contentJson) }}

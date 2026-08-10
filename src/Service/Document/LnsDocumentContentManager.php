@@ -34,6 +34,24 @@ final class LnsDocumentContentManager
      */
     public function normalize(string $payload): array
     {
+        return $this->normalizePayload($payload, true);
+    }
+
+    /**
+     * Validates the shape and safety limits while allowing unfinished fields.
+     *
+     * @return list<array<string, mixed>>
+     */
+    public function normalizeDraft(string $payload): array
+    {
+        return $this->normalizePayload($payload, false);
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    private function normalizePayload(string $payload, bool $requireComplete): array
+    {
         if (strlen($payload) > self::MAX_PAYLOAD_BYTES) {
             throw new \InvalidArgumentException('Le contenu du document est trop volumineux.');
         }
@@ -64,7 +82,7 @@ final class LnsDocumentContentManager
             }
 
             $pageNumber = $pageIndex + 1;
-            $title = $this->requiredString($page['title'] ?? null, self::MAX_TITLE_LENGTH, sprintf('Le titre de la page %d', $pageNumber));
+            $title = $this->normalizedString($page['title'] ?? null, self::MAX_TITLE_LENGTH, sprintf('Le titre de la page %d', $pageNumber), $requireComplete);
             $description = $this->optionalString($page['description'] ?? '', self::MAX_DESCRIPTION_LENGTH, sprintf('La description de la page %d', $pageNumber));
             $rawBlocks = $page['blocks'] ?? [];
 
@@ -79,7 +97,7 @@ final class LnsDocumentContentManager
             $blocks = [];
 
             foreach ($rawBlocks as $blockIndex => $block) {
-                $blocks[] = $this->normalizeBlock($block, $pageNumber, $blockIndex + 1);
+                $blocks[] = $this->normalizeBlock($block, $pageNumber, $blockIndex + 1, $requireComplete);
             }
 
             $pages[] = [
@@ -95,7 +113,7 @@ final class LnsDocumentContentManager
     /**
      * @return array<string, mixed>
      */
-    private function normalizeBlock(mixed $block, int $pageNumber, int $blockNumber): array
+    private function normalizeBlock(mixed $block, int $pageNumber, int $blockNumber, bool $requireComplete): array
     {
         if (!is_array($block)) {
             throw new \InvalidArgumentException(sprintf('Le bloc %d de la page %d est invalide.', $blockNumber, $pageNumber));
@@ -106,7 +124,7 @@ final class LnsDocumentContentManager
         if ($type === 'text') {
             return [
                 'type' => 'text',
-                'title' => $this->requiredString($block['title'] ?? null, self::MAX_TITLE_LENGTH, sprintf('Le titre du bloc %d de la page %d', $blockNumber, $pageNumber)),
+                'title' => $this->normalizedString($block['title'] ?? null, self::MAX_TITLE_LENGTH, sprintf('Le titre du bloc %d de la page %d', $blockNumber, $pageNumber), $requireComplete),
                 'description' => $this->optionalString($block['description'] ?? '', self::MAX_DESCRIPTION_LENGTH, sprintf('La description du bloc %d de la page %d', $blockNumber, $pageNumber)),
             ];
         }
@@ -114,8 +132,8 @@ final class LnsDocumentContentManager
         if ($type === 'image') {
             return [
                 'type' => 'image',
-                'title' => $this->requiredString($block['title'] ?? null, self::MAX_TITLE_LENGTH, sprintf('Le titre de l’image %d de la page %d', $blockNumber, $pageNumber)),
-                'data' => $this->normalizeImageData($block['data'] ?? null, $blockNumber, $pageNumber),
+                'title' => $this->normalizedString($block['title'] ?? null, self::MAX_TITLE_LENGTH, sprintf('Le titre de l’image %d de la page %d', $blockNumber, $pageNumber), $requireComplete),
+                'data' => $this->normalizeImageData($block['data'] ?? null, $blockNumber, $pageNumber, !$requireComplete),
                 'caption' => $this->optionalString($block['caption'] ?? '', self::MAX_CELL_LENGTH, sprintf('La légende de l’image %d de la page %d', $blockNumber, $pageNumber)),
             ];
         }
@@ -142,7 +160,7 @@ final class LnsDocumentContentManager
         $normalizedHeaders = [];
 
         foreach ($headers as $headerIndex => $header) {
-            $normalizedHeaders[] = $this->requiredString($header, self::MAX_HEADER_LENGTH, sprintf('L’en-tête %d du tableau %d', $headerIndex + 1, $blockNumber));
+            $normalizedHeaders[] = $this->normalizedString($header, self::MAX_HEADER_LENGTH, sprintf('L’en-tête %d du tableau %d', $headerIndex + 1, $blockNumber), $requireComplete);
         }
 
         $normalizedRows = [];
@@ -160,7 +178,7 @@ final class LnsDocumentContentManager
 
         return [
             'type' => 'table',
-            'title' => $this->requiredString($block['title'] ?? null, self::MAX_TITLE_LENGTH, sprintf('Le titre du tableau %d de la page %d', $blockNumber, $pageNumber)),
+            'title' => $this->normalizedString($block['title'] ?? null, self::MAX_TITLE_LENGTH, sprintf('Le titre du tableau %d de la page %d', $blockNumber, $pageNumber), $requireComplete),
             'headers' => $normalizedHeaders,
             'rows' => $normalizedRows,
         ];
@@ -175,6 +193,13 @@ final class LnsDocumentContentManager
         }
 
         return $normalized;
+    }
+
+    private function normalizedString(mixed $value, int $maxLength, string $label, bool $required): string
+    {
+        return $required
+            ? $this->requiredString($value, $maxLength, $label)
+            : $this->optionalString($value, $maxLength, $label);
     }
 
     private function optionalString(mixed $value, int $maxLength, string $label): string
@@ -192,9 +217,13 @@ final class LnsDocumentContentManager
         return $normalized;
     }
 
-    private function normalizeImageData(mixed $value, int $blockNumber, int $pageNumber): string
+    private function normalizeImageData(mixed $value, int $blockNumber, int $pageNumber, bool $allowEmpty = false): string
     {
         $label = sprintf('L’image %d de la page %d', $blockNumber, $pageNumber);
+
+        if ($allowEmpty && $value === '') {
+            return '';
+        }
 
         if (!is_string($value) || $value === '') {
             throw new \InvalidArgumentException($label . ' est obligatoire.');

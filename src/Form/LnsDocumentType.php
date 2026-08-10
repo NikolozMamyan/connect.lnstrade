@@ -44,6 +44,10 @@ class LnsDocumentType extends AbstractType
             ->add('contentJson', HiddenType::class, [
                 'mapped' => false,
                 'data' => $options['content_json'],
+            ])
+            ->add('revision', HiddenType::class, [
+                'mapped' => false,
+                'data' => (string) $options['revision'],
             ]);
     }
 
@@ -52,7 +56,9 @@ class LnsDocumentType extends AbstractType
         $resolver->setDefaults([
             'data_class' => LnsDocument::class,
             'content_json' => '[]',
+            'revision' => 1,
         ]);
         $resolver->setAllowedTypes('content_json', 'string');
+        $resolver->setAllowedTypes('revision', 'int');
     }
 }

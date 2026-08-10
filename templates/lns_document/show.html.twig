@@ -1,7 +1,7 @@
 {% extends 'layout/app.html.twig' %}
 
-{% block title %}{{ document.title }} · Documents LNS{% endblock %}
-{% block page_title %}{{ document.title }}{% endblock %}
+{% block title %}{{ document.displayTitle }} · Documents LNS{% endblock %}
+{% block page_title %}{{ document.displayTitle }}{% endblock %}
 {% block page_subtitle %}Aperçu en lecture seule du document LNS.{% endblock %}
 
 {% block stylesheets %}
@@ -19,10 +19,14 @@
         <i class="fas fa-pen"></i>
         Modifier
     </a>
-    <a href="{{ path('lns_documents_pdf', {id: document.id}) }}" class="btn btn-primary btn-md" data-turbo="false">
-        <i class="fas fa-file-pdf"></i>
-        Générer le PDF
-    </a>
+    {% if document.draft %}
+        <span class="tag tag-warning">Brouillon — à valider avant export</span>
+    {% else %}
+        <a href="{{ path('lns_documents_pdf', {id: document.id}) }}" class="btn btn-primary btn-md" data-turbo="false">
+            <i class="fas fa-file-pdf"></i>
+            Générer le PDF
+        </a>
+    {% endif %}
 {% endblock %}
 
 {% block content %}

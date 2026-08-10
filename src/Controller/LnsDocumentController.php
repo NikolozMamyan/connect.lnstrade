@@ -8,9 +8,12 @@ use App\Form\LnsDocumentType;
 use App\Repository\LnsDocumentRepository;
 use App\Service\Document\LnsDocumentContentManager;
 use App\Service\Document\LnsDocumentManager;
+use App\Service\Document\LnsDocumentVersionConflict;
 use App\Service\Pdf\LnsDocumentPdfGenerator;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\Form\FormError;
+use Symfony\Component\HttpFoundation\Exception\JsonException;
+use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Attribute\Route;
@@ -43,13 +46,19 @@ class LnsDocumentController extends AbstractController
         $content = $contentManager->defaultContent();
         $form = $this->createForm(LnsDocumentType::class, $document, [
             'content_json' => json_encode($content, \JSON_THROW_ON_ERROR | \JSON_UNESCAPED_UNICODE),
+            'revision' => $document->getEditVersion(),
         ]);
         $form->handleRequest($request);
 
         if ($form->isSubmitted() && $form->isValid()) {
             try {
                 $author = $this->getUser() instanceof User ? $this->getUser() : null;
-                $documentManager->save($document, (string) $form->get('contentJson')->getData(), $author);
+                $documentManager->save(
+                    $document,
+                    (string) $form->get('contentJson')->getData(),
+                    $author,
+                    (int) $form->get('revision')->getData(),
+                );
 
                 $this->addFlash('success', 'Le document a été créé.');
 
@@ -58,7 +67,7 @@ class LnsDocumentController extends AbstractController
                 }
 
                 return $this->redirectToRoute('lns_documents_edit', ['id' => $document->getId()]);
-            } catch (\InvalidArgumentException $exception) {
+            } catch (LnsDocumentVersionConflict|\InvalidArgumentException $exception) {
                 $form->get('contentJson')->addError(new FormError($exception->getMessage()));
             }
         }
@@ -88,12 +97,18 @@ class LnsDocumentController extends AbstractController
         $document = $this->findDocument($id, $documentRepository);
         $form = $this->createForm(LnsDocumentType::class, $document, [
             'content_json' => json_encode($document->getContent(), \JSON_THROW_ON_ERROR | \JSON_UNESCAPED_UNICODE),
+            'revision' => $document->getEditVersion(),
         ]);
         $form->handleRequest($request);
 
         if ($form->isSubmitted() && $form->isValid()) {
             try {
-                $documentManager->save($document, (string) $form->get('contentJson')->getData(), null);
+                $documentManager->save(
+                    $document,
+                    (string) $form->get('contentJson')->getData(),
+                    null,
+                    (int) $form->get('revision')->getData(),
+                );
 
                 $this->addFlash('success', 'Les modifications ont été enregistrées.');
 
@@ -102,7 +117,7 @@ class LnsDocumentController extends AbstractController
                 }
 
                 return $this->redirectToRoute('lns_documents_edit', ['id' => $document->getId()]);
-            } catch (\InvalidArgumentException $exception) {
+            } catch (LnsDocumentVersionConflict|\InvalidArgumentException $exception) {
                 $form->get('contentJson')->addError(new FormError($exception->getMessage()));
             }
         }
@@ -112,6 +127,51 @@ class LnsDocumentController extends AbstractController
             'form' => $form->createView(),
             'isNew' => false,
         ]);
+    }
+
+    #[Route('/autosave', name: 'autosave_new', methods: ['POST'])]
+    #[Route('/{id}/autosave', name: 'autosave', methods: ['PATCH'], requirements: ['id' => '\\d+'])]
+    public function autosave(
+        Request $request,
+        LnsDocumentRepository $documentRepository,
+        LnsDocumentManager $documentManager,
+        ?int $id = null,
+    ): JsonResponse {
+        if (!$this->isCsrfTokenValid('lns_document_autosave', (string) $request->headers->get('X-CSRF-TOKEN'))) {
+            return new JsonResponse(['message' => 'Jeton CSRF invalide. Rechargez la page.'], Response::HTTP_FORBIDDEN);
+        }
+
+        $isNew = $id === null;
+        $document = $isNew ? new LnsDocument() : $documentRepository->find($id);
+
+        if (!$document instanceof LnsDocument) {
+            return new JsonResponse(['message' => 'Document LNS introuvable.'], Response::HTTP_NOT_FOUND);
+        }
+
+        try {
+            $payload = $request->toArray();
+            $author = $this->getUser() instanceof User ? $this->getUser() : null;
+            $documentManager->autosave($document, $payload, $author);
+        } catch (LnsDocumentVersionConflict $exception) {
+            return new JsonResponse([
+                'message' => $exception->getMessage(),
+                'revision' => $exception->getCurrentVersion(),
+            ], Response::HTTP_CONFLICT);
+        } catch (\InvalidArgumentException $exception) {
+            return new JsonResponse(['message' => $exception->getMessage()], Response::HTTP_UNPROCESSABLE_ENTITY);
+        } catch (JsonException) {
+            return new JsonResponse(['message' => 'Le brouillon envoyé est invalide.'], Response::HTTP_BAD_REQUEST);
+        }
+
+        return new JsonResponse([
+            'message' => 'Brouillon enregistré.',
+            'documentId' => $document->getId(),
+            'revision' => $document->getEditVersion(),
+            'updatedAt' => $document->getUpdatedAt()->format(\DATE_ATOM),
+            'editUrl' => $this->generateUrl('lns_documents_edit', ['id' => $document->getId()]),
+            'autosaveUrl' => $this->generateUrl('lns_documents_autosave', ['id' => $document->getId()]),
+            'showUrl' => $this->generateUrl('lns_documents_show', ['id' => $document->getId()]),
+        ], $isNew ? Response::HTTP_CREATED : Response::HTTP_OK);
     }
 
     #[Route('/{id}/delete', name: 'delete', methods: ['POST'], requirements: ['id' => '\\d+'])]
@@ -129,7 +189,7 @@ class LnsDocumentController extends AbstractController
             return $this->redirectToRoute('lns_documents_index');
         }
 
-        $title = (string) $document->getTitle();
+        $title = $document->getDisplayTitle();
         $documentManager->delete($document);
         $this->addFlash('success', sprintf('Le document « %s » a été supprimé.', $title));
 
@@ -143,6 +203,13 @@ class LnsDocumentController extends AbstractController
         LnsDocumentPdfGenerator $pdfGenerator,
     ): Response {
         $document = $this->findDocument($id, $documentRepository);
+
+        if ($document->isDraft()) {
+            $this->addFlash('warning', 'Validez le brouillon avec « Enregistrer » avant de générer le PDF.');
+
+            return $this->redirectToRoute('lns_documents_edit', ['id' => $document->getId()]);
+        }
+
         $slug = (new AsciiSlugger())->slug((string) $document->getTitle())->lower()->toString();
         $filename = ($slug !== '' ? $slug : 'document-lns') . '.pdf';
 

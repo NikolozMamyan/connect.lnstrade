@@ -161,4 +161,52 @@ class LnsDocumentContentManagerTest extends TestCase
 
         $this->manager->normalize($payload);
     }
+
+    public function testNormalizeDraftAllowsUnfinishedFieldsButKeepsTheStructure(): void
+    {
+        $payload = json_encode([[
+            'title' => '',
+            'description' => '',
+            'blocks' => [
+                [
+                    'type' => 'text',
+                    'title' => '',
+                    'description' => 'Saisie en cours',
+                ],
+                [
+                    'type' => 'image',
+                    'title' => '',
+                    'data' => '',
+                    'caption' => '',
+                ],
+                [
+                    'type' => 'table',
+                    'title' => '',
+                    'headers' => ['', '', ''],
+                    'rows' => [['', '', '']],
+                ],
+            ],
+        ]], \JSON_THROW_ON_ERROR);
+
+        $draft = $this->manager->normalizeDraft($payload);
+
+        self::assertSame('', $draft[0]['title']);
+        self::assertSame('Saisie en cours', $draft[0]['blocks'][0]['description']);
+        self::assertSame('', $draft[0]['blocks'][1]['data']);
+        self::assertSame(['', '', ''], $draft[0]['blocks'][2]['headers']);
+    }
+
+    public function testNormalizeDraftStillRejectsUnsupportedContent(): void
+    {
+        $payload = json_encode([[
+            'title' => '',
+            'description' => '',
+            'blocks' => [['type' => 'video']],
+        ]], \JSON_THROW_ON_ERROR);
+
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('n’est pas autorisé');
+
+        $this->manager->normalizeDraft($payload);
+    }
 }

@@ -36,6 +36,13 @@ class LnsDocument
     #[ORM\Column(type: Types::JSON)]
     private array $content = [];
 
+    #[ORM\Column(name: 'is_draft', options: ['default' => false])]
+    private bool $draft = true;
+
+    #[ORM\Version]
+    #[ORM\Column(name: 'edit_version', type: Types::INTEGER, options: ['default' => 1])]
+    private int $editVersion = 1;
+
     #[ORM\ManyToOne(targetEntity: User::class)]
     #[ORM\JoinColumn(name: 'created_by_id', nullable: true, onDelete: 'SET NULL')]
     private ?User $createdBy = null;
@@ -119,6 +126,29 @@ class LnsDocument
     public function getPageCount(): int
     {
         return count($this->content);
+    }
+
+    public function isDraft(): bool
+    {
+        return $this->draft;
+    }
+
+    public function setDraft(bool $draft): static
+    {
+        $this->draft = $draft;
+        $this->touch();
+
+        return $this;
+    }
+
+    public function getEditVersion(): int
+    {
+        return $this->editVersion;
+    }
+
+    public function getDisplayTitle(): string
+    {
+        return $this->title !== null && $this->title !== '' ? $this->title : 'Document sans titre';
     }
 
     public function getCreatedBy(): ?User

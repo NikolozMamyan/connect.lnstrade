@@ -53,8 +53,11 @@
                         {% for document in documents %}
                             <tr>
                                 <td>
-                                    <div class="client-name">{{ document.title }}</div>
-                                    <div class="client-email lns-document-description-preview">{{ document.description }}</div>
+                                    <div class="client-name">
+                                        {{ document.displayTitle }}
+                                        {% if document.draft %}<span class="tag tag-warning">Brouillon</span>{% endif %}
+                                    </div>
+                                    <div class="client-email lns-document-description-preview">{{ document.description ?: 'Aucune description pour le moment.' }}</div>
                                 </td>
                                 <td><span class="tag tag-muted">{{ document.pageCount }}</span></td>
                                 <td>
@@ -67,7 +70,7 @@
                                 <td style="text-align: right;">
                                     <div class="lns-document-row-actions">
                                         <a href="{{ path('lns_documents_show', {id: document.id}) }}" class="btn btn-secondary btn-sm" data-turbo="false">Voir</a>
-                                        <a href="{{ path('lns_documents_edit', {id: document.id}) }}" class="btn btn-secondary btn-sm" data-turbo="false">Modifier</a>
+                                        <a href="{{ path('lns_documents_edit', {id: document.id}) }}" class="btn btn-secondary btn-sm" data-turbo="false">{{ document.draft ? 'Reprendre' : 'Modifier' }}</a>
                                         <form method="post" action="{{ path('lns_documents_delete', {id: document.id}) }}" onsubmit="return confirm('Supprimer définitivement ce document ?');" data-turbo="false">
                                             <input type="hidden" name="_token" value="{{ csrf_token('delete_lns_document_' ~ document.id) }}">
                                             <button type="submit" class="btn btn-danger btn-sm">Supprimer</button>

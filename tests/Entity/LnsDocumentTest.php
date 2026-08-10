@@ -22,7 +22,16 @@ class LnsDocumentTest extends TestCase
         self::assertSame('Description du guide', $document->getDescription());
         self::assertFalse($document->isAutoGenerateToc());
         self::assertSame(2, $document->getPageCount());
+        self::assertTrue($document->isDraft());
+        self::assertSame(1, $document->getEditVersion());
         self::assertInstanceOf(\DateTimeImmutable::class, $document->getCreatedAt());
         self::assertInstanceOf(\DateTimeImmutable::class, $document->getUpdatedAt());
+    }
+
+    public function testDisplayTitleFallsBackForAnUntitledDraft(): void
+    {
+        $document = (new LnsDocument())->setTitle('');
+
+        self::assertSame('Document sans titre', $document->getDisplayTitle());
     }
 }

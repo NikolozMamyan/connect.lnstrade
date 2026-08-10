@@ -9,7 +9,7 @@
             <span class="lns-eyebrow">Document LNS</span>
         </div>
         <div class="lns-cover-body">
-            <h1>{{ document.title }}</h1>
+            <h1>{{ document.displayTitle }}</h1>
             <p class="lns-cover-description">{{ document.description|nl2br }}</p>
             <div class="lns-meta-grid">
                 <div><span>Date de création</span><strong>{{ document.createdAt|date('d/m/Y') }}</strong></div>
@@ -64,10 +64,14 @@
                     {% elseif block.type == 'image' %}
                         <section class="lns-readonly-block">
                             <h3>{{ block.title }}</h3>
-                            <figure class="lns-content-image">
-                                <img src="{{ block.data }}" alt="{{ block.title }}">
-                                {% if block.caption %}<figcaption>{{ block.caption }}</figcaption>{% endif %}
-                            </figure>
+                            {% if block.data %}
+                                <figure class="lns-content-image">
+                                    <img src="{{ block.data }}" alt="{{ block.title }}">
+                                    {% if block.caption %}<figcaption>{{ block.caption }}</figcaption>{% endif %}
+                                </figure>
+                            {% else %}
+                                <p>Image non ajoutée.</p>
+                            {% endif %}
                         </section>
                     {% elseif block.type == 'table' %}
                         <section class="lns-readonly-block">
