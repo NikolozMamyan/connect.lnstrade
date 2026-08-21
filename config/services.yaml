@@ -13,7 +13,7 @@ parameters:
     sage_password: '%env(SAGE_PASSWORD)%'
     mailer_from: 'pro@ultrapop.com'
     erp_order_notification_recipients:
-        # - 'corentin.bury@lnstrade.fr'
+        - 'corentin.bury@lnstrade.fr'
         - 'nikoloz.mamyan@lnstrade.fr'
     order_form_upload_dir: '%kernel.project_dir%/var/uploads/order_forms'
     # sage_client_id: '%env(default::SAGE_CLIENT_ID)%'

@@ -111,6 +111,7 @@ class ErpOrderExportServiceTest extends TestCase
                     return self::jsonResponse([
                         'firstName' => 'Jean',
                         'lastName' => 'Dupont',
+                        'email' => 'jean.dupont@lnstrade.fr',
                     ]);
                 }
 
@@ -195,6 +196,7 @@ class ErpOrderExportServiceTest extends TestCase
         self::assertSame('A 60 jours net', $sageOrderPayload['modeleReglement']);
         self::assertSame('create', $result['action']);
         self::assertSame($sageOrderPayload, $result['payload']);
+        self::assertSame('jean.dupont@lnstrade.fr', $result['commercialEmail']);
     }
 
     public function testSendDealSkipsAlreadyProcessedEvent(): void

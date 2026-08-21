@@ -167,7 +167,8 @@ class FluxWebhookController extends AbstractController
                     true,
                     $dealId,
                     $erpResult['payload'] ?? [],
-                    null
+                    null,
+                    is_string($erpResult['commercialEmail'] ?? null) ? $erpResult['commercialEmail'] : null
                 );
             } catch (\Throwable $e) {
                 $errors[] = [
@@ -192,7 +193,8 @@ class FluxWebhookController extends AbstractController
                     false,
                     $dealId,
                     [],
-                    $e->getMessage()
+                    $e->getMessage(),
+                    $erpOrderExportService->resolveDealOwnerEmail($dealId)
                 );
             }
         }
@@ -334,6 +336,7 @@ class FluxWebhookController extends AbstractController
         string $dealId,
         array $payload,
         ?string $errorMessage,
+        ?string $commercialEmail,
     ): void {
         $subject = $success
             ? sprintf('[LNS Connecteur] Bon de commande cree pour le deal %s', $dealId)
@@ -363,6 +366,8 @@ class FluxWebhookController extends AbstractController
         }
 
         try {
+            $cc = filter_var($commercialEmail, FILTER_VALIDATE_EMAIL) !== false ? [$commercialEmail] : [];
+
             if ($success) {
                 $simpleMailerService->sendTemplateMessage(
                     $subject,
@@ -372,7 +377,10 @@ class FluxWebhookController extends AbstractController
                         'dealId' => $dealId,
                         'payload' => $payload,
                     ],
-                    implode("\n", $lines)
+                    implode("\n", $lines),
+                    [],
+                    [],
+                    $cc
                 );
 
                 return;
@@ -386,7 +394,10 @@ class FluxWebhookController extends AbstractController
                     'dealId' => $dealId,
                     'errorMessage' => $errorMessage ?? 'Erreur inconnue.',
                 ],
-                implode("\n", $lines)
+                implode("\n", $lines),
+                [],
+                [],
+                $cc
             );
         } catch (\Throwable) {
             // Le mail informatif ne doit pas faire echouer le webhook lui-meme.

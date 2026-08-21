@@ -193,7 +193,33 @@ class ErpOrderExportService
             'payload' => $order,
             'response' => $response,
             'dealHubspotId' => $hubspotDealId,
+            'commercialEmail' => $owner['email'] !== '' ? $owner['email'] : null,
         ];
+    }
+
+    public function resolveDealOwnerEmail(string $hubspotDealId): ?string
+    {
+        $hubspotDealId = trim($hubspotDealId);
+
+        if ($hubspotDealId === '') {
+            return null;
+        }
+
+        try {
+            $dealData = $this->hubSpotClient->getObject('deals', $hubspotDealId, [
+                'properties' => ['hubspot_owner_id'],
+            ]);
+            $owner = $this->resolveOwnerData((string) (($dealData['properties']['hubspot_owner_id'] ?? null) ?: ''));
+
+            return $owner['email'] !== '' ? $owner['email'] : null;
+        } catch (\Throwable $exception) {
+            $this->logger->warning('HubSpot deal owner email lookup failed', [
+                'dealHubspotId' => $hubspotDealId,
+                'message' => $exception->getMessage(),
+            ]);
+
+            return null;
+        }
     }
 
     /**
@@ -270,7 +296,7 @@ class ErpOrderExportService
     }
 
     /**
-     * @return array{firstname: string, lastname: string}
+     * @return array{firstname: string, lastname: string, email: string}
      */
     private function resolveOwnerData(string $ownerId): array
     {
@@ -278,9 +304,12 @@ class ErpOrderExportService
             try {
                 $owner = $this->hubSpotClient->get(sprintf('/crm/v3/owners/%s', $ownerId));
 
+                $email = trim((string) (($owner['email'] ?? null) ?: ''));
+
                 return [
                     'firstname' => trim((string) (($owner['firstName'] ?? null) ?: '')),
                     'lastname' => trim((string) (($owner['lastName'] ?? null) ?: '')),
+                    'email' => filter_var($email, FILTER_VALIDATE_EMAIL) !== false ? $email : '',
                 ];
             } catch (\Throwable $exception) {
                 $this->logger->warning('HubSpot owner lookup failed', [
@@ -293,12 +322,13 @@ class ErpOrderExportService
         return [
             'firstname' => '',
             'lastname' => '',
+            'email' => '',
         ];
     }
 
     /**
      * @param array<string, mixed> $dealData
-     * @param array{firstname: string, lastname: string} $owner
+     * @param array{firstname: string, lastname: string, email: string} $owner
      *
      * @return array<string, mixed>
      */
