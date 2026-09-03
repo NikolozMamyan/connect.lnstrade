@@ -57,6 +57,54 @@ class StatisticsController extends AbstractController
         ]);
     }
 
+    #[Route('/document/{type}/{piece}', name: 'document_detail', methods: ['GET'], requirements: ['type' => '1|6|7', 'piece' => '[^/]+'])]
+    public function documentDetail(
+        int $type,
+        string $piece,
+        SageOrderAnalyticsService $sageOrderAnalyticsService,
+        CommercialAccessService $commercialAccessService,
+    ): Response {
+        /** @var User|null $user */
+        $user = $this->getUser();
+        $representant = null;
+
+        if ($commercialAccessService->isCommercialUser($user)) {
+            $representant = $sageOrderAnalyticsService->resolveRepresentantValueByEmail((string) $user?->getEmail());
+
+            if ($representant === null) {
+                return $this->render('supervision/statistics/_document_detail.html.twig', [
+                    'selectedDocument' => null,
+                    'selectedLines' => [],
+                    'detailError' => 'Aucun commercial Sage actif n’est associé à votre compte.',
+                ], new Response(status: Response::HTTP_FORBIDDEN));
+            }
+        }
+
+        try {
+            $detail = $sageOrderAnalyticsService->getDocumentDetail($type, $piece, $representant);
+
+            if ($detail['document'] === null) {
+                return $this->render('supervision/statistics/_document_detail.html.twig', [
+                    'selectedDocument' => null,
+                    'selectedLines' => [],
+                    'detailError' => 'Ce document est introuvable dans votre périmètre Sage.',
+                ], new Response(status: Response::HTTP_NOT_FOUND));
+            }
+
+            return $this->render('supervision/statistics/_document_detail.html.twig', [
+                'selectedDocument' => $detail['document'],
+                'selectedLines' => $detail['lines'],
+                'detailError' => null,
+            ]);
+        } catch (\Throwable) {
+            return $this->render('supervision/statistics/_document_detail.html.twig', [
+                'selectedDocument' => null,
+                'selectedLines' => [],
+                'detailError' => 'Le détail Sage ne peut pas être chargé pour le moment.',
+            ], new Response(status: Response::HTTP_BAD_GATEWAY));
+        }
+    }
+
     #[Route('/orderform', name: 'orderform', methods: ['GET'])]
     public function orderform(
         UserRepository $userRepository,

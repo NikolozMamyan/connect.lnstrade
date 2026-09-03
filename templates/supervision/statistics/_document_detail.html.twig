@@ -1,0 +1,153 @@
+<div class="sage-card__header">
+    <div class="sage-card__title">
+        <span class="icon"><i class="fas fa-file-invoice"></i></span>
+        Détail du document Sage
+    </div>
+    {% if selectedDocument %}
+        <div class="sage-card__subtitle">
+            <strong>{{ selectedDocument.piece }}</strong>
+            <span class="sage-document-badge sage-document-badge--{{ selectedDocument.category }}">{{ selectedDocument.type_label }}</span>
+            <span class="sage-badge {{ selectedDocument.statut == 'À préparer' or selectedDocument.statut == 'A comptabiliser' ? 'sage-badge--warning' : 'sage-badge--neutral' }}">
+                {{ selectedDocument.statut != '' ? selectedDocument.statut : 'Statut non renseigné' }}
+            </span>
+        </div>
+    {% endif %}
+</div>
+<div class="sage-card__body">
+    {% if detailError|default(null) %}
+        <div class="sage-detail-error" role="alert">
+            <i class="fas fa-circle-exclamation"></i>
+            <div>
+                <strong>Détail indisponible</strong>
+                <span>{{ detailError }}</span>
+            </div>
+        </div>
+    {% elseif selectedDocument %}
+        <div class="sage-detail-grid">
+            <div class="sage-detail-metric">
+                <span>Pièce Sage</span>
+                <strong>{{ selectedDocument.piece }}</strong>
+            </div>
+            <div class="sage-detail-metric">
+                <span>Type de document</span>
+                <strong>{{ selectedDocument.type_label }}</strong>
+            </div>
+            <div class="sage-detail-metric sage-detail-metric--wide">
+                <span>Client</span>
+                <strong>{{ selectedDocument.company_name != '' ? selectedDocument.company_name : selectedDocument.tiers }}</strong>
+                <small>{{ selectedDocument.tiers }}</small>
+            </div>
+            <div class="sage-detail-metric">
+                <span>Date du document</span>
+                <strong>{{ selectedDocument.date_label }}</strong>
+            </div>
+            {% if selectedDocument.date_delivery_label != '-' %}
+                <div class="sage-detail-metric">
+                    <span>Livraison prévue</span>
+                    <strong>{{ selectedDocument.date_delivery_label }}</strong>
+                </div>
+            {% endif %}
+            <div class="sage-detail-metric">
+                <span>Commercial</span>
+                <strong>{{ selectedDocument.representant }}</strong>
+            </div>
+            <div class="sage-detail-metric">
+                <span>Référence</span>
+                <strong>{{ selectedDocument.reference != '' ? selectedDocument.reference : '—' }}</strong>
+            </div>
+            <div class="sage-detail-metric sage-detail-metric--highlight">
+                <span>{{ selectedDocument.family == 'order' ? 'Montant commandé HT' : 'Montant du document HT' }}</span>
+                <strong>{{ selectedDocument.montantHT|number_format(2, ',', ' ') }} €</strong>
+            </div>
+            <div class="sage-detail-metric">
+                <span>{{ selectedDocument.family == 'order' ? 'Montant commandé TTC' : 'Montant du document TTC' }}</span>
+                <strong>{{ selectedDocument.montantTTC|number_format(2, ',', ' ') }} €</strong>
+            </div>
+            {% if selectedDocument.expediteur != '' %}
+                <div class="sage-detail-metric">
+                    <span>Expédition</span>
+                    <strong>{{ selectedDocument.expediteur }}</strong>
+                </div>
+            {% endif %}
+            {% if selectedDocument.order_reference_client != '' %}
+                <div class="sage-detail-metric sage-detail-metric--wide">
+                    <span>Référence commande client</span>
+                    <strong>{{ selectedDocument.order_reference_client }}</strong>
+                </div>
+            {% endif %}
+            {% if selectedDocument.condition_livraison != '' %}
+                <div class="sage-detail-metric">
+                    <span>Condition de livraison</span>
+                    <strong>{{ selectedDocument.condition_livraison }}</strong>
+                </div>
+            {% endif %}
+            {% if selectedDocument.paiement != '' %}
+                <div class="sage-detail-metric">
+                    <span>Paiement</span>
+                    <strong>{{ selectedDocument.paiement }}</strong>
+                </div>
+            {% endif %}
+            {% if selectedDocument.progress != '' %}
+                <div class="sage-detail-metric">
+                    <span>Avancement</span>
+                    <strong>{{ selectedDocument.progress }}</strong>
+                </div>
+            {% endif %}
+            {% if selectedDocument.additional_status != '' %}
+                <div class="sage-detail-metric">
+                    <span>Statut complémentaire</span>
+                    <strong>{{ selectedDocument.additional_status }}</strong>
+                </div>
+            {% endif %}
+            {% if selectedDocument.delivery_instruction != '' %}
+                <div class="sage-detail-metric sage-detail-metric--wide">
+                    <span>Instruction de livraison</span>
+                    <strong>{{ selectedDocument.delivery_instruction }}</strong>
+                </div>
+            {% endif %}
+        </div>
+
+        <div class="sage-detail-lines-title">
+            <strong>Lignes du document</strong>
+            <span>{{ selectedLines|length }} ligne{{ selectedLines|length > 1 ? 's' : '' }}</span>
+        </div>
+        <div class="sage-table-scroll">
+            <table class="sage-table">
+                <thead>
+                    <tr>
+                        <th>Référence</th>
+                        <th>Désignation</th>
+                        <th style="text-align:right;">Quantité</th>
+                        {% if selectedDocument.family == 'order' %}<th style="text-align:right;">Qté préparée</th>{% endif %}
+                        <th style="text-align:right;">PU HT</th>
+                        <th style="text-align:right;">Total HT</th>
+                        <th style="text-align:right;">Total TTC</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for line in selectedLines %}
+                        <tr>
+                            <td><strong class="sage-table__reference">{{ line.referenceArticle }}</strong></td>
+                            <td>{{ line.designationArticle }}</td>
+                            <td class="sage-table__num" style="text-align:right;">{{ line.qteArticle|number_format(2, ',', ' ') }} {{ line.uniteArticle }}</td>
+                            {% if selectedDocument.family == 'order' %}<td class="sage-table__num" style="text-align:right;">{{ line.qtePreparee|number_format(2, ',', ' ') }} {{ line.uniteArticle }}</td>{% endif %}
+                            <td class="sage-table__amount" style="text-align:right;">{{ line.prixHTArticle|number_format(2, ',', ' ') }} €</td>
+                            <td class="sage-table__amount" style="text-align:right;">{{ line.montantHT|number_format(2, ',', ' ') }} €</td>
+                            <td class="sage-table__amount" style="text-align:right;">{{ line.montantTTC|number_format(2, ',', ' ') }} €</td>
+                        </tr>
+                    {% else %}
+                        <tr>
+                            <td colspan="{{ selectedDocument.family == 'order' ? 7 : 6 }}"><div class="sage-empty">Aucune ligne retournée par Sage pour cette pièce.</div></td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    {% else %}
+        <div class="sage-empty">
+            <div class="sage-empty__icon"><i class="fas fa-hand-pointer"></i></div>
+            <strong class="sage-empty__title">Sélectionnez un document</strong>
+            La commande ou la facture apparaîtra ici, sans recharger la page.
+        </div>
+    {% endif %}
+</div>

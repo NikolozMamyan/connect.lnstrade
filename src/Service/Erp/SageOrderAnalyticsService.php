@@ -4,6 +4,11 @@ namespace App\Service\Erp;
 
 final class SageOrderAnalyticsService
 {
+    private const SALES_DOMAIN = 0;
+    private const SALES_ORDER_TYPE = 1;
+    private const SALES_INVOICE_PENDING_TYPE = 6;
+    private const SALES_INVOICE_POSTED_TYPE = 7;
+
     /**
      * @var list<array{hubspotId: string, firstName: string, lastName: string, email: string}>
      */
@@ -27,153 +32,448 @@ final class SageOrderAnalyticsService
     public function getStatistics(array $filters = []): array
     {
         $normalizedFilters = $this->normalizeFilters($filters);
-        $headers = $this->sageClient->get('/Document/header', $this->buildHeaderQuery($normalizedFilters));
-        $dashboard = $this->buildDashboard($headers, $normalizedFilters['group_by'], $normalizedFilters['table_limit']);
+        $documentTypes = $this->resolveDocumentTypes($normalizedFilters);
+        $headers = $this->fetchHeaders($normalizedFilters, $documentTypes);
+        $dashboard = $this->buildDashboard(
+            $headers,
+            $normalizedFilters['group_by'],
+            $normalizedFilters['table_limit'],
+            $documentTypes
+        );
 
-        $comparisonFilters = $this->buildComparisonFilters($normalizedFilters);
-        $comparisonHeaders = $this->sageClient->get('/Document/header', $this->buildHeaderQuery($comparisonFilters));
-        $comparisonDashboard = $this->buildDashboard($comparisonHeaders, $normalizedFilters['group_by'], $normalizedFilters['table_limit']);
+        $comparison = [
+            'enabled' => false,
+            'reason' => 'La comparaison est masquée lors d’une recherche par numéro de pièce.',
+        ];
 
-        $selectedOrder = null;
+        if ($normalizedFilters['piece'] === '') {
+            $comparisonFilters = $this->buildComparisonFilters($normalizedFilters);
+            $comparisonHeaders = $this->fetchHeaders($comparisonFilters, $documentTypes);
+            $comparisonDashboard = $this->buildDashboard(
+                $comparisonHeaders,
+                $normalizedFilters['group_by'],
+                $normalizedFilters['table_limit'],
+                $documentTypes
+            );
+            $comparison = $this->buildComparison(
+                $dashboard['summary'],
+                $comparisonDashboard['summary'],
+                $normalizedFilters,
+                $comparisonFilters
+            );
+        }
+
+        $selectedDocument = null;
         $selectedLines = [];
 
-        if ($normalizedFilters['selected_piece'] !== '') {
-            $selectedOrder = $this->findOrderByPiece($dashboard['allOrders'], $normalizedFilters['selected_piece']);
-            $selectedLines = $this->fetchOrderLines($normalizedFilters['selected_piece']);
+        if ($normalizedFilters['selected_piece'] !== '' && $normalizedFilters['selected_type'] !== null) {
+            $selectedDocument = $this->findDocument(
+                $dashboard['allDocuments'],
+                $normalizedFilters['selected_piece'],
+                $normalizedFilters['selected_type']
+            );
+            $selectedLines = $selectedDocument === null
+                ? []
+                : $this->fetchDocumentLines($normalizedFilters['selected_piece'], $normalizedFilters['selected_type']);
         }
 
         return [
             'filters' => $normalizedFilters,
             'summary' => $dashboard['summary'],
-            'comparison' => $this->buildComparison($dashboard['summary'], $comparisonDashboard['summary'], $normalizedFilters, $comparisonFilters),
+            'comparison' => $comparison,
             'charts' => $dashboard['charts'],
             'topCommercials' => $dashboard['topCommercials'],
             'topClients' => $dashboard['topClients'],
             'representants' => $dashboard['representants'],
-            'recentOrders' => $dashboard['recentOrders'],
-            'selectedOrder' => $selectedOrder,
+            'recentDocuments' => $dashboard['recentDocuments'],
+            'selectedDocument' => $selectedDocument,
             'selectedLines' => $selectedLines,
-            'totalOrders' => count($dashboard['allOrders']),
+            'totalDocuments' => count($dashboard['allDocuments']),
         ];
     }
 
-    public function buildDashboard(array $headers, string $groupBy = 'month', int $tableLimit = 15): array
+    /**
+     * @return array{document: array<string, mixed>|null, lines: list<array<string, mixed>>}
+     */
+    public function getDocumentDetail(int $type, string $piece, ?string $representant = null): array
     {
-        $orders = array_values(array_filter(array_map(
-            fn (array $header): ?array => $this->normalizeHeader($header),
+        $piece = trim($piece);
+
+        if ($piece === '' || !in_array($type, $this->getAllowedDocumentTypes(), true)) {
+            return ['document' => null, 'lines' => []];
+        }
+
+        $query = [
+            'domaine' => self::SALES_DOMAIN,
+            'type' => $type,
+            'piece' => $piece,
+        ];
+
+        if ($representant !== null && trim($representant) !== '') {
+            $query['representant'] = trim($representant);
+        }
+
+        $documents = array_values(array_filter(array_map(
+            fn (array $header): ?array => $this->normalizeHeader($header, $type),
+            $this->sageClient->get('/Document/header', $query)
+        )));
+        $document = $this->findDocument($documents, $piece, $type);
+
+        return [
+            'document' => $document,
+            'lines' => $document === null ? [] : $this->fetchDocumentLines($piece, $type),
+        ];
+    }
+
+    public function buildDashboard(
+        array $headers,
+        string $groupBy = 'month',
+        int $tableLimit = 15,
+        array $includedTypes = [self::SALES_ORDER_TYPE],
+    ): array
+    {
+        $documents = array_values(array_filter(array_map(
+            fn (array $header): ?array => $this->normalizeHeader(
+                $header,
+                (int) ($header['_document_type'] ?? self::SALES_ORDER_TYPE)
+            ),
             $headers
         )));
 
-        usort($orders, static function (array $left, array $right): int {
+        usort($documents, static function (array $left, array $right): int {
             return strcmp((string) $right['date_sort'], (string) $left['date_sort']);
         });
 
-        $totalRevenue = 0.0;
-        $validatedRevenue = 0.0;
-        $unpaidTotal = 0.0;
-        $statusCounts = [];
-        $commercialRevenue = [];
-        $commercialOrders = [];
-        $clientRevenue = [];
-        $clientOrders = [];
-        $clientTiers = [];
-        $revenueSeries = [];
-        $orderSeries = [];
+        $summary = [
+            'document_count' => count($documents),
+            'order_count' => 0,
+            'invoice_count' => 0,
+            'pending_invoice_count' => 0,
+            'posted_invoice_count' => 0,
+            'credit_count' => 0,
+            'ordered_amount_ht' => 0.0,
+            'ordered_amount_ttc' => 0.0,
+            'pending_invoice_amount_ht' => 0.0,
+            'pending_invoice_amount_ttc' => 0.0,
+            'posted_revenue_ht' => 0.0,
+            'posted_revenue_ttc' => 0.0,
+            'invoice_amount_ht' => 0.0,
+            'invoice_amount_ttc' => 0.0,
+            'average_order_ht' => 0.0,
+            'average_invoice_ht' => 0.0,
+            'to_prepare_count' => 0,
+            'to_prepare_amount_ht' => 0.0,
+            'to_prepare_share' => 0.0,
+        ];
+        $statusCounts = ['orders' => [], 'invoices' => []];
+        $commercialMetrics = [];
+        $clientMetrics = [];
+        $amountSeries = [];
+        $volumeSeries = [];
 
-        foreach ($orders as $order) {
-            $totalRevenue += $order['montantTTC'];
-            $unpaidTotal += max(0, $order['resteAPayer']);
+        foreach ($documents as $document) {
+            $category = $document['category'];
+            $amountHt = $document['montantHT'];
+            $amountTtc = $document['montantTTC'];
 
-            if ($order['estValide']) {
-                $validatedRevenue += $order['montantTTC'];
+            if ($category === 'order') {
+                ++$summary['order_count'];
+                $summary['ordered_amount_ht'] += $amountHt;
+                $summary['ordered_amount_ttc'] += $amountTtc;
+
+                if (mb_strtolower($document['statut']) === 'à préparer') {
+                    ++$summary['to_prepare_count'];
+                    $summary['to_prepare_amount_ht'] += $amountHt;
+                }
+            } elseif ($category === 'pending_invoice') {
+                ++$summary['invoice_count'];
+                ++$summary['pending_invoice_count'];
+                $summary['pending_invoice_amount_ht'] += $amountHt;
+                $summary['pending_invoice_amount_ttc'] += $amountTtc;
+            } else {
+                ++$summary['invoice_count'];
+                ++$summary['posted_invoice_count'];
+                $summary['posted_revenue_ht'] += $amountHt;
+                $summary['posted_revenue_ttc'] += $amountTtc;
             }
 
-            $statusLabel = $order['statut'] !== '' ? $order['statut'] : 'Non renseigne';
-            $statusCounts[$statusLabel] = ($statusCounts[$statusLabel] ?? 0) + 1;
+            if ($document['is_credit']) {
+                ++$summary['credit_count'];
+            }
 
-            $commercialRevenue[$order['representant']] = ($commercialRevenue[$order['representant']] ?? 0.0) + $order['montantTTC'];
-            $commercialOrders[$order['representant']] = ($commercialOrders[$order['representant']] ?? 0) + 1;
+            $statusGroup = $category === 'order' ? 'orders' : 'invoices';
+            $statusLabel = $document['statut'] !== '' ? $document['statut'] : 'Non renseigné';
+            $statusCounts[$statusGroup][$statusLabel] = ($statusCounts[$statusGroup][$statusLabel] ?? 0) + 1;
 
-            $clientName = $order['company_name'] !== '' ? $order['company_name'] : ($order['tiers'] !== '' ? $order['tiers'] : $order['piece']);
-            $clientRevenue[$clientName] = ($clientRevenue[$clientName] ?? 0.0) + $order['montantTTC'];
-            $clientOrders[$clientName] = ($clientOrders[$clientName] ?? 0) + 1;
-            $clientTiers[$clientName] = $order['tiers'];
+            $this->accumulateEntityMetric($commercialMetrics, $document['representant'], '', $category, $amountHt);
+            $clientName = $document['company_name'] !== ''
+                ? $document['company_name']
+                : ($document['tiers'] !== '' ? $document['tiers'] : $document['piece']);
+            $this->accumulateEntityMetric($clientMetrics, $clientName, $document['tiers'], $category, $amountHt);
 
-            $bucket = $this->buildPeriodBucket($order['date'], $groupBy);
-            $revenueSeries[$bucket['key']] = [
-                'label' => $bucket['label'],
-                'value' => ($revenueSeries[$bucket['key']]['value'] ?? 0) + $order['montantTTC'],
-            ];
-            $orderSeries[$bucket['key']] = [
-                'label' => $bucket['label'],
-                'value' => ($orderSeries[$bucket['key']]['value'] ?? 0) + 1,
-            ];
+            $bucket = $this->buildPeriodBucket($document['date'], $groupBy);
+            $amountSeries[$bucket['key']]['label'] = $bucket['label'];
+            $amountSeries[$bucket['key']][$category] = ($amountSeries[$bucket['key']][$category] ?? 0.0) + $amountHt;
+            $volumeSeries[$bucket['key']]['label'] = $bucket['label'];
+            $volumeSeries[$bucket['key']][$category] = ($volumeSeries[$bucket['key']][$category] ?? 0) + 1;
         }
 
-        arsort($commercialRevenue);
-        arsort($statusCounts);
-        arsort($clientRevenue);
-        ksort($revenueSeries);
-        ksort($orderSeries);
+        $summary['invoice_amount_ht'] = $summary['pending_invoice_amount_ht'] + $summary['posted_revenue_ht'];
+        $summary['invoice_amount_ttc'] = $summary['pending_invoice_amount_ttc'] + $summary['posted_revenue_ttc'];
+        $summary['average_order_ht'] = $summary['order_count'] > 0
+            ? $summary['ordered_amount_ht'] / $summary['order_count']
+            : 0.0;
+        $summary['average_invoice_ht'] = $summary['invoice_count'] > 0
+            ? $summary['invoice_amount_ht'] / $summary['invoice_count']
+            : 0.0;
+        $summary['to_prepare_share'] = $summary['order_count'] > 0
+            ? ($summary['to_prepare_count'] / $summary['order_count']) * 100
+            : 0.0;
 
-        $topCommercials = [];
-        foreach (array_slice($commercialRevenue, 0, 8, true) as $name => $amount) {
-            $topCommercials[] = [
-                'name' => $name,
-                'amount' => round($amount, 2),
-                'orders' => $commercialOrders[$name] ?? 0,
-            ];
+        foreach ($summary as $key => $value) {
+            if (is_float($value)) {
+                $summary[$key] = round($value, $key === 'to_prepare_share' ? 1 : 2);
+            }
         }
 
-        $topClients = [];
-        foreach (array_slice($clientRevenue, 0, 8, true) as $name => $amount) {
-            $topClients[] = [
-                'name' => $name,
-                'tiers' => $clientTiers[$name] ?? '',
-                'amount' => round($amount, 2),
-                'orders' => $clientOrders[$name] ?? 0,
-            ];
-        }
+        arsort($statusCounts['orders']);
+        arsort($statusCounts['invoices']);
+        ksort($amountSeries);
+        ksort($volumeSeries);
 
-        $bestCommercial = $topCommercials[0] ?? ['name' => 'N/A', 'amount' => 0.0, 'orders' => 0];
-        $averageBasket = count($orders) > 0 ? $totalRevenue / count($orders) : 0.0;
+        $categories = $this->buildChartCategories($includedTypes);
+        $topCommercials = $this->buildTopEntities($commercialMetrics, $categories, 8);
+        $topClients = $this->buildTopEntities($clientMetrics, $categories, 8);
 
         return [
-            'summary' => [
-                'order_count' => count($orders),
-                'revenue_total' => round($totalRevenue, 2),
-                'average_basket' => round($averageBasket, 2),
-                'validated_revenue' => round($validatedRevenue, 2),
-                'unpaid_total' => round($unpaidTotal, 2),
-                'best_commercial' => $bestCommercial,
-            ],
+            'summary' => $summary,
             'charts' => [
-                'revenue' => [
-                    'labels' => array_column($revenueSeries, 'label'),
-                    'data' => array_values(array_map(static fn (array $item): float => round((float) $item['value'], 2), $revenueSeries)),
-                ],
-                'orders' => [
-                    'labels' => array_column($orderSeries, 'label'),
-                    'data' => array_values(array_map(static fn (array $item): int => (int) $item['value'], $orderSeries)),
-                ],
-                'commercials' => [
-                    'labels' => array_column($topCommercials, 'name'),
-                    'data' => array_column($topCommercials, 'amount'),
-                ],
-                'clients' => [
-                    'labels' => array_column($topClients, 'name'),
-                    'data' => array_column($topClients, 'amount'),
-                ],
+                'amounts' => $this->buildPeriodChart($amountSeries, $categories, 'float'),
+                'volumes' => $this->buildPeriodChart($volumeSeries, $categories, 'int'),
+                'commercials' => $this->buildEntityChart($topCommercials, $categories),
+                'clients' => $this->buildEntityChart($topClients, $categories),
                 'statuses' => [
-                    'labels' => array_keys($statusCounts),
-                    'data' => array_values($statusCounts),
+                    'orders' => [
+                        'labels' => array_keys($statusCounts['orders']),
+                        'data' => array_values($statusCounts['orders']),
+                    ],
+                    'invoices' => [
+                        'labels' => array_keys($statusCounts['invoices']),
+                        'data' => array_values($statusCounts['invoices']),
+                    ],
                 ],
             ],
             'topCommercials' => $topCommercials,
             'topClients' => $topClients,
-            'representants' => $this->buildRepresentantOptions($orders),
-            'recentOrders' => array_slice($orders, 0, max(1, $tableLimit)),
-            'allOrders' => $orders,
+            'representants' => $this->buildRepresentantOptions(),
+            'recentDocuments' => array_slice($documents, 0, max(1, $tableLimit)),
+            'allDocuments' => $documents,
+        ];
+    }
+
+    /**
+     * @param list<int> $documentTypes
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function fetchHeaders(array $filters, array $documentTypes): array
+    {
+        $headers = [];
+
+        foreach ($documentTypes as $type) {
+            foreach ($this->sageClient->get('/Document/header', $this->buildHeaderQuery($filters, $type)) as $header) {
+                if (!is_array($header)) {
+                    continue;
+                }
+
+                $header['_document_type'] = $type;
+                $headers[] = $header;
+            }
+        }
+
+        return $headers;
+    }
+
+    /**
+     * @return list<int>
+     */
+    private function resolveDocumentTypes(array $filters): array
+    {
+        $invoiceTypes = match ($filters['invoice_state']) {
+            'pending' => [self::SALES_INVOICE_PENDING_TYPE],
+            'posted' => [self::SALES_INVOICE_POSTED_TYPE],
+            default => [self::SALES_INVOICE_PENDING_TYPE, self::SALES_INVOICE_POSTED_TYPE],
+        };
+
+        return match ($filters['document_scope']) {
+            'orders' => [self::SALES_ORDER_TYPE],
+            'invoices' => $invoiceTypes,
+            default => [self::SALES_ORDER_TYPE, ...$invoiceTypes],
+        };
+    }
+
+    /**
+     * @return list<int>
+     */
+    private function getAllowedDocumentTypes(): array
+    {
+        return [
+            self::SALES_ORDER_TYPE,
+            self::SALES_INVOICE_PENDING_TYPE,
+            self::SALES_INVOICE_POSTED_TYPE,
+        ];
+    }
+
+    /**
+     * @param list<int> $includedTypes
+     *
+     * @return list<array{key: string, label: string, volume_label: string, amount_field: string, count_field: string}>
+     */
+    private function buildChartCategories(array $includedTypes): array
+    {
+        $categories = [];
+
+        if (in_array(self::SALES_ORDER_TYPE, $includedTypes, true)) {
+            $categories[] = [
+                'key' => 'order',
+                'label' => 'Commandes BC',
+                'volume_label' => 'Commandes BC',
+                'amount_field' => 'order_amount_ht',
+                'count_field' => 'order_count',
+            ];
+        }
+
+        if (in_array(self::SALES_INVOICE_PENDING_TYPE, $includedTypes, true)) {
+            $categories[] = [
+                'key' => 'pending_invoice',
+                'label' => 'Factures à comptabiliser',
+                'volume_label' => 'Factures à comptabiliser',
+                'amount_field' => 'pending_invoice_amount_ht',
+                'count_field' => 'pending_invoice_count',
+            ];
+        }
+
+        if (in_array(self::SALES_INVOICE_POSTED_TYPE, $includedTypes, true)) {
+            $categories[] = [
+                'key' => 'posted_invoice',
+                'label' => 'CA comptabilisé net HT',
+                'volume_label' => 'Factures comptabilisées',
+                'amount_field' => 'posted_invoice_amount_ht',
+                'count_field' => 'posted_invoice_count',
+            ];
+        }
+
+        return $categories;
+    }
+
+    private function accumulateEntityMetric(
+        array &$metrics,
+        string $name,
+        string $tiers,
+        string $category,
+        float $amountHt,
+    ): void {
+        $metrics[$name] ??= [
+            'name' => $name,
+            'tiers' => $tiers,
+            'order_amount_ht' => 0.0,
+            'pending_invoice_amount_ht' => 0.0,
+            'posted_invoice_amount_ht' => 0.0,
+            'order_count' => 0,
+            'pending_invoice_count' => 0,
+            'posted_invoice_count' => 0,
+        ];
+
+        $metrics[$name][$category.'_amount_ht'] += $amountHt;
+        ++$metrics[$name][$category.'_count'];
+
+        if ($metrics[$name]['tiers'] === '' && $tiers !== '') {
+            $metrics[$name]['tiers'] = $tiers;
+        }
+    }
+
+    /**
+     * @param array<string, array<string, mixed>> $metrics
+     * @param list<array{key: string, label: string, volume_label: string, amount_field: string, count_field: string}> $categories
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function buildTopEntities(array $metrics, array $categories, int $limit): array
+    {
+        $includesInvoices = count(array_filter(
+            $categories,
+            static fn (array $category): bool => $category['key'] !== 'order'
+        )) > 0;
+
+        foreach ($metrics as &$item) {
+            $item['invoice_amount_ht'] = $item['pending_invoice_amount_ht'] + $item['posted_invoice_amount_ht'];
+            $item['invoice_count'] = $item['pending_invoice_count'] + $item['posted_invoice_count'];
+            $item['ranking_amount_ht'] = $includesInvoices ? $item['invoice_amount_ht'] : $item['order_amount_ht'];
+
+            foreach (['order_amount_ht', 'pending_invoice_amount_ht', 'posted_invoice_amount_ht', 'invoice_amount_ht', 'ranking_amount_ht'] as $key) {
+                $item[$key] = round((float) $item[$key], 2);
+            }
+        }
+        unset($item);
+
+        uasort($metrics, static function (array $left, array $right): int {
+            $comparison = $right['ranking_amount_ht'] <=> $left['ranking_amount_ht'];
+
+            return $comparison !== 0 ? $comparison : strcmp((string) $left['name'], (string) $right['name']);
+        });
+
+        return array_values(array_slice($metrics, 0, $limit, true));
+    }
+
+    /**
+     * @param array<string, array<string, mixed>> $series
+     * @param list<array{key: string, label: string, volume_label: string, amount_field: string, count_field: string}> $categories
+     */
+    private function buildPeriodChart(array $series, array $categories, string $format): array
+    {
+        $datasets = [];
+
+        foreach ($categories as $category) {
+            $datasets[] = [
+                'key' => $category['key'],
+                'label' => $format === 'int' ? $category['volume_label'] : $category['label'],
+                'data' => array_values(array_map(
+                    static fn (array $item): float|int => $format === 'int'
+                        ? (int) ($item[$category['key']] ?? 0)
+                        : round((float) ($item[$category['key']] ?? 0), 2),
+                    $series
+                )),
+            ];
+        }
+
+        return [
+            'labels' => array_column($series, 'label'),
+            'datasets' => $datasets,
+        ];
+    }
+
+    /**
+     * @param list<array<string, mixed>> $entities
+     * @param list<array{key: string, label: string, volume_label: string, amount_field: string, count_field: string}> $categories
+     */
+    private function buildEntityChart(array $entities, array $categories): array
+    {
+        $datasets = [];
+
+        foreach ($categories as $category) {
+            $datasets[] = [
+                'key' => $category['key'],
+                'label' => $category['label'],
+                'data' => array_map(
+                    static fn (array $entity): float => (float) $entity[$category['amount_field']],
+                    $entities
+                ),
+            ];
+        }
+
+        return [
+            'labels' => array_column($entities, 'name'),
+            'datasets' => $datasets,
         ];
     }
 
@@ -204,29 +504,40 @@ final class SageOrderAnalyticsService
         $groupBy = (string) ($filters['group_by'] ?? 'month');
         $groupBy = in_array($groupBy, ['month', 'year'], true) ? $groupBy : 'month';
 
+        $documentScope = (string) ($filters['document_scope'] ?? 'all');
+        $documentScope = in_array($documentScope, ['all', 'orders', 'invoices'], true) ? $documentScope : 'all';
+
+        $invoiceState = (string) ($filters['invoice_state'] ?? 'all');
+        $invoiceState = in_array($invoiceState, ['all', 'pending', 'posted'], true) ? $invoiceState : 'all';
+
         $dateDebut = trim((string) ($filters['date_debut'] ?? ''));
         $dateFin = trim((string) ($filters['date_fin'] ?? ''));
 
-        if ($period === 'custom' && ($dateDebut === '' || $dateFin === '')) {
+        if ($period === 'custom' && (!$this->isValidDate($dateDebut) || !$this->isValidDate($dateFin))) {
             [$dateDebut, $dateFin] = $this->resolvePeriodDates('last_3_months');
         } elseif ($period !== 'custom') {
             [$dateDebut, $dateFin] = $this->resolvePeriodDates($period);
         }
 
+        if ($dateDebut > $dateFin) {
+            [$dateDebut, $dateFin] = [$dateFin, $dateDebut];
+        }
+
+        $selectedType = filter_var($filters['selected_type'] ?? null, FILTER_VALIDATE_INT);
+        $selectedType = in_array($selectedType, $this->getAllowedDocumentTypes(), true) ? $selectedType : null;
+
         return [
             'period' => $period,
             'group_by' => $groupBy,
+            'document_scope' => $documentScope,
+            'invoice_state' => $invoiceState,
             'table_limit' => 15,
             'date_debut' => $dateDebut,
             'date_fin' => $dateFin,
             'representant' => trim((string) ($filters['representant'] ?? '')),
             'piece' => trim((string) ($filters['piece'] ?? '')),
-            'tiers' => '',
-            'statut' => '',
-            'estvalide' => '',
-            'domaine' => null,
-            'type' => null,
             'selected_piece' => trim((string) ($filters['selected_piece'] ?? '')),
+            'selected_type' => $selectedType,
         ];
     }
 
@@ -256,7 +567,7 @@ final class SageOrderAnalyticsService
 
     private function hasExplicitPeriodFilters(array $filters): bool
     {
-        foreach (['date_debut', 'date_fin', 'representant', 'piece', 'selected_piece'] as $key) {
+        foreach (['date_debut', 'date_fin', 'representant', 'piece', 'selected_piece', 'selected_type'] as $key) {
             if (trim((string) ($filters[$key] ?? '')) !== '') {
                 return true;
             }
@@ -265,9 +576,12 @@ final class SageOrderAnalyticsService
         return isset($filters['period']) && trim((string) $filters['period']) !== '';
     }
 
-    private function buildHeaderQuery(array $filters): array
+    private function buildHeaderQuery(array $filters, int $type): array
     {
-        $query = [];
+        $query = [
+            'domaine' => self::SALES_DOMAIN,
+            'type' => $type,
+        ];
 
         if ($filters['date_debut'] !== '') {
             $query['dateDebut'] = $filters['date_debut'].'T00:00:00';
@@ -288,9 +602,9 @@ final class SageOrderAnalyticsService
         return $query;
     }
 
-    private function normalizeHeader(array $header): ?array
+    private function normalizeHeader(array $header, int $type): ?array
     {
-        $piece = trim((string) ($header['piece'] ?? $header['numBC'] ?? ''));
+        $piece = trim((string) ($header['piece'] ?? ''));
 
         if ($piece === '') {
             return null;
@@ -303,55 +617,77 @@ final class SageOrderAnalyticsService
             return null;
         }
 
-        $date = $this->createDate($header['date'] ?? $header['dateBC'] ?? $header['dateCreation'] ?? null);
+        $date = $this->createDate($header['date'] ?? null);
+        $deliveryDate = $this->createDate($header['dateLivraison'] ?? null);
         $freeFields = isset($header['champsLibres']) && is_array($header['champsLibres']) ? $header['champsLibres'] : [];
+        $amountHt = (float) ($header['montantHT'] ?? 0);
+        $category = match ($type) {
+            self::SALES_INVOICE_PENDING_TYPE => 'pending_invoice',
+            self::SALES_INVOICE_POSTED_TYPE => 'posted_invoice',
+            default => 'order',
+        };
+        $isCredit = $category !== 'order' && $amountHt < 0;
+        $typeLabel = match ($category) {
+            'pending_invoice' => $isCredit ? 'Avoir à comptabiliser' : 'Facture à comptabiliser',
+            'posted_invoice' => $isCredit ? 'Avoir comptabilisé' : 'Facture comptabilisée',
+            default => 'Commande BC',
+        };
 
         return [
             'piece' => $piece,
-            'reference' => (string) ($header['reference'] ?? $header['referenceBC'] ?? $piece),
+            'document_type' => $type,
+            'category' => $category,
+            'family' => $category === 'order' ? 'order' : 'invoice',
+            'type_label' => $typeLabel,
+            'is_credit' => $isCredit,
+            'reference' => trim((string) ($header['reference'] ?? '')),
             'date' => $date,
             'date_sort' => $date?->format(\DATE_ATOM) ?? '',
             'date_label' => $date?->format('d/m/Y') ?? '-',
-            'tiers' => trim((string) ($header['tiers'] ?? $header['numClient'] ?? '')),
-            'company_name' => trim((string) ($freeFields['nomtiers'] ?? $header['nomEntreprise'] ?? '')),
+            'date_delivery_label' => $deliveryDate?->format('d/m/Y') ?? '-',
+            'tiers' => trim((string) ($header['tiers'] ?? '')),
+            'company_name' => trim((string) ($freeFields['nomtiers'] ?? '')),
             'representant' => $representant,
-            'representant_raw' => $rawRepresentant,
-            'expediteur' => trim((string) ($header['expediteur'] ?? $header['modeExpedition'] ?? '')),
-            'statut' => trim((string) ($header['statut'] ?? $header['statutBC'] ?? '')),
-            'estValide' => (bool) ($header['estValide'] ?? $header['estvalide'] ?? false),
-            'montantHT' => (float) ($header['montantHT'] ?? 0),
-            'montantTTC' => (float) ($header['montantTTC'] ?? $header['totalTTC'] ?? $header['montant'] ?? 0),
-            'resteAPayer' => (float) ($header['resteAPayer'] ?? 0),
+            'expediteur' => trim((string) ($header['expediteur'] ?? '')),
+            'condition_livraison' => trim((string) ($header['conditionLivraison'] ?? '')),
+            'statut' => trim((string) ($header['statut'] ?? '')),
+            'montantHT' => $amountHt,
+            'montantTTC' => (float) ($header['montantTTC'] ?? 0),
             'paiement' => trim((string) ($header['paiement'] ?? '')),
-            'createur' => trim((string) ($header['createur'] ?? '')),
-            'raw' => $header,
+            'order_reference_client' => trim((string) ($freeFields['Num_commande_ref_client'] ?? '')),
+            'progress' => trim((string) ($freeFields['Avancement'] ?? '')),
+            'additional_status' => trim((string) ($freeFields['Statut supplémentaire'] ?? '')),
+            'delivery_instruction' => trim((string) ($freeFields['Instruction de livraison'] ?? '')),
         ];
     }
 
-    private function fetchOrderLines(string $piece): array
+    private function fetchDocumentLines(string $piece, int $type): array
     {
-        $lines = $this->sageClient->get('/Document/line', ['piece' => $piece]);
+        $lines = $this->sageClient->get('/Document/line', [
+            'piece' => $piece,
+            'domaine' => self::SALES_DOMAIN,
+            'type' => $type,
+        ]);
 
         return array_values(array_map(static function (array $line): array {
             return [
-                'piece' => (string) ($line['piece'] ?? ''),
-                'referenceArticle' => (string) ($line['referenceArticle'] ?? $line['reference'] ?? ''),
-                'designationArticle' => (string) ($line['designationArticle'] ?? $line['designation'] ?? ''),
-                'qteArticle' => (float) ($line['qteArticle'] ?? $line['quantite'] ?? 0),
-                'qtePreparee' => (float) ($line['qtePreparee'] ?? $line['quantitePreparee'] ?? 0),
-                'uniteArticle' => (string) ($line['uniteArticle'] ?? $line['unite'] ?? ''),
-                'prixHTArticle' => (float) ($line['prixHTArticle'] ?? $line['prixHT'] ?? 0),
-                'prixTTCArticle' => (float) ($line['prixTTCArticle'] ?? $line['prixTTC'] ?? 0),
-                'montantArticle' => (float) ($line['montantArticle'] ?? $line['montantTTC'] ?? $line['montant'] ?? 0),
+                'referenceArticle' => (string) ($line['referenceArticle'] ?? ''),
+                'designationArticle' => (string) ($line['designationArticle'] ?? ''),
+                'qteArticle' => (float) ($line['qteArticle'] ?? 0),
+                'qtePreparee' => (float) ($line['qtePreparee'] ?? 0),
+                'uniteArticle' => (string) ($line['uniteArticle'] ?? ''),
+                'prixHTArticle' => (float) ($line['prixHTArticle'] ?? 0),
+                'montantHT' => (float) ($line['montantArticle'] ?? 0),
+                'montantTTC' => (float) ($line['montantTTC'] ?? 0),
             ];
         }, $lines));
     }
 
-    private function findOrderByPiece(array $orders, string $piece): ?array
+    private function findDocument(array $documents, string $piece, int $type): ?array
     {
-        foreach ($orders as $order) {
-            if ($order['piece'] === $piece) {
-                return $order;
+        foreach ($documents as $document) {
+            if ($document['piece'] === $piece && $document['document_type'] === $type) {
+                return $document;
             }
         }
 
@@ -360,15 +696,55 @@ final class SageOrderAnalyticsService
 
     private function buildComparison(array $currentSummary, array $previousSummary, array $currentFilters, array $previousFilters): array
     {
+        $metrics = match ($currentFilters['document_scope']) {
+            'orders' => [
+                $this->buildComparisonMetric('Montant BC HT', 'currency', $currentSummary['ordered_amount_ht'], $previousSummary['ordered_amount_ht']),
+                $this->buildComparisonMetric('Montant BC TTC', 'currency', $currentSummary['ordered_amount_ttc'], $previousSummary['ordered_amount_ttc']),
+                $this->buildComparisonMetric('Commandes BC', 'number', $currentSummary['order_count'], $previousSummary['order_count']),
+                $this->buildComparisonMetric('Panier moyen BC HT', 'currency', $currentSummary['average_order_ht'], $previousSummary['average_order_ht']),
+            ],
+            'invoices' => $this->buildInvoiceComparisonMetrics($currentSummary, $previousSummary, $currentFilters['invoice_state']),
+            default => [
+                $this->buildComparisonMetric('CA comptabilisé net HT', 'currency', $currentSummary['posted_revenue_ht'], $previousSummary['posted_revenue_ht']),
+                $this->buildComparisonMetric('Carnet BC HT', 'currency', $currentSummary['ordered_amount_ht'], $previousSummary['ordered_amount_ht']),
+                $this->buildComparisonMetric('À comptabiliser HT', 'currency', $currentSummary['pending_invoice_amount_ht'], $previousSummary['pending_invoice_amount_ht']),
+                $this->buildComparisonMetric('Documents suivis', 'number', $currentSummary['document_count'], $previousSummary['document_count']),
+            ],
+        };
+
         return [
+            'enabled' => true,
             'current_label' => $this->buildRangeLabel($currentFilters['date_debut'], $currentFilters['date_fin']),
             'previous_label' => $this->buildRangeLabel($previousFilters['date_debut'], $previousFilters['date_fin']),
-            'metrics' => [
-                $this->buildComparisonMetric('Chiffre d affaires', 'currency', $currentSummary['revenue_total'], $previousSummary['revenue_total']),
-                $this->buildComparisonMetric('Commandes', 'number', $currentSummary['order_count'], $previousSummary['order_count']),
-                $this->buildComparisonMetric('Panier moyen', 'currency', $currentSummary['average_basket'], $previousSummary['average_basket']),
-                $this->buildComparisonMetric('CA valide', 'currency', $currentSummary['validated_revenue'], $previousSummary['validated_revenue']),
-            ],
+            'metrics' => $metrics,
+        ];
+    }
+
+    private function buildInvoiceComparisonMetrics(array $current, array $previous, string $invoiceState): array
+    {
+        if ($invoiceState === 'pending') {
+            return [
+                $this->buildComparisonMetric('À comptabiliser HT', 'currency', $current['pending_invoice_amount_ht'], $previous['pending_invoice_amount_ht']),
+                $this->buildComparisonMetric('À comptabiliser TTC', 'currency', $current['pending_invoice_amount_ttc'], $previous['pending_invoice_amount_ttc']),
+                $this->buildComparisonMetric('Documents à comptabiliser', 'number', $current['pending_invoice_count'], $previous['pending_invoice_count']),
+                $this->buildComparisonMetric('Montant moyen HT', 'currency', $current['average_invoice_ht'], $previous['average_invoice_ht']),
+            ];
+        }
+
+        if ($invoiceState === 'posted') {
+            return [
+                $this->buildComparisonMetric('CA comptabilisé net HT', 'currency', $current['posted_revenue_ht'], $previous['posted_revenue_ht']),
+                $this->buildComparisonMetric('CA comptabilisé net TTC', 'currency', $current['posted_revenue_ttc'], $previous['posted_revenue_ttc']),
+                $this->buildComparisonMetric('Documents comptabilisés', 'number', $current['posted_invoice_count'], $previous['posted_invoice_count']),
+                $this->buildComparisonMetric('Montant moyen HT', 'currency', $current['average_invoice_ht'], $previous['average_invoice_ht']),
+            ];
+        }
+
+        return [
+            $this->buildComparisonMetric('CA comptabilisé net HT', 'currency', $current['posted_revenue_ht'], $previous['posted_revenue_ht']),
+            $this->buildComparisonMetric('À comptabiliser HT', 'currency', $current['pending_invoice_amount_ht'], $previous['pending_invoice_amount_ht']),
+            $this->buildComparisonMetric('Documents de facturation', 'number', $current['invoice_count'], $previous['invoice_count']),
+            $this->buildComparisonMetric('Facturation nette HT', 'currency', $current['invoice_amount_ht'], $previous['invoice_amount_ht']),
         ];
     }
 
@@ -404,6 +780,7 @@ final class SageOrderAnalyticsService
         $comparisonFilters['date_debut'] = $previousStart->format('Y-m-d');
         $comparisonFilters['date_fin'] = $previousEnd->format('Y-m-d');
         $comparisonFilters['selected_piece'] = '';
+        $comparisonFilters['selected_type'] = null;
 
         return $comparisonFilters;
     }
@@ -414,7 +791,22 @@ final class SageOrderAnalyticsService
             return 'Periode indisponible';
         }
 
-        return sprintf('%s -> %s', $dateStart, $dateEnd);
+        return sprintf(
+            '%s → %s',
+            (new \DateTimeImmutable($dateStart))->format('d/m/Y'),
+            (new \DateTimeImmutable($dateEnd))->format('d/m/Y')
+        );
+    }
+
+    private function isValidDate(string $value): bool
+    {
+        if ($value === '') {
+            return false;
+        }
+
+        $date = \DateTimeImmutable::createFromFormat('!Y-m-d', $value);
+
+        return $date !== false && $date->format('Y-m-d') === $value;
     }
 
     private function createDate(mixed $value): ?\DateTimeImmutable
@@ -449,22 +841,12 @@ final class SageOrderAnalyticsService
         ];
     }
 
-    private function buildRepresentantOptions(array $orders): array
+    private function buildRepresentantOptions(): array
     {
-        $present = [];
-
-        foreach ($orders as $order) {
-            $present[$order['representant']] = true;
-        }
-
         $options = [];
 
         foreach (self::ALLOWED_COMMERCIALS as $commercial) {
             $label = $this->buildCommercialDisplayName($commercial);
-
-            if (!isset($present[$label])) {
-                continue;
-            }
 
             $options[] = [
                 'value' => $this->buildSageCommercialValue($commercial),

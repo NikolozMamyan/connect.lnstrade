@@ -1,7 +1,7 @@
 {% extends 'layout/app.html.twig' %}
 
 {% block page_title %}Statistiques Sage{% endblock %}
-{% block page_subtitle %}KPI commandes Sage · Période, commercial & chiffre d'affaires{% endblock %}
+{% block page_subtitle %}Commandes et factures Sage · CA comptabilisé, carnet BC et statuts{% endblock %}
 
 {% block stylesheets %}
     {{ parent() }}
@@ -26,6 +26,8 @@
             --of-success: #10B981;
             --of-warning: #F59E0B;
             --of-info: #3B82F6;
+            --of-invoice: #6D5BD0;
+            --of-invoice-light: #F0EDFF;
 
             --of-radius-sm: 10px;
             --of-radius-md: 14px;
@@ -226,6 +228,35 @@
             color: var(--of-error);
         }
 
+        .sage-definition {
+            display: flex;
+            align-items: flex-start;
+            gap: 12px;
+            padding: 14px 18px;
+            border: 1px solid rgba(59, 130, 246, 0.18);
+            border-radius: var(--of-radius-md);
+            background: rgba(59, 130, 246, 0.06);
+            color: #1E3A8A;
+            font-size: 13px;
+            line-height: 1.5;
+        }
+
+        .sage-definition > i {
+            margin-top: 3px;
+            color: var(--of-info);
+        }
+
+        .sage-definition strong,
+        .sage-definition span {
+            display: block;
+        }
+
+        .sage-definition code,
+        .sage-kpi__meta code {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 11px;
+        }
+
         /* ========== FILTRES ========== */
         .sage-filters {
             border-radius: var(--of-radius-xl);
@@ -302,6 +333,79 @@
             grid-template-columns: repeat(12, 1fr);
             gap: 12px;
             align-items: end;
+        }
+
+        .sage-scope-switch {
+            grid-column: span 12;
+            margin: 0 0 4px;
+            padding: 0;
+            border: 0;
+        }
+
+        .sage-scope-switch legend {
+            margin-bottom: 7px;
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--of-text-soft);
+        }
+
+        .sage-scope-switch__options {
+            display: inline-flex;
+            gap: 6px;
+            padding: 4px;
+            border-radius: 12px;
+            background: var(--of-base);
+        }
+
+        .sage-scope-option {
+            cursor: pointer;
+        }
+
+        .sage-scope-option input {
+            position: absolute;
+            width: 1px;
+            height: 1px;
+            overflow: hidden;
+            opacity: 0;
+        }
+
+        .sage-scope-option span {
+            display: inline-flex;
+            align-items: center;
+            gap: 7px;
+            min-height: 36px;
+            padding: 0 14px;
+            border: 1px solid transparent;
+            border-radius: 9px;
+            color: var(--of-text-soft);
+            font-size: 13px;
+            font-weight: 650;
+            transition: var(--of-transition);
+        }
+
+        .sage-scope-option input:focus-visible + span {
+            outline: 3px solid rgba(59, 130, 246, 0.24);
+            outline-offset: 2px;
+        }
+
+        .sage-scope-option--all input:checked + span {
+            border-color: var(--of-primary);
+            background: var(--of-primary);
+            color: #fff;
+        }
+
+        .sage-scope-option--orders input:checked + span {
+            border-color: rgba(0, 194, 168, 0.28);
+            background: var(--of-accent-light);
+            color: var(--of-accent-hover);
+        }
+
+        .sage-scope-option--invoices input:checked + span {
+            border-color: rgba(109, 91, 208, 0.28);
+            background: var(--of-invoice-light);
+            color: var(--of-invoice);
         }
 
         .sage-field {
@@ -386,6 +490,12 @@
             box-shadow: 0 6px 16px rgba(0, 194, 168, 0.32);
         }
 
+        .sage-btn:disabled,
+        .sage-filters.is-loading .sage-period-chip {
+            cursor: wait;
+            opacity: 0.65;
+        }
+
         .sage-btn--ghost {
             background: var(--of-surface);
             color: var(--of-text-soft);
@@ -421,6 +531,12 @@
             border-color: var(--of-border);
         }
 
+        .sage-kpi--order { border-top: 3px solid var(--of-accent); }
+        .sage-kpi--invoice { border-top: 3px solid var(--of-invoice); }
+        .sage-kpi--pending { border-top: 3px solid var(--of-warning); }
+        .sage-kpi--credit { border-top: 3px solid var(--of-error); }
+        .sage-kpi--mixed { border-top: 3px solid var(--of-info); }
+
         .sage-kpi__head {
             display: flex;
             align-items: center;
@@ -451,6 +567,7 @@
         .sage-kpi__icon--warning { background: rgba(245, 158, 11, 0.12); color: var(--of-warning); }
         .sage-kpi__icon--info { background: rgba(59, 130, 246, 0.12); color: var(--of-info); }
         .sage-kpi__icon--danger { background: rgba(229, 62, 62, 0.12); color: var(--of-error); }
+        .sage-kpi__icon--invoice { background: var(--of-invoice-light); color: var(--of-invoice); }
 
         .sage-kpi__value {
             font-size: clamp(20px, 2.2vw, 26px);
@@ -530,6 +647,9 @@
         }
 
         .sage-card__subtitle {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
             font-size: 13px;
             color: var(--of-text-soft);
             font-weight: 500;
@@ -541,6 +661,7 @@
 
         .sage-card__body--flush {
             padding: 0;
+            overflow-x: auto;
         }
 
         .sage-comparison {
@@ -633,6 +754,33 @@
         .sage-chart-canvas--sm {
             min-height: 260px;
         }
+
+        .sage-chart-canvas--status {
+            min-height: 210px;
+        }
+
+        .sage-status-charts {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 16px;
+        }
+
+        .sage-status-chart > strong {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 7px;
+            font-size: 12px;
+        }
+
+        .sage-legend-dot {
+            width: 9px;
+            height: 9px;
+            border-radius: 50%;
+        }
+
+        .sage-legend-dot--order { background: var(--of-accent); }
+        .sage-legend-dot--invoice { background: var(--of-invoice); }
 
         /* ========== TABLES ========== */
         .sage-table-grid {
@@ -737,6 +885,47 @@
             color: var(--of-text-soft);
         }
 
+        .sage-badge--warning {
+            background: rgba(245, 158, 11, 0.14);
+            color: #9A5A00;
+        }
+
+        .sage-badge--neutral {
+            background: var(--of-base);
+            color: var(--of-text-soft);
+        }
+
+        .sage-document-badge {
+            display: inline-flex;
+            align-items: center;
+            max-width: 160px;
+            padding: 4px 9px;
+            border-radius: 7px;
+            font-size: 10px;
+            font-weight: 750;
+            line-height: 1.2;
+            text-transform: uppercase;
+            letter-spacing: 0.035em;
+        }
+
+        .sage-document-badge--order {
+            background: var(--of-accent-light);
+            color: var(--of-accent-hover);
+        }
+
+        .sage-document-badge--pending_invoice {
+            background: rgba(245, 158, 11, 0.14);
+            color: #9A5A00;
+        }
+
+        .sage-document-badge--posted_invoice {
+            background: var(--of-invoice-light);
+            color: var(--of-invoice);
+        }
+
+        .sage-text-order { color: var(--of-accent-hover) !important; }
+        .sage-text-invoice { color: var(--of-invoice) !important; }
+
         .sage-empty {
             padding: 48px 24px;
             text-align: center;
@@ -748,6 +937,12 @@
             font-size: 32px;
             color: var(--of-text-muted);
             margin-bottom: 12px;
+        }
+
+        .sage-empty__title {
+            display: block;
+            margin-bottom: 5px;
+            color: var(--of-primary);
         }
 
         /* ========== DETAIL ========== */
@@ -781,6 +976,17 @@
             font-weight: 600;
         }
 
+        .sage-detail-metric small {
+            display: block;
+            margin-top: 3px;
+            color: var(--of-text-soft);
+            font-size: 11px;
+        }
+
+        .sage-detail-metric--wide {
+            grid-column: span 2;
+        }
+
         .sage-detail-metric--highlight {
             background: var(--of-accent-light);
             border: 1px solid rgba(0, 194, 168, 0.2);
@@ -788,6 +994,80 @@
 
         .sage-detail-metric--highlight strong {
             color: var(--of-accent);
+        }
+
+        .sage-detail-lines-title {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            margin: 22px 0 8px;
+            font-size: 13px;
+        }
+
+        .sage-detail-lines-title span {
+            color: var(--of-text-soft);
+        }
+
+        .sage-table-scroll {
+            overflow-x: auto;
+            margin: 0 -22px -20px;
+        }
+
+        .sage-table__reference {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 12px;
+        }
+
+        .sage-detail-error {
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+            padding: 16px;
+            border-radius: var(--of-radius-md);
+            background: #FEF2F2;
+            color: #991B1B;
+        }
+
+        .sage-detail-error strong,
+        .sage-detail-error span {
+            display: block;
+        }
+
+        .sage-detail-error span {
+            margin-top: 3px;
+            font-size: 13px;
+        }
+
+        .sage-document-loading {
+            display: grid;
+            place-items: center;
+            min-height: 260px;
+            color: var(--of-text-soft);
+            text-align: center;
+        }
+
+        .sage-document-loading i {
+            display: block;
+            margin-bottom: 12px;
+            color: var(--of-accent);
+            font-size: 24px;
+        }
+
+        .sage-inline-note {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            color: var(--of-text-soft);
+            font-size: 13px;
+        }
+
+        @media (min-width: 1121px) {
+            .sage-document-detail-card {
+                position: sticky;
+                top: 20px;
+                align-self: start;
+            }
         }
 
         /* ========== RESPONSIVE ========== */
@@ -825,14 +1105,29 @@
             .sage-field--actions {
                 grid-column: span 12;
             }
+            .sage-scope-switch__options {
+                display: grid;
+                width: 100%;
+                grid-template-columns: 1fr;
+            }
+            .sage-scope-option span {
+                justify-content: center;
+                width: 100%;
+            }
             .sage-detail-grid {
                 grid-template-columns: 1fr;
+            }
+            .sage-detail-metric--wide {
+                grid-column: span 1;
             }
             .sage-card__header {
                 padding: 16px 18px 12px;
             }
             .sage-card__body {
                 padding: 16px 18px;
+            }
+            .sage-table-scroll {
+                margin: 0 -18px -16px;
             }
         }
     </style>
@@ -866,8 +1161,8 @@
                         </span>
                         <h1>Pilotage commercial Sage</h1>
                         <p>
-                            Vision consolidée de votre activité commerciale&nbsp;: chiffre d'affaires, panier moyen,
-                            top commerciaux, top clients et détail ligne par ligne de chaque commande.
+                            Une lecture temps réel séparant le CA comptabilisé, les factures en attente et le carnet
+                            de commandes, avec le détail de chaque pièce sans quitter la page.
                         </p>
                     </div>
                     <div class="sage-hero__meta">
@@ -886,10 +1181,17 @@
                             </div>
                         </div>
                         <div class="sage-hero__meta-item">
+                            <div class="sage-hero__meta-icon"><i class="fas fa-filter"></i></div>
+                            <div class="sage-hero__meta-text">
+                                <span>Vue active</span>
+                                <strong>{{ sage ? (sage.filters.document_scope == 'orders' ? 'Commandes BC' : (sage.filters.document_scope == 'invoices' ? 'Factures / avoirs' : 'Globale')) : 'N/A' }}</strong>
+                            </div>
+                        </div>
+                        <div class="sage-hero__meta-item">
                             <div class="sage-hero__meta-icon"><i class="fas fa-database"></i></div>
                             <div class="sage-hero__meta-text">
                                 <span>Source de données</span>
-                                <strong>Document Header / Line</strong>
+                                <strong>Documents de vente Sage · types 1, 6 et 7</strong>
                             </div>
                         </div>
                     </div>
@@ -903,6 +1205,20 @@
                     <div>
                         <strong>Lecture Sage indisponible</strong>
                         <div>{{ sageError }}</div>
+                    </div>
+                </div>
+            {% endif %}
+
+            {% if sage %}
+                <div class="sage-definition" role="note">
+                    <i class="fas fa-circle-info"></i>
+                    <div>
+                        <strong>Périmètre précis des indicateurs</strong>
+                        <span>
+                            Le CA correspond uniquement aux factures comptabilisées Sage (<code>type 7</code>), net des avoirs négatifs.
+                            Les BC (<code>type 1</code>) et les factures à comptabiliser (<code>type 6</code>) restent séparés&nbsp;:
+                            ils ne sont pas additionnés au CA, faute de lien Sage assez fiable pour éviter les doubles comptes.
+                        </span>
                     </div>
                 </div>
             {% endif %}
@@ -934,7 +1250,23 @@
                     </div>
                 </div>
 
-                <form method="get" id="sageFiltersForm">
+                <form method="get" id="sageFiltersForm" data-turbo="true" data-turbo-action="replace">
+                    <fieldset class="sage-scope-switch">
+                        <legend>Documents affichés</legend>
+                        {% set scopes = {
+                            'all': ['Vue globale', 'fa-layer-group'],
+                            'orders': ['Commandes BC', 'fa-file-signature'],
+                            'invoices': ['Factures', 'fa-file-invoice-dollar']
+                        } %}
+                        <div class="sage-scope-switch__options">
+                            {% for value, option in scopes %}
+                                <label class="sage-scope-option sage-scope-option--{{ value }}">
+                                    <input type="radio" name="document_scope" value="{{ value }}" {{ (sage and sage.filters.document_scope == value) or (not sage and value == 'all') ? 'checked' : '' }}>
+                                    <span><i class="fas {{ option[1] }}"></i>{{ option[0] }}</span>
+                                </label>
+                            {% endfor %}
+                        </div>
+                    </fieldset>
                     <div class="sage-field sage-field--sm">
                         <label for="period">Période</label>
                         <select id="period" name="period">
@@ -974,8 +1306,18 @@
                     </div>
                     <div class="sage-field sage-field--md">
                         <label for="piece">Numéro de pièce</label>
-                        <input id="piece" type="text" name="piece" value="{{ sage ? sage.filters.piece : '' }}" placeholder="ex : BC002137">
+                        <input id="piece" type="text" name="piece" value="{{ sage ? sage.filters.piece : '' }}" placeholder="BC, FA, FV…">
                     </div>
+                    {% if not sage or sage.filters.document_scope != 'orders' %}
+                        <div class="sage-field sage-field--md">
+                            <label for="invoice_state">État des factures</label>
+                            <select id="invoice_state" name="invoice_state">
+                                <option value="all" {{ sage and sage.filters.invoice_state == 'all' ? 'selected' : '' }}>Toutes</option>
+                                <option value="pending" {{ sage and sage.filters.invoice_state == 'pending' ? 'selected' : '' }}>À comptabiliser</option>
+                                <option value="posted" {{ sage and sage.filters.invoice_state == 'posted' ? 'selected' : '' }}>Comptabilisées</option>
+                            </select>
+                        </div>
+                    {% endif %}
                     <input type="hidden" name="table_limit" value="15">
 
                     <div class="sage-field--actions">
@@ -995,100 +1337,118 @@
 
                 {# ========== KPI CARDS ========== #}
                 <div class="sage-kpis">
-                    <article class="sage-kpi">
-                        <div class="sage-kpi__head">
-                            <span class="sage-kpi__label">Chiffre d'affaires</span>
-                            <div class="sage-kpi__icon sage-kpi__icon--accent"><i class="fas fa-euro-sign"></i></div>
-                        </div>
-                        <div class="sage-kpi__value">
-                            {{ sage.summary.revenue_total|number_format(0, ',', ' ') }}<span class="sage-kpi__currency">€</span>
-                        </div>
-                        <div class="sage-kpi__meta">{{ sage.summary.order_count }} commandes sur la période</div>
-                        <div class="sage-kpi__bar"><div class="sage-kpi__bar-fill" style="width: 100%"></div></div>
-                    </article>
-
-                    <article class="sage-kpi">
-                        <div class="sage-kpi__head">
-                            <span class="sage-kpi__label">CA validé</span>
-                            <div class="sage-kpi__icon sage-kpi__icon--success"><i class="fas fa-check-circle"></i></div>
-                        </div>
-                        <div class="sage-kpi__value">
-                            {{ sage.summary.validated_revenue|number_format(0, ',', ' ') }}<span class="sage-kpi__currency">€</span>
-                        </div>
-                        <div class="sage-kpi__meta">Commandes confirmées dans Sage</div>
-                        <div class="sage-kpi__bar">
-                            <div class="sage-kpi__bar-fill" style="width: {{ sage.summary.revenue_total > 0 ? (sage.summary.validated_revenue / sage.summary.revenue_total * 100)|round : 0 }}%; background: var(--of-success);"></div>
-                        </div>
-                    </article>
-
-                    <article class="sage-kpi">
-                        <div class="sage-kpi__head">
-                            <span class="sage-kpi__label">Panier moyen</span>
-                            <div class="sage-kpi__icon sage-kpi__icon--info"><i class="fas fa-shopping-basket"></i></div>
-                        </div>
-                        <div class="sage-kpi__value">
-                            {{ sage.summary.average_basket|number_format(0, ',', ' ') }}<span class="sage-kpi__currency">€</span>
-                        </div>
-                        <div class="sage-kpi__meta">Montant moyen par commande</div>
-                        <div class="sage-kpi__bar"><div class="sage-kpi__bar-fill" style="width: 100%; background: var(--of-info);"></div></div>
-                    </article>
-
-                    <article class="sage-kpi">
-                        <div class="sage-kpi__head">
-                            <span class="sage-kpi__label">Top commercial</span>
-                            <div class="sage-kpi__icon sage-kpi__icon--warning"><i class="fas fa-trophy"></i></div>
-                        </div>
-                        <div class="sage-kpi__value" style="font-size: 18px;">
-                            {{ sage.summary.best_commercial.name }}
-                        </div>
-                        <div class="sage-kpi__meta">
-                            <strong style="color: var(--of-primary);">{{ sage.summary.best_commercial.amount|number_format(0, ',', ' ') }} €</strong> · {{ sage.summary.best_commercial.orders }} cmd
-                        </div>
-                        <div class="sage-kpi__bar"><div class="sage-kpi__bar-fill" style="width: 100%; background: var(--of-warning);"></div></div>
-                    </article>
-
-                    <article class="sage-kpi">
-                        <div class="sage-kpi__head">
-                            <span class="sage-kpi__label">Reste à payer</span>
-                            <div class="sage-kpi__icon sage-kpi__icon--danger"><i class="fas fa-clock"></i></div>
-                        </div>
-                        <div class="sage-kpi__value">
-                            {{ sage.summary.unpaid_total|number_format(0, ',', ' ') }}<span class="sage-kpi__currency">€</span>
-                        </div>
-                        <div class="sage-kpi__meta">Encours théorique sélectionné</div>
-                        <div class="sage-kpi__bar">
-                            <div class="sage-kpi__bar-fill" style="width: {{ sage.summary.revenue_total > 0 ? (sage.summary.unpaid_total / sage.summary.revenue_total * 100)|round : 0 }}%; background: var(--of-error);"></div>
-                        </div>
-                    </article>
+                    {% if sage.filters.document_scope == 'orders' %}
+                        <article class="sage-kpi sage-kpi--order">
+                            <div class="sage-kpi__head"><span class="sage-kpi__label">Commandes BC</span><div class="sage-kpi__icon sage-kpi__icon--accent"><i class="fas fa-file-signature"></i></div></div>
+                            <div class="sage-kpi__value">{{ sage.summary.order_count|number_format(0, ',', ' ') }}</div>
+                            <div class="sage-kpi__meta">Bons de commande clients Sage</div>
+                        </article>
+                        <article class="sage-kpi sage-kpi--order">
+                            <div class="sage-kpi__head"><span class="sage-kpi__label">Carnet BC HT</span><div class="sage-kpi__icon sage-kpi__icon--accent"><i class="fas fa-euro-sign"></i></div></div>
+                            <div class="sage-kpi__value">{{ sage.summary.ordered_amount_ht|number_format(2, ',', ' ') }}<span class="sage-kpi__currency">€</span></div>
+                            <div class="sage-kpi__meta">Somme des BC retournés par Sage</div>
+                        </article>
+                        <article class="sage-kpi sage-kpi--order">
+                            <div class="sage-kpi__head"><span class="sage-kpi__label">Montant BC TTC</span><div class="sage-kpi__icon sage-kpi__icon--info"><i class="fas fa-receipt"></i></div></div>
+                            <div class="sage-kpi__value">{{ sage.summary.ordered_amount_ttc|number_format(2, ',', ' ') }}<span class="sage-kpi__currency">€</span></div>
+                            <div class="sage-kpi__meta">Montant TTC des commandes</div>
+                        </article>
+                        <article class="sage-kpi sage-kpi--order">
+                            <div class="sage-kpi__head"><span class="sage-kpi__label">Panier moyen BC HT</span><div class="sage-kpi__icon sage-kpi__icon--info"><i class="fas fa-calculator"></i></div></div>
+                            <div class="sage-kpi__value">{{ sage.summary.average_order_ht|number_format(2, ',', ' ') }}<span class="sage-kpi__currency">€</span></div>
+                            <div class="sage-kpi__meta">Carnet HT ÷ nombre de BC</div>
+                        </article>
+                        <article class="sage-kpi sage-kpi--pending">
+                            <div class="sage-kpi__head"><span class="sage-kpi__label">À préparer</span><div class="sage-kpi__icon sage-kpi__icon--warning"><i class="fas fa-box-open"></i></div></div>
+                            <div class="sage-kpi__value">{{ sage.summary.to_prepare_count|number_format(0, ',', ' ') }}</div>
+                            <div class="sage-kpi__meta"><strong>{{ sage.summary.to_prepare_amount_ht|number_format(2, ',', ' ') }} € HT</strong> · {{ sage.summary.to_prepare_share|number_format(1, ',', ' ') }} % des BC</div>
+                            <div class="sage-kpi__bar"><div class="sage-kpi__bar-fill" style="width: {{ sage.summary.to_prepare_share }}%; background: var(--of-warning);"></div></div>
+                        </article>
+                    {% elseif sage.filters.document_scope == 'invoices' %}
+                        <article class="sage-kpi sage-kpi--invoice">
+                            <div class="sage-kpi__head"><span class="sage-kpi__label">CA comptabilisé net HT</span><div class="sage-kpi__icon sage-kpi__icon--invoice"><i class="fas fa-chart-line"></i></div></div>
+                            <div class="sage-kpi__value">{{ sage.summary.posted_revenue_ht|number_format(2, ',', ' ') }}<span class="sage-kpi__currency">€</span></div>
+                            <div class="sage-kpi__meta">Factures type 7, avoirs déduits</div>
+                        </article>
+                        <article class="sage-kpi sage-kpi--invoice">
+                            <div class="sage-kpi__head"><span class="sage-kpi__label">CA comptabilisé net TTC</span><div class="sage-kpi__icon sage-kpi__icon--invoice"><i class="fas fa-euro-sign"></i></div></div>
+                            <div class="sage-kpi__value">{{ sage.summary.posted_revenue_ttc|number_format(2, ',', ' ') }}<span class="sage-kpi__currency">€</span></div>
+                            <div class="sage-kpi__meta">Montant TTC net comptabilisé</div>
+                        </article>
+                        <article class="sage-kpi sage-kpi--invoice">
+                            <div class="sage-kpi__head"><span class="sage-kpi__label">Documents de facturation</span><div class="sage-kpi__icon sage-kpi__icon--invoice"><i class="fas fa-file-invoice-dollar"></i></div></div>
+                            <div class="sage-kpi__value">{{ sage.summary.invoice_count|number_format(0, ',', ' ') }}</div>
+                            <div class="sage-kpi__meta">{{ sage.summary.posted_invoice_count }} comptabilisés · {{ sage.summary.pending_invoice_count }} en attente</div>
+                        </article>
+                        <article class="sage-kpi sage-kpi--pending">
+                            <div class="sage-kpi__head"><span class="sage-kpi__label">À comptabiliser HT</span><div class="sage-kpi__icon sage-kpi__icon--warning"><i class="fas fa-clock"></i></div></div>
+                            <div class="sage-kpi__value">{{ sage.summary.pending_invoice_amount_ht|number_format(2, ',', ' ') }}<span class="sage-kpi__currency">€</span></div>
+                            <div class="sage-kpi__meta">{{ sage.summary.pending_invoice_count }} document{{ sage.summary.pending_invoice_count > 1 ? 's' : '' }} type 6</div>
+                        </article>
+                        <article class="sage-kpi sage-kpi--credit">
+                            <div class="sage-kpi__head"><span class="sage-kpi__label">Avoirs détectés</span><div class="sage-kpi__icon sage-kpi__icon--danger"><i class="fas fa-rotate-left"></i></div></div>
+                            <div class="sage-kpi__value">{{ sage.summary.credit_count|number_format(0, ',', ' ') }}</div>
+                            <div class="sage-kpi__meta">Documents négatifs déjà intégrés au net</div>
+                        </article>
+                    {% else %}
+                        <article class="sage-kpi sage-kpi--invoice">
+                            <div class="sage-kpi__head"><span class="sage-kpi__label">CA comptabilisé net HT</span><div class="sage-kpi__icon sage-kpi__icon--invoice"><i class="fas fa-chart-line"></i></div></div>
+                            <div class="sage-kpi__value">{{ sage.summary.posted_revenue_ht|number_format(2, ',', ' ') }}<span class="sage-kpi__currency">€</span></div>
+                            <div class="sage-kpi__meta">{{ sage.summary.posted_invoice_count }} documents comptabilisés · avoirs déduits</div>
+                        </article>
+                        <article class="sage-kpi sage-kpi--order">
+                            <div class="sage-kpi__head"><span class="sage-kpi__label">Carnet de commandes HT</span><div class="sage-kpi__icon sage-kpi__icon--accent"><i class="fas fa-file-signature"></i></div></div>
+                            <div class="sage-kpi__value">{{ sage.summary.ordered_amount_ht|number_format(2, ',', ' ') }}<span class="sage-kpi__currency">€</span></div>
+                            <div class="sage-kpi__meta">{{ sage.summary.order_count }} commandes BC, non ajoutées au CA</div>
+                        </article>
+                        <article class="sage-kpi sage-kpi--pending">
+                            <div class="sage-kpi__head"><span class="sage-kpi__label">À comptabiliser HT</span><div class="sage-kpi__icon sage-kpi__icon--warning"><i class="fas fa-clock"></i></div></div>
+                            <div class="sage-kpi__value">{{ sage.summary.pending_invoice_amount_ht|number_format(2, ',', ' ') }}<span class="sage-kpi__currency">€</span></div>
+                            <div class="sage-kpi__meta">{{ sage.summary.pending_invoice_count }} factures / avoirs en attente</div>
+                        </article>
+                        <article class="sage-kpi sage-kpi--mixed">
+                            <div class="sage-kpi__head"><span class="sage-kpi__label">Documents suivis</span><div class="sage-kpi__icon sage-kpi__icon--info"><i class="fas fa-layer-group"></i></div></div>
+                            <div class="sage-kpi__value">{{ sage.summary.document_count|number_format(0, ',', ' ') }}</div>
+                            <div class="sage-kpi__meta"><strong class="sage-text-order">{{ sage.summary.order_count }} BC</strong> · <strong class="sage-text-invoice">{{ sage.summary.invoice_count }} factures / avoirs</strong></div>
+                        </article>
+                        <article class="sage-kpi sage-kpi--invoice">
+                            <div class="sage-kpi__head"><span class="sage-kpi__label">Factures suivies</span><div class="sage-kpi__icon sage-kpi__icon--invoice"><i class="fas fa-file-invoice-dollar"></i></div></div>
+                            <div class="sage-kpi__value">{{ sage.summary.invoice_count|number_format(0, ',', ' ') }}</div>
+                            <div class="sage-kpi__meta">{{ sage.summary.posted_invoice_count }} comptabilisées · {{ sage.summary.pending_invoice_count }} en attente</div>
+                        </article>
+                    {% endif %}
                 </div>
 
-                {# ========== COMPARAISON N / N-1 ========== #}
+                {# ========== COMPARAISON PÉRIODE PRÉCÉDENTE ========== #}
                 <div class="sage-card">
                     <div class="sage-card__header">
                         <div class="sage-card__title">
                             <span class="icon"><i class="fas fa-code-compare"></i></span>
-                            Comparaison N / N-1
+                            Comparaison à la période précédente de même durée
                         </div>
-                        <div class="sage-card__subtitle">
-                            <strong>{{ sage.comparison.current_label }}</strong> vs {{ sage.comparison.previous_label }}
-                        </div>
+                        {% if sage.comparison.enabled %}
+                            <div class="sage-card__subtitle">
+                                <strong>{{ sage.comparison.current_label }}</strong> vs {{ sage.comparison.previous_label }}
+                            </div>
+                        {% endif %}
                     </div>
                     <div class="sage-card__body">
-                        <div class="sage-comparison">
-                            {% for metric in sage.comparison.metrics %}
+                        {% if sage.comparison.enabled %}
+                            <div class="sage-comparison">
+                                {% for metric in sage.comparison.metrics %}
                                 <article class="sage-metric">
                                     <span class="sage-metric__label">{{ metric.label }}</span>
                                     <strong class="sage-metric__value">
                                         {% if metric.format == 'currency' %}
-                                            {{ metric.current|number_format(0, ',', ' ') }} €
+                                            {{ metric.current|number_format(2, ',', ' ') }} €
                                         {% else %}
                                             {{ metric.current|number_format(0, ',', ' ') }}
                                         {% endif %}
                                     </strong>
                                     <small class="sage-metric__previous">
-                                        N-1 :
+                                        Période précédente :
                                         {% if metric.format == 'currency' %}
-                                            {{ metric.previous|number_format(0, ',', ' ') }} €
+                                            {{ metric.previous|number_format(2, ',', ' ') }} €
                                         {% else %}
                                             {{ metric.previous|number_format(0, ',', ' ') }}
                                         {% endif %}
@@ -1106,7 +1466,7 @@
                                                 {{ metric.delta_percent > 0 ? '+' : '' }}{{ metric.delta_percent|number_format(1, ',', ' ') }}%
                                             {% else %}
                                                 {% if metric.format == 'currency' %}
-                                                    {{ metric.delta|number_format(0, ',', ' ') }} €
+                                                    {{ metric.delta|number_format(2, ',', ' ') }} €
                                                 {% else %}
                                                     {{ metric.delta|number_format(0, ',', ' ') }}
                                                 {% endif %}
@@ -1114,8 +1474,11 @@
                                         </span>
                                     </div>
                                 </article>
-                            {% endfor %}
-                        </div>
+                                {% endfor %}
+                            </div>
+                        {% else %}
+                            <div class="sage-inline-note"><i class="fas fa-info-circle"></i>{{ sage.comparison.reason }}</div>
+                        {% endif %}
                     </div>
                 </div>
 
@@ -1125,13 +1488,13 @@
                         <div class="sage-card__header">
                             <div class="sage-card__title">
                                 <span class="icon"><i class="fas fa-chart-area"></i></span>
-                                Évolution du chiffre d'affaires
+                                Évolution des montants HT
                             </div>
-                            <div class="sage-card__subtitle">{{ sage.filters.group_by == 'year' ? 'Vue annuelle' : 'Vue mensuelle' }}</div>
+                            <div class="sage-card__subtitle">Séries séparées · {{ sage.filters.group_by == 'year' ? 'vue annuelle' : 'vue mensuelle' }}</div>
                         </div>
                         <div class="sage-card__body">
                             <div class="sage-chart-canvas">
-                                <canvas id="erpRevenueChart"></canvas>
+                                <canvas id="erpAmountChart"></canvas>
                             </div>
                         </div>
                     </div>
@@ -1140,7 +1503,7 @@
                             <div class="sage-card__header">
                                 <div class="sage-card__title">
                                     <span class="icon"><i class="fas fa-users"></i></span>
-                                    CA par commercial
+                                    Activité HT par commercial
                                 </div>
                             </div>
                             <div class="sage-card__body">
@@ -1153,12 +1516,23 @@
                             <div class="sage-card__header">
                                 <div class="sage-card__title">
                                     <span class="icon"><i class="fas fa-chart-pie"></i></span>
-                                    Répartition des statuts
+                                    Statuts par famille de document
                                 </div>
                             </div>
                             <div class="sage-card__body">
-                                <div class="sage-chart-canvas sage-chart-canvas--sm">
-                                    <canvas id="erpStatusChart"></canvas>
+                                <div class="sage-status-charts">
+                                    {% if sage.filters.document_scope != 'invoices' %}
+                                        <div class="sage-status-chart">
+                                            <strong><span class="sage-legend-dot sage-legend-dot--order"></span>Commandes BC</strong>
+                                            <div class="sage-chart-canvas sage-chart-canvas--status"><canvas id="erpOrderStatusChart"></canvas></div>
+                                        </div>
+                                    {% endif %}
+                                    {% if sage.filters.document_scope != 'orders' %}
+                                        <div class="sage-status-chart">
+                                            <strong><span class="sage-legend-dot sage-legend-dot--invoice"></span>Factures / avoirs</strong>
+                                            <div class="sage-chart-canvas sage-chart-canvas--status"><canvas id="erpInvoiceStatusChart"></canvas></div>
+                                        </div>
+                                    {% endif %}
                                 </div>
                             </div>
                         </div>
@@ -1173,7 +1547,7 @@
                                 <span class="icon"><i class="fas fa-medal"></i></span>
                                 Top clients
                             </div>
-                            <div class="sage-card__subtitle">Classement par CA</div>
+                            <div class="sage-card__subtitle">{{ sage.filters.document_scope == 'orders' ? 'Classement par carnet BC' : 'Classement par facturation nette' }}</div>
                         </div>
                         <div class="sage-card__body">
                             <div class="sage-chart-canvas sage-chart-canvas--sm">
@@ -1193,8 +1567,14 @@
                                 <thead>
                                     <tr>
                                         <th>Client</th>
-                                        <th style="text-align:right;">Cmd</th>
-                                        <th style="text-align:right;">CA</th>
+                                        {% if sage.filters.document_scope != 'invoices' %}
+                                            <th style="text-align:right;">BC</th>
+                                            <th style="text-align:right;">BC HT</th>
+                                        {% endif %}
+                                        {% if sage.filters.document_scope != 'orders' %}
+                                            <th style="text-align:right;">Fact.</th>
+                                            <th style="text-align:right;">Facturation HT</th>
+                                        {% endif %}
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -1206,12 +1586,18 @@
                                                     <span class="sage-table__sub">{{ item.tiers }}</span>
                                                 {% endif %}
                                             </td>
-                                            <td class="sage-table__num" style="text-align:right;">{{ item.orders }}</td>
-                                            <td class="sage-table__amount" style="text-align:right;">{{ item.amount|number_format(0, ',', ' ') }} €</td>
+                                            {% if sage.filters.document_scope != 'invoices' %}
+                                                <td class="sage-table__num" style="text-align:right;">{{ item.order_count }}</td>
+                                                <td class="sage-table__amount sage-text-order" style="text-align:right;">{{ item.order_amount_ht|number_format(2, ',', ' ') }} €</td>
+                                            {% endif %}
+                                            {% if sage.filters.document_scope != 'orders' %}
+                                                <td class="sage-table__num" style="text-align:right;">{{ item.invoice_count }}</td>
+                                                <td class="sage-table__amount sage-text-invoice" style="text-align:right;">{{ item.invoice_amount_ht|number_format(2, ',', ' ') }} €</td>
+                                            {% endif %}
                                         </tr>
                                     {% else %}
                                         <tr>
-                                            <td colspan="3">
+                                            <td colspan="{{ sage.filters.document_scope == 'all' ? 5 : 3 }}">
                                                 <div class="sage-empty">
                                                     <div class="sage-empty__icon"><i class="fas fa-inbox"></i></div>
                                                     Aucune donnée client disponible
@@ -1231,13 +1617,13 @@
                         <div class="sage-card__header">
                             <div class="sage-card__title">
                                 <span class="icon"><i class="fas fa-chart-bar"></i></span>
-                                Volume de commandes
+                                Volume des documents
                             </div>
-                            <div class="sage-card__subtitle">Nombre de commandes par période</div>
+                            <div class="sage-card__subtitle">BC et factures comptés séparément</div>
                         </div>
                         <div class="sage-card__body">
                             <div class="sage-chart-canvas sage-chart-canvas--sm">
-                                <canvas id="erpOrdersChart"></canvas>
+                                <canvas id="erpVolumeChart"></canvas>
                             </div>
                         </div>
                     </div>
@@ -1253,20 +1639,32 @@
                                 <thead>
                                     <tr>
                                         <th>Commercial</th>
-                                        <th style="text-align:right;">Cmd</th>
-                                        <th style="text-align:right;">CA</th>
+                                        {% if sage.filters.document_scope != 'invoices' %}
+                                            <th style="text-align:right;">BC</th>
+                                            <th style="text-align:right;">BC HT</th>
+                                        {% endif %}
+                                        {% if sage.filters.document_scope != 'orders' %}
+                                            <th style="text-align:right;">Fact.</th>
+                                            <th style="text-align:right;">Facturation HT</th>
+                                        {% endif %}
                                     </tr>
                                 </thead>
                                 <tbody>
                                     {% for item in sage.topCommercials %}
                                         <tr>
                                             <td><strong>{{ item.name }}</strong></td>
-                                            <td class="sage-table__num" style="text-align:right;">{{ item.orders }}</td>
-                                            <td class="sage-table__amount" style="text-align:right;">{{ item.amount|number_format(0, ',', ' ') }} €</td>
+                                            {% if sage.filters.document_scope != 'invoices' %}
+                                                <td class="sage-table__num" style="text-align:right;">{{ item.order_count }}</td>
+                                                <td class="sage-table__amount sage-text-order" style="text-align:right;">{{ item.order_amount_ht|number_format(2, ',', ' ') }} €</td>
+                                            {% endif %}
+                                            {% if sage.filters.document_scope != 'orders' %}
+                                                <td class="sage-table__num" style="text-align:right;">{{ item.invoice_count }}</td>
+                                                <td class="sage-table__amount sage-text-invoice" style="text-align:right;">{{ item.invoice_amount_ht|number_format(2, ',', ' ') }} €</td>
+                                            {% endif %}
                                         </tr>
                                     {% else %}
                                         <tr>
-                                            <td colspan="3">
+                                            <td colspan="{{ sage.filters.document_scope == 'all' ? 5 : 3 }}">
                                                 <div class="sage-empty">
                                                     <div class="sage-empty__icon"><i class="fas fa-user-slash"></i></div>
                                                     Aucune donnée commerciale
@@ -1280,67 +1678,68 @@
                     </div>
                 </div>
 
-                {# ========== COMMANDES + DETAIL ========== #}
+                {# ========== DOCUMENTS + DETAIL ========== #}
                 <div class="sage-table-grid">
                     <div class="sage-card">
                         <div class="sage-card__header">
                             <div class="sage-card__title">
                                 <span class="icon"><i class="fas fa-receipt"></i></span>
-                                Dernières commandes
+                                Activité récente
                             </div>
-                            <div class="sage-card__subtitle">Cliquez sur une pièce pour voir le détail</div>
+                            <div class="sage-card__subtitle">Détail instantané, sans rechargement</div>
                         </div>
                         <div class="sage-card__body sage-card__body--flush">
                             <table class="sage-table">
                                 <thead>
                                     <tr>
+                                        <th>Type</th>
                                         <th>Pièce</th>
                                         <th>Date</th>
                                         <th>Client</th>
                                         <th>Commercial</th>
                                         <th>Statut</th>
+                                        <th style="text-align:right;">Montant HT</th>
                                         <th style="text-align:right;">Montant TTC</th>
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {% for order in sage.recentOrders %}
-                                        <tr class="{{ sage.filters.selected_piece == order.piece ? 'is-selected' : '' }}">
+                                    {% for document in sage.recentDocuments %}
+                                        <tr class="{{ sage.filters.selected_piece == document.piece and sage.filters.selected_type == document.document_type ? 'is-selected' : '' }}" data-document-row>
+                                            <td><span class="sage-document-badge sage-document-badge--{{ document.category }}">{{ document.type_label }}</span></td>
                                             <td>
                                                 <a class="sage-piece-link" href="{{ path('supervision_statistics_index', {
                                                     period: sage.filters.period,
                                                     group_by: sage.filters.group_by,
+                                                    document_scope: sage.filters.document_scope,
+                                                    invoice_state: sage.filters.invoice_state,
                                                     date_debut: sage.filters.date_debut,
                                                     date_fin: sage.filters.date_fin,
                                                     representant: sage.filters.representant,
-                                                    tiers: sage.filters.tiers,
                                                     piece: sage.filters.piece,
-                                                    statut: sage.filters.statut,
-                                                    estvalide: sage.filters.estvalide,
-                                                    table_limit: sage.filters.table_limit,
-                                                    domaine: sage.filters.domaine,
-                                                    type: sage.filters.type,
-                                                    selected_piece: order.piece
-                                                }) }}">
-                                                    {{ order.piece }}
+                                                    selected_piece: document.piece,
+                                                    selected_type: document.document_type
+                                                }) }}" data-turbo="false" data-document-detail-url="{{ path('supervision_statistics_document_detail', {type: document.document_type, piece: document.piece}) }}">
+                                                    {{ document.piece }}
                                                 </a>
                                             </td>
-                                            <td>{{ order.date_label }}</td>
+                                            <td>{{ document.date_label }}</td>
                                             <td>
-                                                <strong>{{ order.company_name != '' ? order.company_name : order.tiers }}</strong>
-                                                <span class="sage-table__sub">{{ order.tiers }}</span>
+                                                <strong>{{ document.company_name != '' ? document.company_name : document.tiers }}</strong>
+                                                <span class="sage-table__sub">{{ document.tiers }}</span>
                                             </td>
-                                            <td>{{ order.representant != '' ? order.representant : '—' }}</td>
+                                            <td>{{ document.representant != '' ? document.representant : '—' }}</td>
                                             <td>
-                                                <span class="sage-badge">{{ order.statut != '' ? order.statut : 'N/A' }}</span>
+                                                <span class="sage-badge {{ document.statut == 'À préparer' or document.statut == 'A comptabiliser' ? 'sage-badge--warning' : 'sage-badge--neutral' }}">{{ document.statut != '' ? document.statut : 'N/A' }}</span>
                                             </td>
-                                            <td class="sage-table__amount" style="text-align:right;">{{ order.montantTTC|number_format(2, ',', ' ') }} €</td>
+                                            <td class="sage-table__amount" style="text-align:right;">{{ document.montantHT|number_format(2, ',', ' ') }} €</td>
+                                            <td class="sage-table__amount" style="text-align:right;">{{ document.montantTTC|number_format(2, ',', ' ') }} €</td>
                                         </tr>
                                     {% else %}
                                         <tr>
-                                            <td colspan="6">
+                                            <td colspan="8">
                                                 <div class="sage-empty">
                                                     <div class="sage-empty__icon"><i class="fas fa-search"></i></div>
-                                                    Aucune commande sur ces filtres
+                                                    Aucun document sur ces filtres
                                                 </div>
                                             </td>
                                         </tr>
@@ -1350,81 +1749,12 @@
                         </div>
                     </div>
 
-                    <div class="sage-card">
-                        <div class="sage-card__header">
-                            <div class="sage-card__title">
-                                <span class="icon"><i class="fas fa-file-invoice"></i></span>
-                                Détail commande
-                            </div>
-                            {% if sage.selectedOrder %}
-                                <div class="sage-card__subtitle">{{ sage.selectedOrder.piece }}</div>
-                            {% endif %}
-                        </div>
-                        <div class="sage-card__body">
-                            {% if sage.selectedOrder %}
-                                <div class="sage-detail-grid">
-                                    <div class="sage-detail-metric">
-                                        <span>Pièce</span>
-                                        <strong>{{ sage.selectedOrder.piece }}</strong>
-                                    </div>
-                                    <div class="sage-detail-metric">
-                                        <span>Date</span>
-                                        <strong>{{ sage.selectedOrder.date_label }}</strong>
-                                    </div>
-                                    <div class="sage-detail-metric">
-                                        <span>Commercial</span>
-                                        <strong>{{ sage.selectedOrder.representant != '' ? sage.selectedOrder.representant : '—' }}</strong>
-                                    </div>
-                                    <div class="sage-detail-metric sage-detail-metric--highlight">
-                                        <span>Montant TTC</span>
-                                        <strong>{{ sage.selectedOrder.montantTTC|number_format(2, ',', ' ') }} €</strong>
-                                    </div>
-                                    <div class="sage-detail-metric">
-                                        <span>Client</span>
-                                        <strong>{{ sage.selectedOrder.company_name != '' ? sage.selectedOrder.company_name : sage.selectedOrder.tiers }}</strong>
-                                    </div>
-                                    <div class="sage-detail-metric">
-                                        <span>Reste à payer</span>
-                                        <strong>{{ sage.selectedOrder.resteAPayer|number_format(2, ',', ' ') }} €</strong>
-                                    </div>
-                                </div>
-
-                                <table class="sage-table">
-                                    <thead>
-                                        <tr>
-                                            <th>Référence</th>
-                                            <th>Désignation</th>
-                                            <th style="text-align:right;">Qté</th>
-                                            <th style="text-align:right;">PU TTC</th>
-                                            <th style="text-align:right;">Montant</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {% for line in sage.selectedLines %}
-                                            <tr>
-                                                <td><strong style="font-family: 'JetBrains Mono', monospace; font-size: 12px;">{{ line.referenceArticle }}</strong></td>
-                                                <td>{{ line.designationArticle }}</td>
-                                                <td class="sage-table__num" style="text-align:right;">{{ line.qteArticle|number_format(0, ',', ' ') }} {{ line.uniteArticle }}</td>
-                                                <td class="sage-table__amount" style="text-align:right;">{{ line.prixTTCArticle|number_format(2, ',', ' ') }} €</td>
-                                                <td class="sage-table__amount" style="text-align:right;">{{ line.montantArticle|number_format(2, ',', ' ') }} €</td>
-                                            </tr>
-                                        {% else %}
-                                            <tr>
-                                                <td colspan="5">
-                                                    <div class="sage-empty">Aucune ligne pour cette pièce</div>
-                                                </td>
-                                            </tr>
-                                        {% endfor %}
-                                    </tbody>
-                                </table>
-                            {% else %}
-                                <div class="sage-empty">
-                                    <div class="sage-empty__icon"><i class="fas fa-hand-pointer"></i></div>
-                                    <strong style="display:block; color:var(--of-primary); margin-bottom:4px;">Aucune pièce sélectionnée</strong>
-                                    Cliquez sur un numéro de pièce dans la table de gauche pour voir le détail des lignes.
-                                </div>
-                            {% endif %}
-                        </div>
+                    <div class="sage-card sage-document-detail-card" id="sageDocumentDetail" aria-live="polite">
+                        {% include 'supervision/statistics/_document_detail.html.twig' with {
+                            selectedDocument: sage.selectedDocument,
+                            selectedLines: sage.selectedLines,
+                            detailError: null
+                        } only %}
                     </div>
                 </div>
 
@@ -1463,8 +1793,8 @@
                     Chart.defaults.plugins.tooltip.boxPadding = 6;
                 }
 
-                const revenueData = {{ sageStatistics.charts.revenue|json_encode(constant('JSON_UNESCAPED_UNICODE'))|raw }};
-                const orderData = {{ sageStatistics.charts.orders|json_encode(constant('JSON_UNESCAPED_UNICODE'))|raw }};
+                const amountData = {{ sageStatistics.charts.amounts|json_encode(constant('JSON_UNESCAPED_UNICODE'))|raw }};
+                const volumeData = {{ sageStatistics.charts.volumes|json_encode(constant('JSON_UNESCAPED_UNICODE'))|raw }};
                 const commercialData = {{ sageStatistics.charts.commercials|json_encode(constant('JSON_UNESCAPED_UNICODE'))|raw }};
                 const clientData = {{ sageStatistics.charts.clients|json_encode(constant('JSON_UNESCAPED_UNICODE'))|raw }};
                 const statusData = {{ sageStatistics.charts.statuses|json_encode(constant('JSON_UNESCAPED_UNICODE'))|raw }};
@@ -1474,7 +1804,7 @@
                 const fmtCurrency = (value) => new Intl.NumberFormat('fr-FR', {
                     style: 'currency',
                     currency: 'EUR',
-                    maximumFractionDigits: 0
+                    maximumFractionDigits: 2
                 }).format(value);
 
                 const fmtCompact = (value) => {
@@ -1490,105 +1820,85 @@
                     }
                 };
 
-                const buildGradient = (ctx, color) => {
-                    const gradient = ctx.createLinearGradient(0, 0, 0, 320);
-                    gradient.addColorStop(0, color.replace('1)', '0.28)').replace('rgb(', 'rgba(').replace(')', ', 0.28)'));
-                    gradient.addColorStop(1, 'rgba(0, 194, 168, 0)');
-                    return gradient;
+                const documentColors = {
+                    order: '#00C2A8',
+                    pending_invoice: '#F59E0B',
+                    posted_invoice: '#6D5BD0'
                 };
+
+                const buildBarDatasets = (datasets, maxBarThickness = 28) => datasets.map(dataset => ({
+                    ...dataset,
+                    backgroundColor: documentColors[dataset.key] || palette.secondary,
+                    hoverBackgroundColor: palette.secondary,
+                    borderRadius: 6,
+                    borderSkipped: false,
+                    barThickness: 'flex',
+                    maxBarThickness
+                }));
+
+                const currencyTooltip = (axis) => ({
+                    callbacks: {
+                        label: (context) => `  ${context.dataset.label} : ${fmtCurrency(axis === 'x' ? context.parsed.x || 0 : context.parsed.y || 0)}`
+                    }
+                });
 
                 const renderCharts = () => {
                     if (typeof Chart === 'undefined') return;
 
-                    resetChart('revenue');
-                    resetChart('orders');
+                    resetChart('amounts');
+                    resetChart('volumes');
                     resetChart('commercials');
                     resetChart('clients');
-                    resetChart('statuses');
+                    resetChart('orderStatuses');
+                    resetChart('invoiceStatuses');
 
-                    // ===== REVENUE (line, gradient) =====
-                    const revenueCanvas = document.getElementById('erpRevenueChart');
-                    if (revenueCanvas) {
-                        const ctx = revenueCanvas.getContext('2d');
-                        const gradient = ctx.createLinearGradient(0, 0, 0, 320);
-                        gradient.addColorStop(0, 'rgba(0, 194, 168, 0.32)');
-                        gradient.addColorStop(1, 'rgba(0, 194, 168, 0)');
-
-                        window.erpSageCharts.revenue = new Chart(revenueCanvas, {
-                            type: 'line',
+                    // ===== AMOUNTS BY DOCUMENT TYPE =====
+                    const amountCanvas = document.getElementById('erpAmountChart');
+                    if (amountCanvas) {
+                        window.erpSageCharts.amounts = new Chart(amountCanvas, {
+                            type: 'bar',
                             data: {
-                                labels: revenueData.labels,
-                                datasets: [{
-                                    label: 'Chiffre d\'affaires',
-                                    data: revenueData.data,
-                                    borderColor: palette.accent,
-                                    backgroundColor: gradient,
-                                    borderWidth: 2.5,
-                                    fill: true,
-                                    tension: 0.35,
-                                    pointRadius: 0,
-                                    pointHoverRadius: 6,
-                                    pointHoverBackgroundColor: palette.accent,
-                                    pointHoverBorderColor: '#fff',
-                                    pointHoverBorderWidth: 2
-                                }]
+                                labels: amountData.labels,
+                                datasets: buildBarDatasets(amountData.datasets)
                             },
                             options: {
                                 responsive: true,
                                 maintainAspectRatio: false,
                                 interaction: { mode: 'index', intersect: false },
                                 plugins: {
-                                    legend: { display: false },
-                                    tooltip: {
-                                        callbacks: {
-                                            label: (ctx) => '  ' + fmtCurrency(ctx.parsed.y || 0)
-                                        }
-                                    }
+                                    legend: { position: 'bottom', labels: { usePointStyle: true, pointStyle: 'circle', padding: 14 } },
+                                    tooltip: currencyTooltip('y')
                                 },
                                 scales: {
-                                    x: {
-                                        grid: { display: false },
-                                        border: { display: false }
-                                    },
+                                    x: { grid: { display: false }, border: { display: false } },
                                     y: {
                                         beginAtZero: true,
                                         grid: { color: 'rgba(26, 31, 60, 0.06)' },
                                         border: { display: false },
-                                        ticks: {
-                                            callback: (v) => fmtCompact(v)
-                                        }
+                                        ticks: { callback: (v) => fmtCompact(v) }
                                     }
                                 }
                             }
                         });
                     }
 
-                    // ===== ORDERS (bars) =====
-                    const orderCanvas = document.getElementById('erpOrdersChart');
-                    if (orderCanvas) {
-                        window.erpSageCharts.orders = new Chart(orderCanvas, {
+                    // ===== DOCUMENT VOLUMES =====
+                    const volumeCanvas = document.getElementById('erpVolumeChart');
+                    if (volumeCanvas) {
+                        window.erpSageCharts.volumes = new Chart(volumeCanvas, {
                             type: 'bar',
                             data: {
-                                labels: orderData.labels,
-                                datasets: [{
-                                    label: 'Commandes',
-                                    data: orderData.data,
-                                    backgroundColor: palette.accent,
-                                    hoverBackgroundColor: palette.secondary,
-                                    borderRadius: 8,
-                                    borderSkipped: false,
-                                    barThickness: 'flex',
-                                    maxBarThickness: 32
-                                }]
+                                labels: volumeData.labels,
+                                datasets: buildBarDatasets(volumeData.datasets, 24)
                             },
                             options: {
                                 responsive: true,
                                 maintainAspectRatio: false,
                                 plugins: {
-                                    legend: { display: false },
+                                    legend: { position: 'bottom', labels: { usePointStyle: true, pointStyle: 'circle', padding: 12 } },
                                     tooltip: {
                                         callbacks: {
-                                            label: (ctx) => '  ' + ctx.parsed.y + ' commandes'
+                                            label: (context) => `  ${context.dataset.label} : ${context.parsed.y || 0}`
                                         }
                                     }
                                 },
@@ -1612,27 +1922,15 @@
                             type: 'bar',
                             data: {
                                 labels: commercialData.labels,
-                                datasets: [{
-                                    label: 'CA',
-                                    data: commercialData.data,
-                                    backgroundColor: palette.chart,
-                                    borderRadius: 6,
-                                    borderSkipped: false,
-                                    barThickness: 'flex',
-                                    maxBarThickness: 22
-                                }]
+                                datasets: buildBarDatasets(commercialData.datasets, 16)
                             },
                             options: {
                                 indexAxis: 'y',
                                 responsive: true,
                                 maintainAspectRatio: false,
                                 plugins: {
-                                    legend: { display: false },
-                                    tooltip: {
-                                        callbacks: {
-                                            label: (ctx) => '  ' + fmtCurrency(ctx.parsed.x || 0)
-                                        }
-                                    }
+                                    legend: { position: 'bottom', labels: { usePointStyle: true, pointStyle: 'circle', padding: 10, font: { size: 10 } } },
+                                    tooltip: currencyTooltip('x')
                                 },
                                 scales: {
                                     x: {
@@ -1654,27 +1952,15 @@
                             type: 'bar',
                             data: {
                                 labels: clientData.labels,
-                                datasets: [{
-                                    label: 'CA',
-                                    data: clientData.data,
-                                    backgroundColor: palette.chart,
-                                    borderRadius: 6,
-                                    borderSkipped: false,
-                                    barThickness: 'flex',
-                                    maxBarThickness: 22
-                                }]
+                                datasets: buildBarDatasets(clientData.datasets, 16)
                             },
                             options: {
                                 indexAxis: 'y',
                                 responsive: true,
                                 maintainAspectRatio: false,
                                 plugins: {
-                                    legend: { display: false },
-                                    tooltip: {
-                                        callbacks: {
-                                            label: (ctx) => '  ' + fmtCurrency(ctx.parsed.x || 0)
-                                        }
-                                    }
+                                    legend: { position: 'bottom', labels: { usePointStyle: true, pointStyle: 'circle', padding: 10, font: { size: 10 } } },
+                                    tooltip: currencyTooltip('x')
                                 },
                                 scales: {
                                     x: {
@@ -1689,16 +1975,25 @@
                         });
                     }
 
-                    // ===== STATUS (doughnut) =====
-                    const statusCanvas = document.getElementById('erpStatusChart');
-                    if (statusCanvas) {
-                        window.erpSageCharts.statuses = new Chart(statusCanvas, {
+                    // ===== STATUSES, KEPT SEPARATE BY FAMILY =====
+                    const renderStatusChart = (key, canvasId, data, family) => {
+                        const canvas = document.getElementById(canvasId);
+                        if (!canvas || data.labels.length === 0) return;
+
+                        const colors = data.labels.map((label, index) => {
+                            if (family === 'order') return label === 'À préparer' ? '#F59E0B' : ['#00C2A8', '#2B3160', '#3B82F6'][index % 3];
+                            if (label === 'A comptabiliser') return '#F59E0B';
+                            if (label === 'Comptabilisé') return '#6D5BD0';
+                            return ['#6D5BD0', '#9B5DE5', '#E53E3E'][index % 3];
+                        });
+
+                        window.erpSageCharts[key] = new Chart(canvas, {
                             type: 'doughnut',
                             data: {
-                                labels: statusData.labels,
+                                labels: data.labels,
                                 datasets: [{
-                                    data: statusData.data,
-                                    backgroundColor: palette.chart,
+                                    data: data.data,
+                                    backgroundColor: colors,
                                     borderWidth: 3,
                                     borderColor: '#fff',
                                     hoverOffset: 8
@@ -1721,7 +2016,10 @@
                                 }
                             }
                         });
-                    }
+                    };
+
+                    renderStatusChart('orderStatuses', 'erpOrderStatusChart', statusData.orders, 'order');
+                    renderStatusChart('invoiceStatuses', 'erpInvoiceStatusChart', statusData.invoices, 'invoice');
                 };
 
                 // ===== Period chips → sync select + auto-submit =====
@@ -1729,33 +2027,140 @@
                     const chips = document.querySelectorAll('.sage-period-chip');
                     const periodSelect = document.getElementById('period');
                     const form = document.getElementById('sageFiltersForm');
+                    const dateInputs = document.querySelectorAll('#date_debut, #date_fin');
+
+                    const activatePeriod = (value) => {
+                        chips.forEach(chip => {
+                            const isActive = chip.dataset.period === value;
+                            chip.classList.toggle('is-active', isActive);
+                            chip.setAttribute('aria-selected', isActive ? 'true' : 'false');
+                        });
+                        if (periodSelect) periodSelect.value = value;
+                    };
 
                     chips.forEach(chip => {
                         chip.addEventListener('click', () => {
                             const value = chip.dataset.period;
-                            chips.forEach(c => {
-                                c.classList.remove('is-active');
-                                c.setAttribute('aria-selected', 'false');
-                            });
-                            chip.classList.add('is-active');
-                            chip.setAttribute('aria-selected', 'true');
-                            if (periodSelect) periodSelect.value = value;
-                            if (value !== 'custom' && form) form.submit();
+                            activatePeriod(value);
+                            if (value !== 'custom' && form) form.requestSubmit();
+                        });
+                    });
+
+                    periodSelect?.addEventListener('change', () => activatePeriod(periodSelect.value));
+                    dateInputs.forEach(input => input.addEventListener('change', () => activatePeriod('custom')));
+                };
+
+                const setupFilterFeedback = () => {
+                    const form = document.getElementById('sageFiltersForm');
+                    const filters = form?.closest('.sage-filters');
+                    const submitButton = form?.querySelector('button[type="submit"]');
+
+                    if (!form || !filters || !submitButton) return;
+                    const submitLabel = submitButton.innerHTML;
+
+                    form.addEventListener('submit', () => {
+                        filters.classList.add('is-loading');
+                        submitButton.disabled = true;
+                        submitButton.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i> Chargement Sage…';
+                    });
+
+                    form.addEventListener('turbo:submit-end', () => {
+                        filters.classList.remove('is-loading');
+                        submitButton.disabled = false;
+                        submitButton.innerHTML = submitLabel;
+                    });
+                };
+
+                const setupDocumentScope = () => {
+                    const form = document.getElementById('sageFiltersForm');
+                    if (!form) return;
+
+                    form.querySelectorAll('input[name="document_scope"]').forEach(input => {
+                        input.addEventListener('change', () => form.requestSubmit());
+                    });
+                    form.querySelector('#invoice_state')?.addEventListener('change', () => form.requestSubmit());
+                };
+
+                const setupDocumentDetails = () => {
+                    const detailCard = document.getElementById('sageDocumentDetail');
+                    const links = document.querySelectorAll('.sage-piece-link[data-document-detail-url]');
+                    let activeRequest = null;
+
+                    if (!detailCard || links.length === 0) return;
+
+                    links.forEach(link => {
+                        link.addEventListener('click', async (event) => {
+                            event.preventDefault();
+                            activeRequest?.abort();
+                            const request = new AbortController();
+                            activeRequest = request;
+
+                            document.querySelectorAll('[data-document-row]').forEach(row => row.classList.remove('is-selected'));
+                            link.closest('[data-document-row]')?.classList.add('is-selected');
+                            detailCard.setAttribute('aria-busy', 'true');
+                            detailCard.innerHTML = `
+                                <div class="sage-document-loading" role="status">
+                                    <div><i class="fas fa-circle-notch fa-spin"></i>Chargement du document Sage…</div>
+                                </div>
+                            `;
+
+                            try {
+                                const response = await fetch(link.dataset.documentDetailUrl, {
+                                    headers: {'X-Requested-With': 'XMLHttpRequest'},
+                                    signal: request.signal
+                                });
+                                const html = await response.text();
+
+                                if (html.trim() === '') throw new Error('Empty response');
+
+                                detailCard.innerHTML = html;
+
+                                if (response.ok) {
+                                    window.history.replaceState({}, '', link.href);
+                                }
+
+                                if (window.matchMedia('(max-width: 1120px)').matches) {
+                                    detailCard.scrollIntoView({behavior: 'smooth', block: 'start'});
+                                }
+                            } catch (error) {
+                                if (error.name === 'AbortError') return;
+
+                                detailCard.innerHTML = `
+                                    <div class="sage-card__header">
+                                        <div class="sage-card__title"><span class="icon"><i class="fas fa-file-invoice"></i></span>Détail du document Sage</div>
+                                    </div>
+                                    <div class="sage-card__body">
+                                        <div class="sage-detail-error" role="alert">
+                                            <i class="fas fa-circle-exclamation"></i>
+                                            <div><strong>Détail indisponible</strong><span>La communication avec Sage a échoué. Réessayez dans quelques instants.</span></div>
+                                        </div>
+                                    </div>
+                                `;
+                            } finally {
+                                if (activeRequest === request) {
+                                    activeRequest = null;
+                                    detailCard.removeAttribute('aria-busy');
+                                }
+                            }
                         });
                     });
                 };
 
                 document.addEventListener('turbo:before-cache', () => {
-                    resetChart('revenue');
-                    resetChart('orders');
+                    resetChart('amounts');
+                    resetChart('volumes');
                     resetChart('commercials');
                     resetChart('clients');
-                    resetChart('statuses');
+                    resetChart('orderStatuses');
+                    resetChart('invoiceStatuses');
                 }, { once: true });
 
                 const init = () => {
                     renderCharts();
                     setupPeriodChips();
+                    setupFilterFeedback();
+                    setupDocumentScope();
+                    setupDocumentDetails();
                 };
 
                 if (document.readyState === 'loading') {
