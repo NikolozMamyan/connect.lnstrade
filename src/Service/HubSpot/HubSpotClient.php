@@ -86,6 +86,22 @@ class HubSpotClient
     }
 
     /**
+     * Mise a jour generique PUT.
+     */
+    public function put(string $path, array $body = [], array $query = []): array
+    {
+        $query = $this->normalizeQuery($query);
+
+        $response = $this->httpClient->request('PUT', $this->buildUrl($path), [
+            'headers' => $this->getHeaders(),
+            'query' => $query,
+            'json' => $body,
+        ]);
+
+        return $this->decodeResponse($response);
+    }
+
+    /**
      * Suppression / archivage generique DELETE.
      *
      * @throws TransportExceptionInterface

@@ -77,9 +77,9 @@ final class FluxHubspotOrdersController extends AbstractController
         $syncLogService->info(
             'delivery_order',
             'Synchronisation Orders HubSpot demandee',
-            sprintf('Analyse des BL Sage du %s au %s ajoutee a Messenger.', $dateFrom->format('d/m/Y'), $dateTo->format('d/m/Y')),
+            sprintf('Analyse des BL et factures Sage du %s au %s ajoutee a Messenger.', $dateFrom->format('d/m/Y'), $dateTo->format('d/m/Y')),
         );
-        $this->addFlash('success', 'Analyse des BL et creation des Orders HubSpot lancees en arriere-plan.');
+        $this->addFlash('success', 'Analyse des BL et factures, puis synchronisation des Orders HubSpot lancees en arriere-plan.');
 
         return $this->redirectToRoute('flux_hubspot_orders_index', [
             'period' => $period,

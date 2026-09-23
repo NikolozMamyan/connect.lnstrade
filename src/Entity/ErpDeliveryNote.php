@@ -9,7 +9,9 @@ use Doctrine\ORM\Mapping as ORM;
 #[ORM\Entity(repositoryClass: ErpDeliveryNoteRepository::class)]
 #[ORM\Table(name: 'erp_delivery_note')]
 #[ORM\UniqueConstraint(name: 'uniq_erp_delivery_note_sage_key', columns: ['sage_key'])]
+#[ORM\UniqueConstraint(name: 'uniq_erp_delivery_note_invoice_piece', columns: ['invoice_piece'])]
 #[ORM\Index(columns: ['status', 'document_date'], name: 'idx_erp_delivery_note_status_date')]
+#[ORM\Index(columns: ['client_id', 'reference'], name: 'idx_erp_delivery_note_client_reference')]
 class ErpDeliveryNote
 {
     public const STATUS_DISCOVERED = 'discovered';
@@ -28,6 +30,15 @@ class ErpDeliveryNote
 
     #[ORM\Column(length: 64)]
     private string $piece;
+
+    #[ORM\Column(length: 255, nullable: true)]
+    private ?string $reference = null;
+
+    #[ORM\Column(name: 'source_document_type', options: ['default' => 3])]
+    private int $sourceDocumentType = 3;
+
+    #[ORM\Column(name: 'invoice_piece', length: 64, nullable: true)]
+    private ?string $invoicePiece = null;
 
     #[ORM\Column(name: 'client_id', length: 64, nullable: true)]
     private ?string $clientId = null;
@@ -107,6 +118,21 @@ class ErpDeliveryNote
     public function getPiece(): string
     {
         return $this->piece;
+    }
+
+    public function getReference(): ?string
+    {
+        return $this->reference;
+    }
+
+    public function getSourceDocumentType(): int
+    {
+        return $this->sourceDocumentType;
+    }
+
+    public function getInvoicePiece(): ?string
+    {
+        return $this->invoicePiece;
     }
 
     public function getClientId(): ?string
@@ -229,12 +255,20 @@ class ErpDeliveryNote
         array $contacts,
         array $deliveries,
         string $payloadHash,
+        int $sourceDocumentType = 3,
     ): static {
         $freeFields = isset($header['champsLibres']) && is_array($header['champsLibres']) ? $header['champsLibres'] : [];
         $clientName = $this->nullableString($client['intitule'] ?? ($freeFields['nomtiers'] ?? null), 255);
 
         $this->clientId = $this->nullableString($header['tiers'] ?? null, 64);
         $this->clientName = $clientName;
+        $this->reference = $this->nullableString($header['reference'] ?? null, 255);
+        $this->sourceDocumentType = $sourceDocumentType;
+
+        if (in_array($sourceDocumentType, [6, 7], true)) {
+            $this->invoicePiece = $this->nullableString($header['piece'] ?? null, 64);
+        }
+
         $this->documentDate = $this->toDate($header['date'] ?? null);
         $this->deliveryDate = $this->toDate($header['dateLivraison'] ?? ($freeFields['Date de livraison client'] ?? null));
         $this->amountExcludingTax = $this->toFloat($header['montantHT'] ?? null);
@@ -242,6 +276,7 @@ class ErpDeliveryNote
         $this->lineCount = count($lines);
         $this->payloadHash = $payloadHash;
         $this->rawPayload = [
+            'sourceDocumentType' => $sourceDocumentType,
             'header' => $header,
             'lines' => $lines,
             'client' => $client,
@@ -282,6 +317,19 @@ class ErpDeliveryNote
         $ids = $this->getHubspotLineItemIds();
         $ids[] = trim($lineItemId);
         $this->hubspotLineItemIds = array_values(array_unique(array_filter($ids)));
+        $this->updatedAt = new \DateTimeImmutable();
+
+        return $this;
+    }
+
+    /**
+     * @param list<string> $lineItemIds
+     */
+    public function replaceHubspotLineItems(array $lineItemIds): static
+    {
+        $this->hubspotLineItemIds = array_values(array_unique(array_filter(
+            array_map(static fn (mixed $id): string => trim((string) $id), $lineItemIds),
+        )));
         $this->updatedAt = new \DateTimeImmutable();
 
         return $this;

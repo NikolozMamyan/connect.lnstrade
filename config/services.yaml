@@ -11,6 +11,7 @@ parameters:
         '20': '115152086'
     hubspot_delivery_order_pipeline: '3942112450'
     hubspot_delivery_order_stage: '5659785460'
+    delivery_order_report_recipient: 'corentin.bury@lnstrade.fr'
     base_uri_sage: '%env(SAGE_BASE_URI)%'
     sage_username: '%env(SAGE_USERNAME)%'
     sage_password: '%env(SAGE_PASSWORD)%'

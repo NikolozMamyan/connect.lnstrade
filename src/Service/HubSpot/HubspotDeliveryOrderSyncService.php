@@ -19,12 +19,22 @@ final class HubspotDeliveryOrderSyncService
     private const ORDER_TO_LINE_ITEM_ASSOCIATION = 513;
     private const SAGE_DOCUMENT_DOMAIN = 0;
     private const SAGE_DELIVERY_NOTE_TYPE = 3;
+    private const SAGE_INVOICE_TYPES = [6, 7];
 
     /** @var array<string, array<string, mixed>|null> */
     private array $productCache = [];
 
     /** @var array<string, string|null> */
     private array $ownerCache = [];
+
+    /** @var array<string, string> */
+    private array $companyCache = [];
+
+    /** @var array<string, array<string, mixed>|null> */
+    private array $clientCache = [];
+
+    /** @var array<string, list<array<string, mixed>>> */
+    private array $sageListCache = [];
 
     public function __construct(
         private readonly SageClient $sageClient,
@@ -43,135 +53,347 @@ final class HubspotDeliveryOrderSyncService
     }
 
     /**
+     * @return list<array<string, mixed>>
+     */
+    private function loadHeaders(int $documentType, \DateTimeImmutable $dateFrom, \DateTimeImmutable $dateTo): array
+    {
+        return $this->extractList($this->sageClient->get('/Document/header', [
+            'domaine' => self::SAGE_DOCUMENT_DOMAIN,
+            'type' => $documentType,
+            'dateDebut' => $dateFrom->format('Y-m-d'),
+            'dateFin' => $dateTo->format('Y-m-d'),
+        ]));
+    }
+
+    /**
+     * @return list<array{type: int, header: array<string, mixed>}>
+     */
+    private function loadInvoiceHeaders(\DateTimeImmutable $dateFrom, \DateTimeImmutable $dateTo): array
+    {
+        $invoicesByPiece = [];
+
+        foreach (self::SAGE_INVOICE_TYPES as $documentType) {
+            foreach ($this->loadHeaders($documentType, $dateFrom, $dateTo) as $header) {
+                $piece = strtoupper(trim((string) ($header['piece'] ?? '')));
+
+                if ($piece === '' || !str_starts_with($piece, 'FA')) {
+                    continue;
+                }
+
+                if (!isset($invoicesByPiece[$piece]) || $documentType > $invoicesByPiece[$piece]['type']) {
+                    $invoicesByPiece[$piece] = ['type' => $documentType, 'header' => $header];
+                }
+            }
+        }
+
+        return array_values($invoicesByPiece);
+    }
+
+    /**
+     * @param array<string, mixed> $header
+     */
+    private function resolveLocalRecord(array $header, int $documentType): ?ErpDeliveryNote
+    {
+        $piece = trim((string) ($header['piece'] ?? ''));
+
+        if (!in_array($documentType, self::SAGE_INVOICE_TYPES, true)) {
+            return $this->deliveryNoteRepository->findOneBySageKey(
+                sprintf('sage:%d:%d:%s', self::SAGE_DOCUMENT_DOMAIN, $documentType, $piece)
+            );
+        }
+
+        $invoiceRecord = $this->deliveryNoteRepository->findOneByInvoicePiece($piece)
+            ?? $this->deliveryNoteRepository->findOneBySageKey(
+                sprintf('sage:%d:invoice:%s', self::SAGE_DOCUMENT_DOMAIN, $piece)
+            );
+
+        if ($invoiceRecord instanceof ErpDeliveryNote) {
+            return $invoiceRecord;
+        }
+
+        $reference = $this->normalizeDocumentReference((string) ($header['reference'] ?? ''));
+        $clientId = trim((string) ($header['tiers'] ?? ''));
+
+        if ($reference === '' || $clientId === '') {
+            return null;
+        }
+
+        $matches = array_values(array_filter(
+            $this->deliveryNoteRepository->findPotentialInvoiceMatches($clientId),
+            function (ErpDeliveryNote $deliveryNote) use ($reference): bool {
+                $storedReference = $deliveryNote->getReference();
+
+                if ($storedReference === null) {
+                    $rawPayload = $deliveryNote->getRawPayload();
+                    $storedReference = is_array($rawPayload['header'] ?? null)
+                        ? (string) ($rawPayload['header']['reference'] ?? '')
+                        : '';
+                }
+
+                return in_array($reference, [
+                    $this->normalizeDocumentReference($deliveryNote->getPiece()),
+                    $this->normalizeDocumentReference($storedReference),
+                ], true);
+            },
+        ));
+
+        if (count($matches) <= 1) {
+            return $matches[0] ?? null;
+        }
+
+        $invoiceAmount = $this->numeric($header['montantTTC'] ?? null);
+
+        if ($invoiceAmount === null) {
+            return null;
+        }
+
+        $amountMatches = array_values(array_filter(
+            $matches,
+            static fn (ErpDeliveryNote $deliveryNote): bool => abs($deliveryNote->getAmountIncludingTax() - $invoiceAmount) < 0.01,
+        ));
+
+        return count($amountMatches) === 1 ? $amountMatches[0] : null;
+    }
+
+    /**
+     * @param array<string, mixed> $header
+     */
+    private function hasSameExportedHeader(ErpDeliveryNote $deliveryNote, array $header, int $documentType): bool
+    {
+        $rawPayload = $deliveryNote->getRawPayload();
+        $storedHeader = is_array($rawPayload['header'] ?? null) ? $rawPayload['header'] : null;
+
+        return $deliveryNote->isSent()
+            && $deliveryNote->getHubspotOrderId() !== null
+            && $deliveryNote->getExportedPayloadHash() !== null
+            && $deliveryNote->getSourceDocumentType() === $documentType
+            && $storedHeader !== null
+            && $this->payloadHash($storedHeader) === $this->payloadHash($header);
+    }
+
+    /**
      * @return array{
      *   analyzed: int,
+     *   deliveryNotesAnalyzed: int,
+     *   invoicesAnalyzed: int,
      *   discovered: int,
      *   sent: int,
      *   existing: int,
+     *   updated: int,
      *   skipped: int,
      *   changed: int,
      *   failed: int,
-     *   errors: list<array{piece: string, message: string}>
+     *   warnings: list<array<string, mixed>>,
+     *   errors: list<array<string, mixed>>
      * }
      */
     public function sync(\DateTimeImmutable $dateFrom, \DateTimeImmutable $dateTo): array
     {
-        $headers = $this->extractList($this->sageClient->get('/Document/header', [
-            'domaine' => self::SAGE_DOCUMENT_DOMAIN,
-            'type' => self::SAGE_DELIVERY_NOTE_TYPE,
-            'dateDebut' => $dateFrom->format('Y-m-d'),
-            'dateFin' => $dateTo->format('Y-m-d'),
-        ]));
+        $this->clientCache = [];
+        $this->sageListCache = [];
+        $this->companyCache = [];
         $result = [
             'analyzed' => 0,
+            'deliveryNotesAnalyzed' => 0,
+            'invoicesAnalyzed' => 0,
             'discovered' => 0,
             'sent' => 0,
             'existing' => 0,
+            'updated' => 0,
             'skipped' => 0,
             'changed' => 0,
             'failed' => 0,
+            'warnings' => [],
             'errors' => [],
         ];
 
-        foreach ($headers as $header) {
-            $piece = trim((string) ($header['piece'] ?? ''));
+        foreach ($this->loadHeaders(self::SAGE_DELIVERY_NOTE_TYPE, $dateFrom, $dateTo) as $header) {
+            $this->processDocument($header, self::SAGE_DELIVERY_NOTE_TYPE, $result);
+        }
 
-            if ($piece === '') {
-                ++$result['failed'];
-                $result['errors'][] = ['piece' => '', 'message' => 'Numero de piece Sage manquant.'];
-                continue;
-            }
-
-            ++$result['analyzed'];
-            $sageKey = sprintf('sage:%d:%d:%s', self::SAGE_DOCUMENT_DOMAIN, self::SAGE_DELIVERY_NOTE_TYPE, $piece);
-            $deliveryNote = $this->deliveryNoteRepository->findOneBySageKey($sageKey);
-
-            if (!$deliveryNote instanceof ErpDeliveryNote) {
-                $deliveryNote = new ErpDeliveryNote($sageKey, $piece);
-                $this->entityManager->persist($deliveryNote);
-                ++$result['discovered'];
-            }
-
-            try {
-                $warnings = [];
-                $lines = $this->extractList($this->sageClient->get('/Document/line', [
-                    'piece' => $piece,
-                    'domaine' => self::SAGE_DOCUMENT_DOMAIN,
-                    'type' => self::SAGE_DELIVERY_NOTE_TYPE,
-                ]));
-
-                if ($lines === []) {
-                    throw new \RuntimeException('Le BL ne contient aucune ligne Sage exploitable.');
-                }
-
-                $clientId = trim((string) ($header['tiers'] ?? ''));
-                $client = $this->loadClient($clientId, $warnings);
-                $contacts = $this->loadOptionalList('/Contacts', ['client' => $clientId, 'limit' => 100], 'contacts', $warnings);
-                $deliveries = $this->loadOptionalList('/Livraisons', ['client' => $clientId], 'adresses de livraison', $warnings);
-                $payloadHash = $this->payloadHash(['header' => $header, 'lines' => $lines]);
-                $previousPayloadHash = $deliveryNote->getPayloadHash();
-
-                $deliveryNote->refreshFromSage($header, $lines, $client, $contacts, $deliveries, $payloadHash);
-
-                if ($deliveryNote->getExportedPayloadHash() === $payloadHash && $deliveryNote->getHubspotOrderId() !== null) {
-                    ++$result['skipped'];
-                    $this->entityManager->flush();
-                    continue;
-                }
-
-                if ($previousPayloadHash !== null
-                    && $previousPayloadHash !== $payloadHash
-                    && ($deliveryNote->getHubspotOrderId() !== null || $deliveryNote->getHubspotLineItemIds() !== [])
-                ) {
-                    $deliveryNote->markChanged();
-                    ++$result['changed'];
-                    $this->entityManager->flush();
-                    continue;
-                }
-
-                if ($deliveryNote->getExportedPayloadHash() !== null && $deliveryNote->getExportedPayloadHash() !== $payloadHash) {
-                    $deliveryNote->markChanged();
-                    ++$result['changed'];
-                    $this->entityManager->flush();
-                    continue;
-                }
-
-                $deliveryNote->markProcessing();
-                $this->entityManager->flush();
-
-                $export = $this->exportDeliveryNote($deliveryNote, $header, $lines, $client, $contacts, $deliveries, $warnings);
-                $deliveryNote->markSent(
-                    $export['orderId'],
-                    $export['lineItemIds'],
-                    $payloadHash,
-                    $export['warnings'],
-                );
-                $this->entityManager->flush();
-
-                if ($export['existing']) {
-                    ++$result['existing'];
-                } else {
-                    ++$result['sent'];
-                }
-            } catch (\Throwable $exception) {
-                $deliveryNote->markFailed($exception->getMessage(), $warnings ?? []);
-                $this->entityManager->persist($deliveryNote);
-                $this->entityManager->flush();
-                ++$result['failed'];
-                $result['errors'][] = [
-                    'piece' => $piece,
-                    'message' => $exception->getMessage(),
-                ];
-
-                $this->logger->error('Sage delivery note to HubSpot Order synchronization failed.', [
-                    'piece' => $piece,
-                    'message' => $exception->getMessage(),
-                    'exception' => $exception,
-                ]);
-            }
+        foreach ($this->loadInvoiceHeaders($dateFrom, $dateTo) as $invoice) {
+            $this->processDocument($invoice['header'], $invoice['type'], $result);
         }
 
         return $result;
+    }
+
+    /**
+     * @param array<string, mixed> $header
+     * @param array<string, mixed> $result
+     */
+    private function processDocument(array $header, int $documentType, array &$result): void
+    {
+        $piece = trim((string) ($header['piece'] ?? ''));
+
+        if ($piece === '') {
+            ++$result['failed'];
+            $result['errors'][] = $this->buildReportIssue($header, null, '', 'Numero de piece Sage manquant.', $documentType);
+
+            return;
+        }
+
+        $isInvoice = in_array($documentType, self::SAGE_INVOICE_TYPES, true);
+        ++$result['analyzed'];
+        ++$result[$isInvoice ? 'invoicesAnalyzed' : 'deliveryNotesAnalyzed'];
+        $deliveryNote = $this->resolveLocalRecord($header, $documentType);
+
+        if (!$isInvoice && $deliveryNote?->getInvoicePiece() !== null) {
+            ++$result['skipped'];
+
+            return;
+        }
+
+        if (!$deliveryNote instanceof ErpDeliveryNote) {
+            $sageKey = $isInvoice
+                ? sprintf('sage:%d:invoice:%s', self::SAGE_DOCUMENT_DOMAIN, $piece)
+                : sprintf('sage:%d:%d:%s', self::SAGE_DOCUMENT_DOMAIN, $documentType, $piece);
+            $deliveryNote = new ErpDeliveryNote($sageKey, $piece);
+            $this->entityManager->persist($deliveryNote);
+            ++$result['discovered'];
+        }
+
+        try {
+            $warnings = [];
+
+            if ($this->hasSameExportedHeader($deliveryNote, $header, $documentType)) {
+                ++$result['skipped'];
+
+                return;
+            }
+
+            $lines = $this->extractList($this->sageClient->get('/Document/line', [
+                'piece' => $piece,
+                'domaine' => self::SAGE_DOCUMENT_DOMAIN,
+                'type' => $documentType,
+            ]));
+
+            if ($lines === []) {
+                throw new \RuntimeException(sprintf('Le document Sage %s ne contient aucune ligne exploitable.', $piece));
+            }
+
+            $clientId = trim((string) ($header['tiers'] ?? ''));
+            $client = $this->loadClient($clientId, $warnings);
+            $contacts = $this->loadOptionalList('/Contacts', ['client' => $clientId, 'limit' => 100], 'contacts', $warnings);
+            $deliveries = $this->loadOptionalList('/Livraisons', ['client' => $clientId], 'adresses de livraison', $warnings);
+            $payloadHash = $this->payloadHash([
+                'sourceDocumentType' => $documentType,
+                'header' => $header,
+                'lines' => $lines,
+            ]);
+            $previousPayloadHash = $deliveryNote->getPayloadHash();
+
+            $deliveryNote->refreshFromSage($header, $lines, $client, $contacts, $deliveries, $payloadHash, $documentType);
+
+            if ($deliveryNote->getExportedPayloadHash() === $payloadHash && $deliveryNote->getHubspotOrderId() !== null) {
+                ++$result['skipped'];
+                $this->entityManager->flush();
+
+                return;
+            }
+
+            if (!$isInvoice
+                && $previousPayloadHash !== null
+                && $previousPayloadHash !== $payloadHash
+                && ($deliveryNote->getHubspotOrderId() !== null || $deliveryNote->getHubspotLineItemIds() !== [])
+            ) {
+                $deliveryNote->markChanged();
+                ++$result['changed'];
+                $this->entityManager->flush();
+
+                return;
+            }
+
+            if (!$isInvoice && $deliveryNote->getExportedPayloadHash() !== null && $deliveryNote->getExportedPayloadHash() !== $payloadHash) {
+                $deliveryNote->markChanged();
+                ++$result['changed'];
+                $this->entityManager->flush();
+
+                return;
+            }
+
+            $deliveryNote->markProcessing();
+            $this->entityManager->flush();
+
+            $export = $this->exportDeliveryNote(
+                $deliveryNote,
+                $header,
+                $lines,
+                $client,
+                $contacts,
+                $deliveries,
+                $warnings,
+                $isInvoice,
+            );
+            $deliveryNote->markSent(
+                $export['orderId'],
+                $export['lineItemIds'],
+                $payloadHash,
+                $export['warnings'],
+            );
+            $this->entityManager->flush();
+
+            foreach ($export['warnings'] as $warning) {
+                if (str_starts_with($warning, 'Order HubSpot ')) {
+                    continue;
+                }
+
+                $result['warnings'][] = $this->buildReportIssue($header, $deliveryNote, $piece, $warning, $documentType);
+            }
+
+            if ($export['updated']) {
+                ++$result['updated'];
+            } elseif ($export['existing']) {
+                ++$result['existing'];
+            } else {
+                ++$result['sent'];
+            }
+        } catch (\Throwable $exception) {
+            $deliveryNote->markFailed($exception->getMessage(), $warnings ?? []);
+            $this->entityManager->persist($deliveryNote);
+            $this->entityManager->flush();
+            ++$result['failed'];
+            $result['errors'][] = $this->buildReportIssue(
+                $header,
+                $deliveryNote,
+                $piece,
+                $exception->getMessage(),
+                $documentType,
+            );
+
+            $this->logger->error('Sage document to HubSpot Order synchronization failed.', [
+                'piece' => $piece,
+                'documentType' => $documentType,
+                'message' => $exception->getMessage(),
+                'exception' => $exception,
+            ]);
+        }
+    }
+
+    /**
+     * @param array<string, mixed> $header
+     *
+     * @return array<string, mixed>
+     */
+    private function buildReportIssue(
+        array $header,
+        ?ErpDeliveryNote $deliveryNote,
+        string $piece,
+        string $message,
+        int $documentType,
+    ): array {
+        $freeFields = is_array($header['champsLibres'] ?? null) ? $header['champsLibres'] : [];
+        $clientId = trim((string) ($header['tiers'] ?? $deliveryNote?->getClientId() ?? ''));
+        $clientName = trim((string) ($deliveryNote?->getClientName() ?? $freeFields['nomtiers'] ?? ''));
+
+        return [
+            'piece' => $piece,
+            'documentLabel' => in_array($documentType, self::SAGE_INVOICE_TYPES, true) ? 'Facture' : 'BL',
+            'clientId' => $clientId,
+            'clientName' => $clientName !== '' ? $clientName : $clientId,
+            'hubspotOrderId' => $deliveryNote?->getHubspotOrderId(),
+            'message' => $message,
+        ];
     }
 
     /**
@@ -182,7 +404,7 @@ final class HubspotDeliveryOrderSyncService
      * @param list<array<string, mixed>> $deliveries
      * @param list<string> $warnings
      *
-     * @return array{orderId: string, lineItemIds: list<string>, warnings: list<string>, existing: bool}
+     * @return array{orderId: string, lineItemIds: list<string>, warnings: list<string>, existing: bool, updated: bool}
      */
     private function exportDeliveryNote(
         ErpDeliveryNote $deliveryNote,
@@ -192,10 +414,40 @@ final class HubspotDeliveryOrderSyncService
         array $contacts,
         array $deliveries,
         array $warnings,
+        bool $isInvoice,
     ): array {
-        $existingOrderId = $this->findExistingOrderId($deliveryNote->getSageKey());
+        $existingOrderId = $deliveryNote->getHubspotOrderId()
+            ?? $this->findExistingOrderId($deliveryNote->getSageKey());
+
+        if ($existingOrderId === null && $isInvoice) {
+            $existingOrderId = $this->findExistingOrderIdByReference($header);
+        }
 
         if ($existingOrderId !== null) {
+            if ($isInvoice) {
+                $ownerId = $this->resolveOwnerId((string) ($header['representant'] ?? ''), $warnings);
+                $lineItemIds = $this->synchronizeExistingLineItems(
+                    $deliveryNote,
+                    $existingOrderId,
+                    $lines,
+                    $warnings,
+                );
+                $this->hubSpotClient->patch(
+                    sprintf('/crm/objects/%s/orders/%s', self::API_VERSION, $existingOrderId),
+                    ['properties' => $this->buildOrderProperties($deliveryNote, $header, $lines, $client, $contacts, $deliveries, $ownerId)],
+                );
+
+                $warnings[] = sprintf('Order HubSpot %s actualise avec la facture %s.', $existingOrderId, (string) ($header['piece'] ?? ''));
+
+                return [
+                    'orderId' => $existingOrderId,
+                    'lineItemIds' => $lineItemIds,
+                    'warnings' => array_values(array_unique($warnings)),
+                    'existing' => true,
+                    'updated' => true,
+                ];
+            }
+
             $warnings[] = sprintf('Order HubSpot %s deja existant, rattache au registre local.', $existingOrderId);
 
             return [
@@ -203,13 +455,14 @@ final class HubspotDeliveryOrderSyncService
                 'lineItemIds' => $deliveryNote->getHubspotLineItemIds(),
                 'warnings' => $warnings,
                 'existing' => true,
+                'updated' => false,
             ];
         }
 
         $clientId = trim((string) ($header['tiers'] ?? ''));
 
         if ($clientId === '') {
-            throw new \RuntimeException('Identifiant client Sage manquant sur le BL.');
+            throw new \RuntimeException('Identifiant client Sage manquant sur le document.');
         }
 
         $companyId = $this->resolveCompanyId($clientId);
@@ -218,7 +471,7 @@ final class HubspotDeliveryOrderSyncService
         $lineItemIds = $deliveryNote->getHubspotLineItemIds();
 
         if (count($lineItemIds) > count($lines)) {
-            throw new \RuntimeException('Le registre local contient plus de line items HubSpot que le BL Sage.');
+            throw new \RuntimeException('Le registre local contient plus de line items HubSpot que le document Sage.');
         }
 
         for ($position = count($lineItemIds); $position < count($lines); ++$position) {
@@ -231,7 +484,7 @@ final class HubspotDeliveryOrderSyncService
             $lineItemId = trim((string) ($response['id'] ?? ''));
 
             if ($lineItemId === '') {
-                throw new \RuntimeException(sprintf('HubSpot n a retourne aucun identifiant pour la ligne %d du BL.', $position + 1));
+                throw new \RuntimeException(sprintf('HubSpot n a retourne aucun identifiant pour la ligne %d du document.', $position + 1));
             }
 
             $deliveryNote->rememberHubspotLineItem($lineItemId);
@@ -269,7 +522,181 @@ final class HubspotDeliveryOrderSyncService
             'lineItemIds' => $lineItemIds,
             'warnings' => array_values(array_unique($warnings)),
             'existing' => false,
+            'updated' => false,
         ];
+    }
+
+    /**
+     * @param array<string, mixed> $header
+     */
+    private function findExistingOrderIdByReference(array $header): ?string
+    {
+        $reference = trim((string) ($header['reference'] ?? ''));
+
+        if ($reference === '') {
+            return null;
+        }
+
+        $response = $this->hubSpotClient->post(sprintf('/crm/objects/%s/orders/search', self::API_VERSION), [
+            'limit' => 10,
+            'properties' => ['order_reference', 'hs_total_price', 'hs_external_order_id'],
+            'filterGroups' => [[
+                'filters' => [[
+                    'propertyName' => 'order_reference',
+                    'operator' => 'EQ',
+                    'value' => $reference,
+                ]],
+            ]],
+        ]);
+        $results = $this->extractList($response);
+
+        if ($results === []) {
+            return null;
+        }
+
+        $clientId = trim((string) ($header['tiers'] ?? ''));
+
+        if ($clientId === '') {
+            return null;
+        }
+
+        $companyId = $this->resolveCompanyId($clientId);
+        $results = array_values(array_filter(
+            $results,
+            fn (array $order): bool => in_array(
+                $companyId,
+                $this->fetchOrderAssociationIds((string) ($order['id'] ?? ''), 'companies'),
+                true,
+            ),
+        ));
+
+        if ($results === []) {
+            return null;
+        }
+
+        if (count($results) > 1) {
+            $invoiceAmount = $this->numeric($header['montantTTC'] ?? null);
+            $results = $invoiceAmount === null ? [] : array_values(array_filter(
+                $results,
+                function (array $order) use ($invoiceAmount): bool {
+                    $properties = is_array($order['properties'] ?? null) ? $order['properties'] : [];
+                    $orderAmount = $this->numeric($properties['hs_total_price'] ?? null);
+
+                    return $orderAmount !== null && abs($orderAmount - $invoiceAmount) < 0.01;
+                },
+            ));
+
+            if (count($results) !== 1) {
+                throw new \RuntimeException(sprintf('Plusieurs Orders HubSpot correspondent a la reference Sage %s.', $reference));
+            }
+        }
+
+        if ($results === []) {
+            return null;
+        }
+
+        $id = trim((string) ($results[0]['id'] ?? ''));
+
+        return $id !== '' ? $id : null;
+    }
+
+    /**
+     * @param list<array<string, mixed>> $lines
+     * @param list<string> $warnings
+     *
+     * @return list<string>
+     */
+    private function synchronizeExistingLineItems(
+        ErpDeliveryNote $deliveryNote,
+        string $orderId,
+        array $lines,
+        array &$warnings,
+    ): array {
+        $lineItemIds = $deliveryNote->getHubspotLineItemIds();
+
+        if ($lineItemIds === []) {
+            $lineItemIds = $this->fetchOrderLineItemIds($orderId);
+        }
+
+        $synchronizedIds = [];
+
+        foreach ($lines as $position => $line) {
+            $properties = $this->buildLineItemProperties($line, $warnings);
+            $lineItemId = $lineItemIds[$position] ?? null;
+
+            if ($lineItemId !== null) {
+                $this->hubSpotClient->patch(
+                    sprintf('/crm/objects/%s/line_items/%s', self::API_VERSION, $lineItemId),
+                    ['properties' => $properties],
+                );
+                $synchronizedIds[] = $lineItemId;
+
+                continue;
+            }
+
+            $response = $this->hubSpotClient->post(
+                sprintf('/crm/objects/%s/line_items', self::API_VERSION),
+                ['properties' => $properties, 'associations' => []],
+            );
+            $lineItemId = trim((string) ($response['id'] ?? ''));
+
+            if ($lineItemId === '') {
+                throw new \RuntimeException(sprintf('HubSpot n a retourne aucun identifiant pour la ligne %d de la facture.', $position + 1));
+            }
+
+            $this->hubSpotClient->put(
+                sprintf('/crm/objects/%s/orders/%s/associations/line_items/%s', self::API_VERSION, $orderId, $lineItemId),
+                [[
+                    'associationCategory' => 'HUBSPOT_DEFINED',
+                    'associationTypeId' => self::ORDER_TO_LINE_ITEM_ASSOCIATION,
+                ]],
+            );
+            $synchronizedIds[] = $lineItemId;
+            $deliveryNote->replaceHubspotLineItems($synchronizedIds);
+            $this->entityManager->flush();
+        }
+
+        foreach (array_slice($lineItemIds, count($lines)) as $obsoleteLineItemId) {
+            $this->hubSpotClient->delete(sprintf('/crm/objects/%s/line_items/%s', self::API_VERSION, $obsoleteLineItemId));
+        }
+
+        $deliveryNote->replaceHubspotLineItems($synchronizedIds);
+        $this->entityManager->flush();
+
+        return $synchronizedIds;
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function fetchOrderLineItemIds(string $orderId): array
+    {
+        return $this->fetchOrderAssociationIds($orderId, 'line_items');
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function fetchOrderAssociationIds(string $orderId, string $associationType): array
+    {
+        if (trim($orderId) === '') {
+            return [];
+        }
+
+        $response = $this->hubSpotClient->get(
+            sprintf('/crm/objects/%s/orders/%s', self::API_VERSION, $orderId),
+            ['associations' => [$associationType]],
+        );
+        $associations = is_array($response['associations'] ?? null) ? $response['associations'] : [];
+        $association = is_array($associations[$associationType] ?? null) ? $associations[$associationType] : [];
+        $results = is_array($association['results'] ?? null) ? $association['results'] : [];
+
+        return array_values(array_unique(array_filter(array_map(
+            static fn (mixed $association): string => is_array($association)
+                ? trim((string) ($association['id'] ?? ($association['toObjectId'] ?? '')))
+                : '',
+            $results,
+        ))));
     }
 
     private function findExistingOrderId(string $externalOrderId): ?string
@@ -302,6 +729,10 @@ final class HubspotDeliveryOrderSyncService
 
     private function resolveCompanyId(string $clientId): string
     {
+        if (isset($this->companyCache[$clientId])) {
+            return $this->companyCache[$clientId];
+        }
+
         $response = $this->hubSpotClient->post(sprintf('/crm/objects/%s/companies/search', self::API_VERSION), [
             'limit' => 2,
             'properties' => ['name', 'id_erp'],
@@ -329,7 +760,7 @@ final class HubspotDeliveryOrderSyncService
             throw new \RuntimeException(sprintf('La societe HubSpot du client Sage %s ne contient aucun identifiant.', $clientId));
         }
 
-        return $companyId;
+        return $this->companyCache[$clientId] = $companyId;
     }
 
     /**
@@ -385,7 +816,7 @@ final class HubspotDeliveryOrderSyncService
 
         if (count($emails) !== 1) {
             if ($contacts !== []) {
-                $warnings[] = 'Aucun contact HubSpot unique n a pu etre determine pour le BL.';
+                $warnings[] = 'Aucun contact HubSpot unique n a pu etre determine pour le document.';
             }
 
             return null;
@@ -495,7 +926,7 @@ final class HubspotDeliveryOrderSyncService
         $lineAmount = $this->numeric($line['montantArticle'] ?? null);
         $netUnitPrice = $lineAmount !== null ? $lineAmount / $quantity : $listedUnitPrice;
         $properties = [
-            'name' => $name !== '' ? $name : ($reference !== '' ? $reference : 'Ligne BL Sage'),
+            'name' => $name !== '' ? $name : ($reference !== '' ? $reference : 'Ligne Sage'),
             'quantity' => $quantity,
             'price' => round($netUnitPrice, 6),
             'hs_line_item_currency_code' => 'EUR',
@@ -557,8 +988,13 @@ final class HubspotDeliveryOrderSyncService
         $freeFields = isset($header['champsLibres']) && is_array($header['champsLibres']) ? $header['champsLibres'] : [];
         $amountExcludingTax = $this->numeric($header['montantHT'] ?? null) ?? 0.0;
         $amountIncludingTax = $this->numeric($header['montantTTC'] ?? null) ?? 0.0;
+        $documentName = match (true) {
+            $deliveryNote->getInvoicePiece() === null => sprintf('BL %s', $deliveryNote->getPiece()),
+            $deliveryNote->getInvoicePiece() === $deliveryNote->getPiece() => sprintf('Facture %s', $deliveryNote->getPiece()),
+            default => sprintf('BL %s / Facture %s', $deliveryNote->getPiece(), $deliveryNote->getInvoicePiece()),
+        };
         $properties = [
-            'hs_order_name' => sprintf('BL %s%s', $deliveryNote->getPiece(), $clientName !== '' ? ' - '.$clientName : ''),
+            'hs_order_name' => sprintf('%s%s', $documentName, $clientName !== '' ? ' - '.$clientName : ''),
             'hs_external_order_id' => $deliveryNote->getSageKey(),
             'hs_subtotal_price' => $amountExcludingTax,
             'hs_tax' => round($amountIncludingTax - $amountExcludingTax, 6),
@@ -735,6 +1171,10 @@ final class HubspotDeliveryOrderSyncService
             return null;
         }
 
+        if (array_key_exists($clientId, $this->clientCache)) {
+            return $this->clientCache[$clientId];
+        }
+
         try {
             $clients = $this->extractList($this->sageClient->get('/Clients', [
                 'reference' => $clientId,
@@ -743,14 +1183,14 @@ final class HubspotDeliveryOrderSyncService
 
             foreach ($clients as $client) {
                 if (trim((string) ($client['reference'] ?? '')) === $clientId) {
-                    return $client;
+                    return $this->clientCache[$clientId] = $client;
                 }
             }
         } catch (\Throwable $exception) {
             $warnings[] = sprintf('Fiche client Sage non chargee: %s', $exception->getMessage());
         }
 
-        return null;
+        return $this->clientCache[$clientId] = null;
     }
 
     /**
@@ -765,12 +1205,18 @@ final class HubspotDeliveryOrderSyncService
             return [];
         }
 
+        $cacheKey = $path.':'.trim((string) $query['client']);
+
+        if (array_key_exists($cacheKey, $this->sageListCache)) {
+            return $this->sageListCache[$cacheKey];
+        }
+
         try {
-            return $this->extractList($this->sageClient->get($path, $query));
+            return $this->sageListCache[$cacheKey] = $this->extractList($this->sageClient->get($path, $query));
         } catch (\Throwable $exception) {
             $warnings[] = sprintf('Chargement des %s Sage impossible: %s', $label, $exception->getMessage());
 
-            return [];
+            return $this->sageListCache[$cacheKey] = [];
         }
     }
 
@@ -851,6 +1297,11 @@ final class HubspotDeliveryOrderSyncService
         $value = is_string($transliterated) ? $transliterated : $value;
 
         return trim((string) preg_replace('/[^a-z0-9]+/', ' ', $value));
+    }
+
+    private function normalizeDocumentReference(string $value): string
+    {
+        return mb_strtoupper(trim((string) preg_replace('/\s+/', ' ', $value)));
     }
 
     private function normalizeVatRate(mixed $value): ?string

@@ -1,0 +1,32 @@
+{% set isError = tone == 'error' %}
+<div style="margin-bottom:12px;padding:18px 20px;background:{{ isError ? '#fff7f6' : '#fffbeb' }};border:1px solid {{ isError ? '#f0cfcb' : '#f2dfaa' }};border-radius:17px;">
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;">
+        <tr>
+            <td style="vertical-align:top;">
+                <div style="font-size:15px;font-weight:800;color:#152238;">
+                    {{ issue.documentLabel|default('Document') }} {{ issue.piece|default('N/A') }}
+                </div>
+                <div style="margin-top:4px;font-size:12px;color:#65758b;">
+                    {{ issue.clientName|default('Entreprise inconnue') }}{% if issue.clientId|default('') %} &middot; {{ issue.clientId }}{% endif %}
+                </div>
+            </td>
+            <td align="right" style="vertical-align:top;">
+                <span style="display:inline-block;padding:6px 10px;border-radius:999px;background:{{ isError ? '#fee2e2' : '#fef3c7' }};font-size:10px;font-weight:800;color:{{ isError ? '#b42318' : '#92400e' }};text-transform:uppercase;letter-spacing:.07em;">{{ isError ? 'Bloquant' : 'A verifier' }}</span>
+            </td>
+        </tr>
+    </table>
+
+    <div style="margin-top:13px;font-size:13px;line-height:1.65;color:{{ isError ? '#7f302a' : '#76520a' }};word-break:break-word;">{{ issue.message|default('Probleme non detaille.') }}</div>
+
+    {% if issue.actionHint|default(null) %}
+        <div style="margin-top:11px;padding:11px 13px;background:rgba(255,255,255,.7);border-radius:11px;font-size:12px;line-height:1.6;color:#526276;">
+            <strong style="color:#152238;">Comment corriger :</strong> {{ issue.actionHint }}
+        </div>
+    {% endif %}
+
+    {% if issue.actionUrl|default(null) %}
+        <div style="margin-top:13px;">
+            <a href="{{ issue.actionUrl }}" style="display:inline-block;padding:10px 15px;background:{{ isError ? '#b8473e' : '#9a6700' }};color:#ffffff!important;text-decoration:none;border-radius:999px;font-size:12px;font-weight:800;">{{ issue.actionLabel|default('Ouvrir HubSpot') }}</a>
+        </div>
+    {% endif %}
+</div>

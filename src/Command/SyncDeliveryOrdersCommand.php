@@ -13,7 +13,7 @@ use Symfony\Component\Console\Style\SymfonyStyle;
 
 #[AsCommand(
     name: 'app:sync:delivery-orders',
-    description: 'Planifie l analyse des BL Sage et leur export vers les Orders HubSpot.',
+    description: 'Planifie l analyse des BL et factures Sage vers les Orders HubSpot.',
 )]
 final class SyncDeliveryOrdersCommand extends Command
 {
@@ -61,7 +61,7 @@ final class SyncDeliveryOrdersCommand extends Command
             'delivery_order',
             'Synchronisation Orders HubSpot planifiee',
             sprintf(
-                'Analyse des BL Sage du %s au %s ajoutee a Messenger par la commande planifiee.',
+                'Analyse des BL et factures Sage du %s au %s ajoutee a Messenger par la commande planifiee.',
                 $dateFrom->format('d/m/Y'),
                 $dateTo->format('d/m/Y'),
             ),

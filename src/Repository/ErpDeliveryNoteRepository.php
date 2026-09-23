@@ -22,6 +22,27 @@ class ErpDeliveryNoteRepository extends ServiceEntityRepository
         return $this->findOneBy(['sageKey' => trim($sageKey)]);
     }
 
+    public function findOneByInvoicePiece(string $piece): ?ErpDeliveryNote
+    {
+        return $this->findOneBy(['invoicePiece' => trim($piece)]);
+    }
+
+    /**
+     * @return ErpDeliveryNote[]
+     */
+    public function findPotentialInvoiceMatches(string $clientId): array
+    {
+        return $this->createQueryBuilder('n')
+            ->andWhere('n.clientId = :clientId')
+            ->andWhere('n.invoicePiece IS NULL')
+            ->andWhere('n.piece LIKE :deliveryNotePrefix')
+            ->setParameter('clientId', trim($clientId))
+            ->setParameter('deliveryNotePrefix', 'BL%')
+            ->orderBy('n.documentDate', 'DESC')
+            ->getQuery()
+            ->getResult();
+    }
+
     /**
      * @return ErpDeliveryNote[]
      */
@@ -69,7 +90,7 @@ class ErpDeliveryNoteRepository extends ServiceEntityRepository
 
         if ($search !== '') {
             $queryBuilder
-                ->andWhere('LOWER(n.piece) LIKE :term OR LOWER(n.clientId) LIKE :term OR LOWER(n.clientName) LIKE :term OR LOWER(n.hubspotOrderId) LIKE :term')
+                ->andWhere('LOWER(n.piece) LIKE :term OR LOWER(n.invoicePiece) LIKE :term OR LOWER(n.reference) LIKE :term OR LOWER(n.clientId) LIKE :term OR LOWER(n.clientName) LIKE :term OR LOWER(n.hubspotOrderId) LIKE :term')
                 ->setParameter('term', '%'.mb_strtolower($search).'%');
         }
 

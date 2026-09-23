@@ -1,7 +1,7 @@
 {% extends 'layout/app.html.twig' %}
 
 {% block page_title %}Orders HubSpot{% endblock %}
-{% block page_subtitle %}Bons de livraison Sage enregistres localement et exportes vers les Orders HubSpot.{% endblock %}
+{% block page_subtitle %}BL et factures Sage rapproches localement puis synchronises avec les Orders HubSpot.{% endblock %}
 
 {% block content %}
     <style>
@@ -26,7 +26,7 @@
     </style>
 
     <div class="flux-header">
-        <span class="flux-direction-badge flux-direction-badge--sage-hs">BL Sage -&gt; Orders HubSpot</span>
+        <span class="flux-direction-badge flux-direction-badge--sage-hs">BL + factures Sage -&gt; Orders HubSpot</span>
         {% if watchSince %}
             <span id="ordersSyncIndicator" class="orders-sync-indicator"><span class="orders-spinner"></span><span id="ordersSyncLabel">Synchronisation en cours</span></span>
         {% endif %}
@@ -42,7 +42,7 @@
     {% endif %}
 
     <div class="card" style="margin-bottom:var(--space-6);">
-        <div class="card-header"><span class="card-title">Analyser les bons de livraison</span></div>
+        <div class="card-header"><span class="card-title">Analyser les BL et leurs factures</span></div>
         <div class="card-body">
             <form method="post" action="{{ path('flux_hubspot_orders_sync') }}" class="orders-toolbar">
                 <input type="hidden" name="_token" value="{{ csrf_token('flux_hubspot_orders_sync') }}">
@@ -59,13 +59,13 @@
                     <i class="fas fa-rotate"></i>
                     Analyser et synchroniser
                 </button>
-                <span style="font-size:12px;color:var(--text-muted);">Du {{ filters.dateFrom|date('d/m/Y') }} au {{ filters.dateTo|date('d/m/Y') }}. Les BL deja exportes sont ignores automatiquement.</span>
+                <span style="font-size:12px;color:var(--text-muted);">Du {{ filters.dateFrom|date('d/m/Y') }} au {{ filters.dateTo|date('d/m/Y') }}. Les documents identiques sont ignores et les factures actualisent les Orders lies.</span>
             </form>
         </div>
     </div>
 
     <div class="stats-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:var(--space-6);">
-        <article class="stat-card"><div class="stat-header"><span class="stat-label">BL locaux</span><div class="stat-icon blue"><i class="fas fa-file-lines"></i></div></div><div class="stat-value">{{ localTotal }}</div></article>
+        <article class="stat-card"><div class="stat-header"><span class="stat-label">Documents locaux</span><div class="stat-icon blue"><i class="fas fa-file-lines"></i></div></div><div class="stat-value">{{ localTotal }}</div></article>
         <article class="stat-card"><div class="stat-header"><span class="stat-label">Envoyes</span><div class="stat-icon green"><i class="fas fa-check"></i></div></div><div class="stat-value">{{ statusCounts.sent|default(0) }}</div></article>
         <article class="stat-card"><div class="stat-header"><span class="stat-label">En erreur</span><div class="stat-icon red"><i class="fas fa-triangle-exclamation"></i></div></div><div class="stat-value">{{ statusCounts.failed|default(0) }}</div></article>
         <article class="stat-card"><div class="stat-header"><span class="stat-label">Modifies apres export</span><div class="stat-icon orange"><i class="fas fa-pen"></i></div></div><div class="stat-value">{{ statusCounts.changed|default(0) }}</div></article>
@@ -76,7 +76,7 @@
             <form method="get" class="orders-toolbar">
                 <div class="orders-field orders-field--search">
                     <label for="orders-search">Recherche locale</label>
-                    <input id="orders-search" type="text" name="q" value="{{ filters.q }}" placeholder="Numero BL, client ou ID HubSpot">
+                    <input id="orders-search" type="text" name="q" value="{{ filters.q }}" placeholder="Numero BL/FA, reference, client ou ID HubSpot">
                 </div>
                 <div class="orders-field">
                     <label for="orders-status-filter">Statut</label>
@@ -96,14 +96,21 @@
     </div>
 
     <div class="card">
-        <div class="card-header"><span class="card-title">Registre local des BL</span><span class="tag tag-info">{{ total }} resultat(s)</span></div>
+        <div class="card-header"><span class="card-title">Registre local des documents</span><span class="tag tag-info">{{ total }} resultat(s)</span></div>
         <div class="card-body orders-table-wrap" style="padding:0;">
             <table class="table">
-                <thead><tr><th>BL</th><th>Client</th><th>Date</th><th>Lignes</th><th>Total HT</th><th>Total TTC</th><th>Statut</th><th>HubSpot</th><th>Derniere analyse</th></tr></thead>
+                <thead><tr><th>Document</th><th>Client</th><th>Date</th><th>Lignes</th><th>Total HT</th><th>Total TTC</th><th>Statut</th><th>HubSpot</th><th>Derniere analyse</th></tr></thead>
                 <tbody>
                     {% for note in deliveryNotes %}
                         <tr>
-                            <td><div class="client-name">{{ note.piece }}</div><div style="font-size:11px;color:var(--text-muted);font-family:var(--font-mono);">{{ note.sageKey }}</div></td>
+                            <td>
+                                <div class="client-name">
+                                    {{ note.piece }}
+                                    {% if note.invoicePiece and note.invoicePiece != note.piece %}<span style="color:var(--text-muted);">&rarr;</span> {{ note.invoicePiece }}{% endif %}
+                                </div>
+                                {% if note.invoicePiece %}<span class="tag tag-info" style="margin-top:4px;">Facture finale</span>{% endif %}
+                                <div style="font-size:11px;color:var(--text-muted);font-family:var(--font-mono);">{{ note.sageKey }}</div>
+                            </td>
                             <td><strong>{{ note.clientName ?: 'N/A' }}</strong><div style="font-size:11px;color:var(--text-muted);">{{ note.clientId ?: 'Sans reference' }}</div></td>
                             <td>{{ note.documentDate ? note.documentDate|date('d/m/Y') : 'N/A' }}</td>
                             <td>{{ note.lineCount }}</td>
@@ -118,7 +125,7 @@
                             <td>{{ note.analyzedAt ? note.analyzedAt|date('d/m/Y H:i') : 'N/A' }}</td>
                         </tr>
                     {% else %}
-                        <tr><td colspan="9" style="text-align:center;color:var(--text-muted);padding:28px;">Aucun BL enregistre localement. Lancez une premiere analyse.</td></tr>
+                        <tr><td colspan="9" style="text-align:center;color:var(--text-muted);padding:28px;">Aucun document enregistre localement. Lancez une premiere analyse.</td></tr>
                     {% endfor %}
                 </tbody>
             </table>
