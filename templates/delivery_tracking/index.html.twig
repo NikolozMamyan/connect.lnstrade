@@ -1,0 +1,182 @@
+{% extends 'layout/app.html.twig' %}
+
+{% block page_title %}Suivi livraison{% endblock %}
+{% block page_subtitle %}Progression en temps réel des commandes Sage, de la création à l'expédition.{% endblock %}
+
+{% block content %}
+    <style>
+        .delivery-stats { display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px;margin-bottom:var(--space-6); }
+        .delivery-stat { position:relative;overflow:hidden;padding:20px;border:1px solid var(--border-color);border-radius:16px;background:var(--bg-surface);box-shadow:var(--shadow-xs); }
+        .delivery-stat::after { content:"";position:absolute;right:-20px;bottom:-30px;width:90px;height:90px;border-radius:50%;background:var(--stat-soft); }
+        .delivery-stat__head { display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px; }
+        .delivery-stat__label { color:var(--text-secondary);font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.055em; }
+        .delivery-stat__icon { display:grid;place-items:center;width:36px;height:36px;border-radius:11px;color:var(--stat-color);background:var(--stat-soft);font-size:14px; }
+        .delivery-stat__value { position:relative;z-index:1;font-size:30px;line-height:1;font-weight:800;color:var(--text-primary); }
+        .delivery-stat__hint { position:relative;z-index:1;margin-top:8px;color:var(--text-muted);font-size:12px; }
+        .delivery-stat--all { --stat-color:#3b82f6;--stat-soft:#eff6ff; }
+        .delivery-stat--bc { --stat-color:#6366f1;--stat-soft:#eef2ff; }
+        .delivery-stat--bl { --stat-color:#f97316;--stat-soft:#fff7ed; }
+        .delivery-stat--fc { --stat-color:#16a34a;--stat-soft:#f0fdf4; }
+
+        .delivery-toolbar { display:flex;align-items:flex-end;gap:14px;flex-wrap:wrap; }
+        .delivery-field { display:flex;flex-direction:column;gap:7px;min-width:170px; }
+        .delivery-field--search { flex:1;min-width:250px; }
+        .delivery-field label { font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text-muted); }
+        .delivery-field input,.delivery-field select { width:100%;box-sizing:border-box;padding:11px 13px;border:1px solid var(--border-color);border-radius:10px;background:#fff;color:var(--text-primary);font:inherit;font-size:13px;outline:none;transition:var(--transition-fast); }
+        .delivery-field input:focus,.delivery-field select:focus { border-color:var(--color-brand-accent);box-shadow:0 0 0 3px var(--color-brand-accent-light); }
+        .delivery-period { display:inline-flex;padding:4px;border:1px solid var(--border-color);border-radius:11px;background:var(--bg-base); }
+        .delivery-period input { position:absolute;opacity:0;pointer-events:none; }
+        .delivery-period label { padding:8px 14px;border-radius:8px;color:var(--text-secondary);font-size:12px;font-weight:800;cursor:pointer;text-transform:none;letter-spacing:0; }
+        .delivery-period input:checked + label { color:#fff;background:var(--color-brand-primary);box-shadow:var(--shadow-xs); }
+
+        .delivery-table-wrap { overflow-x:auto; }
+        .delivery-table { width:100%;min-width:1120px;border-collapse:separate;border-spacing:0; }
+        .delivery-table th { padding:12px 16px;border-bottom:1px solid var(--border-color);background:#fafbfe;color:var(--text-muted);font-size:11px;font-weight:800;text-align:left;text-transform:uppercase;letter-spacing:.055em;white-space:nowrap; }
+        .delivery-table td { padding:17px 16px;border-bottom:1px solid #edf0f6;vertical-align:middle; }
+        .delivery-table tbody tr { transition:var(--transition-fast); }
+        .delivery-table tbody tr:hover { background:#fbfcff; }
+        .delivery-table tbody tr:last-child td { border-bottom:0; }
+        .delivery-piece { display:flex;align-items:center;gap:11px; }
+        .delivery-piece__icon { display:grid;place-items:center;flex:0 0 38px;width:38px;height:38px;border-radius:12px;font-size:12px;font-weight:800;background:#eef2ff;color:#4f46e5; }
+        .delivery-piece__number { color:var(--text-primary);font-family:var(--font-mono);font-size:13px;font-weight:800; }
+        .delivery-piece__ref { max-width:180px;margin-top:3px;overflow:hidden;color:var(--text-muted);font-size:11px;text-overflow:ellipsis;white-space:nowrap; }
+        .delivery-client__name { max-width:190px;overflow:hidden;color:var(--text-primary);font-size:13px;font-weight:700;text-overflow:ellipsis;white-space:nowrap; }
+        .delivery-client__id { margin-top:4px;color:var(--text-muted);font-family:var(--font-mono);font-size:11px; }
+        .delivery-owner { display:flex;align-items:center;gap:9px; }
+        .delivery-owner__avatar { display:grid;place-items:center;flex:0 0 32px;width:32px;height:32px;border-radius:50%;background:linear-gradient(135deg,#1a1f3c,#3e477f);color:#fff;font-size:10px;font-weight:800; }
+        .delivery-owner__name { max-width:150px;color:var(--text-secondary);font-size:12px;font-weight:650; }
+
+        .delivery-progress { --progress:0%;width:260px; }
+        .delivery-progress__top { display:flex;align-items:center;justify-content:space-between;margin-bottom:10px; }
+        .delivery-stage-badge { display:inline-flex;align-items:center;gap:6px;padding:4px 9px;border-radius:999px;font-size:10px;font-weight:800;letter-spacing:.035em; }
+        .delivery-stage-badge--bc { color:#4f46e5;background:#eef2ff; }
+        .delivery-stage-badge--bl { color:#c2410c;background:#fff7ed; }
+        .delivery-stage-badge--fc { color:#15803d;background:#f0fdf4; }
+        .delivery-progress__status { color:var(--text-secondary);font-size:11px;font-weight:700; }
+        .delivery-progress__rail { position:relative;height:18px;margin:0 8px; }
+        .delivery-progress__track,.delivery-progress__fill { position:absolute;top:7px;left:0;height:4px;border-radius:999px; }
+        .delivery-progress__track { width:100%;background:#e5e7ef; }
+        .delivery-progress__fill { width:var(--progress);background:linear-gradient(90deg,#6366f1 0%,#f97316 48%,#22c55e 100%);transition:width .45s ease; }
+        .delivery-progress__dots { position:absolute;inset:0;display:flex;justify-content:space-between;align-items:center; }
+        .delivery-progress__dot { display:grid;place-items:center;width:16px;height:16px;border:3px solid #e5e7ef;border-radius:50%;background:#fff;color:transparent;font-size:7px; }
+        .delivery-progress__dot.is-done { border-color:var(--dot-color);background:var(--dot-color);color:#fff;box-shadow:0 0 0 3px var(--dot-soft); }
+        .delivery-progress__dot:nth-child(1) { --dot-color:#6366f1;--dot-soft:#eef2ff; }
+        .delivery-progress__dot:nth-child(2) { --dot-color:#f97316;--dot-soft:#fff7ed; }
+        .delivery-progress__dot:nth-child(3) { --dot-color:#22c55e;--dot-soft:#f0fdf4; }
+        .delivery-progress__labels { display:flex;justify-content:space-between;margin-top:5px;color:#a0a4b8;font-size:9px;font-weight:800;letter-spacing:.04em; }
+        .delivery-progress__labels span.is-done { color:var(--text-secondary); }
+        .delivery-date { white-space:nowrap;color:var(--text-secondary);font-size:12px; }
+        .delivery-date strong { display:block;color:var(--text-primary);font-size:12px; }
+        .delivery-empty { padding:54px 20px;text-align:center;color:var(--text-muted); }
+        .delivery-empty i { display:block;margin-bottom:12px;font-size:28px;color:#c8cbdf; }
+
+        @media (max-width:1050px) { .delivery-stats { grid-template-columns:repeat(2,minmax(0,1fr)); } }
+        @media (max-width:650px) { .delivery-stats { grid-template-columns:1fr; }.delivery-field,.delivery-field--search { width:100%;min-width:0; }.delivery-period { display:flex; }.delivery-period label { flex:1;text-align:center; } }
+    </style>
+
+    {% if isCommercialScope %}
+        <div class="flux-info-banner flux-info-banner--note" style="margin-bottom:var(--space-6);">
+            <i class="fas fa-user-shield"></i>
+            Vue limitée aux commandes de {{ commercialScopeName ?: 'votre périmètre commercial' }}.
+        </div>
+    {% endif %}
+
+    {% if error %}
+        <div class="flux-info-banner flux-info-banner--warning" style="margin-bottom:var(--space-6);">
+            <i class="fas fa-triangle-exclamation"></i>
+            Impossible de charger le suivi Sage : {{ error }}
+        </div>
+    {% endif %}
+
+    <div class="delivery-stats">
+        <article class="delivery-stat delivery-stat--all"><div class="delivery-stat__head"><span class="delivery-stat__label">Commandes suivies</span><span class="delivery-stat__icon"><i class="fas fa-layer-group"></i></span></div><div class="delivery-stat__value">{{ summary.total }}</div><div class="delivery-stat__hint">Sur les {{ filters.period }} derniers jours</div></article>
+        <article class="delivery-stat delivery-stat--bc"><div class="delivery-stat__head"><span class="delivery-stat__label">Commandes générées</span><span class="delivery-stat__icon"><i class="fas fa-file-signature"></i></span></div><div class="delivery-stat__value">{{ summary.bc }}</div><div class="delivery-stat__hint">Étape BC · démarrage</div></article>
+        <article class="delivery-stat delivery-stat--bl"><div class="delivery-stat__head"><span class="delivery-stat__label">En préparation</span><span class="delivery-stat__icon"><i class="fas fa-box-open"></i></span></div><div class="delivery-stat__value">{{ summary.bl }}</div><div class="delivery-stat__hint">Étape BL · préparation</div></article>
+        <article class="delivery-stat delivery-stat--fc"><div class="delivery-stat__head"><span class="delivery-stat__label">Expédiées</span><span class="delivery-stat__icon"><i class="fas fa-truck-fast"></i></span></div><div class="delivery-stat__value">{{ summary.fc }}</div><div class="delivery-stat__hint">Étape FC · terminée</div></article>
+    </div>
+
+    <div class="card" style="margin-bottom:var(--space-6);">
+        <div class="card-body">
+            <form method="get" class="delivery-toolbar" id="deliveryFilters">
+                <div class="delivery-field">
+                    <label>Période</label>
+                    <div class="delivery-period">
+                        {% for days in [30, 60, 90] %}
+                            <input id="delivery-period-{{ days }}" type="radio" name="period" value="{{ days }}" {{ filters.period == days ? 'checked' : '' }} onchange="this.form.submit()">
+                            <label for="delivery-period-{{ days }}">{{ days }} j</label>
+                        {% endfor %}
+                    </div>
+                </div>
+                <div class="delivery-field delivery-field--search">
+                    <label for="delivery-search">Recherche</label>
+                    <input id="delivery-search" type="search" name="q" value="{{ filters.q }}" placeholder="Pièce, client, référence ou commercial">
+                </div>
+                <div class="delivery-field">
+                    <label for="delivery-stage">Étape</label>
+                    <select id="delivery-stage" name="stage">
+                        <option value="">Toutes les étapes</option>
+                        <option value="bc" {{ filters.stage == 'bc' ? 'selected' : '' }}>BC · Commande générée</option>
+                        <option value="bl" {{ filters.stage == 'bl' ? 'selected' : '' }}>BL · En préparation</option>
+                        <option value="fc" {{ filters.stage == 'fc' ? 'selected' : '' }}>FC · Expédiée</option>
+                    </select>
+                </div>
+                {% if not isCommercialScope %}
+                    <div class="delivery-field">
+                        <label for="delivery-owner">Owner</label>
+                        <select id="delivery-owner" name="owner">
+                            <option value="">Tous les owners</option>
+                            {% for owner in ownerOptions %}<option value="{{ owner }}" {{ filters.owner == owner ? 'selected' : '' }}>{{ owner }}</option>{% endfor %}
+                        </select>
+                    </div>
+                {% endif %}
+                <button class="btn btn-primary btn-md" type="submit"><i class="fas fa-filter"></i> Appliquer</button>
+            </form>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <div><span class="card-title">Cycle de livraison</span><div style="margin-top:4px;color:var(--text-muted);font-size:12px;">Du {{ dateFrom|date('d/m/Y') }} au {{ dateTo|date('d/m/Y') }}</div></div>
+            <div style="display:flex;align-items:center;gap:10px;">
+                <span class="tag tag-info">{{ total }} résultat(s)</span>
+                <a class="btn btn-secondary btn-sm" href="{{ path('delivery_tracking_index', filters) }}" title="Actualiser les données Sage" aria-label="Actualiser les données Sage"><i class="fas fa-rotate"></i> Actualiser</a>
+            </div>
+        </div>
+        <div class="delivery-table-wrap">
+            <table class="delivery-table">
+                <thead><tr><th>Numéro de pièce</th><th>Client</th><th>Owner</th><th>Progression livraison</th><th>Création</th><th>Dernière évolution</th></tr></thead>
+                <tbody>
+                    {% for row in rows %}
+                        {% set progress = row.stageRank == 1 ? 0 : (row.stageRank == 2 ? 50 : 100) %}
+                        <tr>
+                            <td><div class="delivery-piece"><span class="delivery-piece__icon">{{ row.stage|upper }}</span><div><div class="delivery-piece__number">{{ row.piece }}</div>{% if row.reference %}<div class="delivery-piece__ref" title="{{ row.reference }}">Réf. {{ row.reference }}</div>{% endif %}</div></div></td>
+                            <td><div class="delivery-client__name" title="{{ row.clientName }}">{{ row.clientName ?: 'Client non renseigné' }}</div><div class="delivery-client__id">{{ row.clientId ?: 'Sans identifiant' }}</div></td>
+                            <td><div class="delivery-owner"><span class="delivery-owner__avatar">{{ row.ownerInitials }}</span><span class="delivery-owner__name">{{ row.owner }}</span></div></td>
+                            <td>
+                                <div class="delivery-progress" style="--progress:{{ progress }}%;">
+                                    <div class="delivery-progress__top"><span class="delivery-stage-badge delivery-stage-badge--{{ row.stage }}"><i class="fas {{ row.stage == 'bc' ? 'fa-file-signature' : (row.stage == 'bl' ? 'fa-box-open' : 'fa-truck-fast') }}"></i>{{ row.stage|upper }}</span><span class="delivery-progress__status">{{ row.stageLabel }}</span></div>
+                                    <div class="delivery-progress__rail"><span class="delivery-progress__track"></span><span class="delivery-progress__fill"></span><div class="delivery-progress__dots">{% for rank in [1,2,3] %}<span class="delivery-progress__dot {{ row.stageRank >= rank ? 'is-done' : '' }}"><i class="fas fa-check"></i></span>{% endfor %}</div></div>
+                                    <div class="delivery-progress__labels"><span class="{{ row.stageRank >= 1 ? 'is-done' : '' }}">BC</span><span class="{{ row.stageRank >= 2 ? 'is-done' : '' }}">BL</span><span class="{{ row.stageRank >= 3 ? 'is-done' : '' }}">FC</span></div>
+                                </div>
+                            </td>
+                            <td class="delivery-date"><strong>{{ row.createdAt ? row.createdAt|date('d/m/Y') : '—' }}</strong>{{ row.createdAt ? row.createdAt|date('H:i') : 'Non disponible' }}</td>
+                            <td class="delivery-date"><strong>{{ row.updatedAt ? row.updatedAt|date('d/m/Y') : '—' }}</strong>{{ row.updatedAt ? row.updatedAt|date('H:i') : 'Non disponible' }}</td>
+                        </tr>
+                    {% else %}
+                        <tr><td colspan="6"><div class="delivery-empty"><i class="fas fa-route"></i><strong>Aucune commande trouvée</strong><div style="margin-top:6px;">Modifiez la période ou les filtres de recherche.</div></div></td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% if totalPages > 1 %}
+            <div class="card-footer" style="display:flex;justify-content:space-between;align-items:center;gap:12px;">
+                <span style="color:var(--text-muted);font-size:12px;">Page {{ page }} sur {{ totalPages }}</span>
+                <div style="display:flex;gap:8px;">
+                    {% if page > 1 %}<a class="btn btn-secondary btn-sm" href="{{ path('delivery_tracking_index', filters|merge({page:page - 1})) }}">Précédent</a>{% endif %}
+                    {% if page < totalPages %}<a class="btn btn-secondary btn-sm" href="{{ path('delivery_tracking_index', filters|merge({page:page + 1})) }}">Suivant</a>{% endif %}
+                </div>
+            </div>
+        {% endif %}
+    </div>
+
+{% endblock %}

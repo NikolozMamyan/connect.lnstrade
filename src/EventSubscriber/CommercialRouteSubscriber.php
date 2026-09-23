@@ -16,6 +16,7 @@ final class CommercialRouteSubscriber implements EventSubscriberInterface
         'app_dashboard',
         'supervision_statistics_',
         'supervision_settings_',
+        'delivery_tracking_',
     ];
 
     private const ALLOWED_ROUTE_NAMES = [

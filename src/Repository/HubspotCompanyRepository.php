@@ -127,4 +127,39 @@ class HubspotCompanyRepository extends ServiceEntityRepository
             ->getQuery()
             ->getResult();
     }
+
+    /**
+     * @param list<string> $erpIds
+     *
+     * @return array<string, string>
+     */
+    public function findNamesIndexedByErpIds(array $erpIds): array
+    {
+        $erpIds = array_values(array_unique(array_filter(array_map('trim', $erpIds))));
+
+        if ($erpIds === []) {
+            return [];
+        }
+
+        $rows = $this->createQueryBuilder('c')
+            ->select('c.idErp AS idErp, c.name AS name')
+            ->andWhere('c.idErp IN (:erpIds)')
+            ->andWhere('c.archived = false OR c.archived IS NULL')
+            ->setParameter('erpIds', $erpIds)
+            ->orderBy('c.id', 'ASC')
+            ->getQuery()
+            ->getArrayResult();
+        $names = [];
+
+        foreach ($rows as $row) {
+            $erpId = trim((string) ($row['idErp'] ?? ''));
+            $name = trim((string) ($row['name'] ?? ''));
+
+            if ($erpId !== '' && $name !== '' && !isset($names[$erpId])) {
+                $names[$erpId] = $name;
+            }
+        }
+
+        return $names;
+    }
 }

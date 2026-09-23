@@ -1,4 +1,5 @@
 parameters:
+    app.session_lifetime: 21600
     base_uri_hubspot: 'https://api.hubapi.com'
     hubspot_portal_id: '143807682'
     hubspot_access: '%env(HUBSPOT_ACCESS_TOKEN)%'
@@ -41,3 +42,7 @@ services:
     App\Service\Monitoring\CronHeartbeatService:
         arguments:
             $projectDir: '%kernel.project_dir%'
+
+    App\EventSubscriber\SessionRenewalSubscriber:
+        arguments:
+            $sessionLifetime: '%app.session_lifetime%'

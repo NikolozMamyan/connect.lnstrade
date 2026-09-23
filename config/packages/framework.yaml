@@ -4,8 +4,13 @@ framework:
 
     # Note that the session will be started ONLY if you read or write from it.
     session:
-        cookie_lifetime: 21600
-        gc_maxlifetime: 21600
+        cookie_lifetime: '%app.session_lifetime%'
+        gc_maxlifetime: '%app.session_lifetime%'
+        gc_probability: 1
+        gc_divisor: 100
+        cookie_secure: auto
+        cookie_httponly: true
+        cookie_samesite: lax
 
     #esi: true
     #fragments: true
