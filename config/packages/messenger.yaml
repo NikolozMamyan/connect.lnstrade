@@ -30,3 +30,4 @@ framework:
             App\Message\SyncProductMessage: async
             App\Message\SyncProductStockMessage: async
             App\Message\SyncInvoiceMessage: async
+            App\Message\SyncDeliveryOrderMessage: async

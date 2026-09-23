@@ -1,0 +1,160 @@
+{% extends 'layout/app.html.twig' %}
+
+{% block page_title %}Orders HubSpot{% endblock %}
+{% block page_subtitle %}Bons de livraison Sage enregistres localement et exportes vers les Orders HubSpot.{% endblock %}
+
+{% block content %}
+    <style>
+        .orders-toolbar { display:flex;gap:var(--space-4);align-items:flex-end;flex-wrap:wrap; }
+        .orders-field { display:flex;flex-direction:column;gap:var(--space-2);min-width:170px; }
+        .orders-field--search { flex:1;min-width:260px; }
+        .orders-field label { font-size:12px;font-weight:600;color:var(--text-secondary); }
+        .orders-field input,.orders-field select { width:100%;box-sizing:border-box;padding:var(--space-3) var(--space-4);border:var(--border-width) solid var(--border-color);border-radius:var(--border-radius-md);background:var(--bg-surface); }
+        .orders-period-switch { display:inline-flex;padding:4px;border:var(--border-width) solid var(--border-color);border-radius:var(--border-radius-md);background:var(--bg-base); }
+        .orders-period-switch input { position:absolute;opacity:0;pointer-events:none; }
+        .orders-period-switch label { padding:9px 18px;border-radius:calc(var(--border-radius-md) - 3px);font-size:13px;font-weight:700;color:var(--text-secondary);cursor:pointer;transition:.15s ease; }
+        .orders-period-switch input:checked + label { background:var(--color-brand-accent);color:#fff;box-shadow:0 1px 3px rgba(0,0,0,.12); }
+        .orders-status { display:inline-flex;padding:4px 9px;border-radius:999px;font-size:11px;font-weight:700; }
+        .orders-status--sent { background:var(--color-success-bg);color:var(--color-success); }
+        .orders-status--failed { background:var(--color-error-bg);color:var(--color-error); }
+        .orders-status--changed { background:var(--color-warning-bg);color:#9a3412; }
+        .orders-status--processing,.orders-status--discovered { background:var(--color-info-bg);color:var(--color-info); }
+        .orders-sync-indicator { display:inline-flex;align-items:center;gap:8px;padding:7px 12px;border-radius:999px;background:var(--color-warning-bg);color:#9a3412;font-size:12px;font-weight:600; }
+        .orders-spinner { width:13px;height:13px;border:2px solid rgba(249,115,22,.2);border-top-color:var(--color-warning);border-radius:50%;animation:orders-spin .9s linear infinite; }
+        @keyframes orders-spin { to { transform:rotate(360deg); } }
+        @media (max-width:900px) { .orders-table-wrap { overflow-x:auto; } }
+    </style>
+
+    <div class="flux-header">
+        <span class="flux-direction-badge flux-direction-badge--sage-hs">BL Sage -&gt; Orders HubSpot</span>
+        {% if watchSince %}
+            <span id="ordersSyncIndicator" class="orders-sync-indicator"><span class="orders-spinner"></span><span id="ordersSyncLabel">Synchronisation en cours</span></span>
+        {% endif %}
+    </div>
+
+    {% if latestLogs is not empty %}
+        {% set latestLog = latestLogs[0] %}
+        <div class="flux-info-banner {{ latestLog.level == 'error' ? 'flux-info-banner--warning' : 'flux-info-banner--note' }}">
+            <strong>Dernier evenement :</strong>
+            <span>[{{ latestLog.level|upper }}] {{ latestLog.title }}</span>
+            {% if latestLog.message %}<span> - {{ latestLog.message }}</span>{% endif %}
+        </div>
+    {% endif %}
+
+    <div class="card" style="margin-bottom:var(--space-6);">
+        <div class="card-header"><span class="card-title">Analyser les bons de livraison</span></div>
+        <div class="card-body">
+            <form method="post" action="{{ path('flux_hubspot_orders_sync') }}" class="orders-toolbar">
+                <input type="hidden" name="_token" value="{{ csrf_token('flux_hubspot_orders_sync') }}">
+                <div class="orders-field">
+                    <label>Periode a analyser</label>
+                    <div class="orders-period-switch" role="radiogroup" aria-label="Periode a analyser">
+                        {% for days in [30, 60, 90] %}
+                            <input id="orders-period-{{ days }}" type="radio" name="period" value="{{ days }}" {{ filters.period == days ? 'checked' : '' }}>
+                            <label for="orders-period-{{ days }}">{{ days }} jours</label>
+                        {% endfor %}
+                    </div>
+                </div>
+                <button type="submit" class="btn btn-primary btn-md">
+                    <i class="fas fa-rotate"></i>
+                    Analyser et synchroniser
+                </button>
+                <span style="font-size:12px;color:var(--text-muted);">Du {{ filters.dateFrom|date('d/m/Y') }} au {{ filters.dateTo|date('d/m/Y') }}. Les BL deja exportes sont ignores automatiquement.</span>
+            </form>
+        </div>
+    </div>
+
+    <div class="stats-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:var(--space-6);">
+        <article class="stat-card"><div class="stat-header"><span class="stat-label">BL locaux</span><div class="stat-icon blue"><i class="fas fa-file-lines"></i></div></div><div class="stat-value">{{ localTotal }}</div></article>
+        <article class="stat-card"><div class="stat-header"><span class="stat-label">Envoyes</span><div class="stat-icon green"><i class="fas fa-check"></i></div></div><div class="stat-value">{{ statusCounts.sent|default(0) }}</div></article>
+        <article class="stat-card"><div class="stat-header"><span class="stat-label">En erreur</span><div class="stat-icon red"><i class="fas fa-triangle-exclamation"></i></div></div><div class="stat-value">{{ statusCounts.failed|default(0) }}</div></article>
+        <article class="stat-card"><div class="stat-header"><span class="stat-label">Modifies apres export</span><div class="stat-icon orange"><i class="fas fa-pen"></i></div></div><div class="stat-value">{{ statusCounts.changed|default(0) }}</div></article>
+    </div>
+
+    <div class="card" style="margin-bottom:var(--space-6);">
+        <div class="card-body">
+            <form method="get" class="orders-toolbar">
+                <div class="orders-field orders-field--search">
+                    <label for="orders-search">Recherche locale</label>
+                    <input id="orders-search" type="text" name="q" value="{{ filters.q }}" placeholder="Numero BL, client ou ID HubSpot">
+                </div>
+                <div class="orders-field">
+                    <label for="orders-status-filter">Statut</label>
+                    <select id="orders-status-filter" name="status">
+                        <option value="">Tous</option>
+                        <option value="sent" {{ filters.status == 'sent' ? 'selected' : '' }}>Envoyes</option>
+                        <option value="failed" {{ filters.status == 'failed' ? 'selected' : '' }}>En erreur</option>
+                        <option value="changed" {{ filters.status == 'changed' ? 'selected' : '' }}>Modifies</option>
+                        <option value="processing" {{ filters.status == 'processing' ? 'selected' : '' }}>En cours</option>
+                        <option value="discovered" {{ filters.status == 'discovered' ? 'selected' : '' }}>Detectes</option>
+                    </select>
+                </div>
+                <input type="hidden" name="period" value="{{ filters.period }}">
+                <button type="submit" class="btn btn-secondary btn-md"><i class="fas fa-filter"></i> Filtrer</button>
+            </form>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header"><span class="card-title">Registre local des BL</span><span class="tag tag-info">{{ total }} resultat(s)</span></div>
+        <div class="card-body orders-table-wrap" style="padding:0;">
+            <table class="table">
+                <thead><tr><th>BL</th><th>Client</th><th>Date</th><th>Lignes</th><th>Total HT</th><th>Total TTC</th><th>Statut</th><th>HubSpot</th><th>Derniere analyse</th></tr></thead>
+                <tbody>
+                    {% for note in deliveryNotes %}
+                        <tr>
+                            <td><div class="client-name">{{ note.piece }}</div><div style="font-size:11px;color:var(--text-muted);font-family:var(--font-mono);">{{ note.sageKey }}</div></td>
+                            <td><strong>{{ note.clientName ?: 'N/A' }}</strong><div style="font-size:11px;color:var(--text-muted);">{{ note.clientId ?: 'Sans reference' }}</div></td>
+                            <td>{{ note.documentDate ? note.documentDate|date('d/m/Y') : 'N/A' }}</td>
+                            <td>{{ note.lineCount }}</td>
+                            <td>{{ note.amountExcludingTax|number_format(2, ',', ' ') }} EUR</td>
+                            <td><strong>{{ note.amountIncludingTax|number_format(2, ',', ' ') }} EUR</strong></td>
+                            <td>
+                                {% set statusLabels = {sent:'Envoye',failed:'Erreur',changed:'Modifie',processing:'En cours',discovered:'Detecte'} %}
+                                <span class="orders-status orders-status--{{ note.status }}">{{ statusLabels[note.status]|default(note.status) }}</span>
+                                {% if note.errorMessage %}<div title="{{ note.errorMessage }}" style="max-width:220px;margin-top:5px;font-size:11px;color:var(--color-error);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ note.errorMessage }}</div>{% endif %}
+                            </td>
+                            <td>{% if note.hubspotOrderId %}<span style="font-family:var(--font-mono);font-size:12px;">{{ note.hubspotOrderId }}</span>{% else %}<span style="color:var(--text-muted);">-</span>{% endif %}</td>
+                            <td>{{ note.analyzedAt ? note.analyzedAt|date('d/m/Y H:i') : 'N/A' }}</td>
+                        </tr>
+                    {% else %}
+                        <tr><td colspan="9" style="text-align:center;color:var(--text-muted);padding:28px;">Aucun BL enregistre localement. Lancez une premiere analyse.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% if totalPages > 1 %}
+            <div class="card-footer" style="display:flex;justify-content:space-between;align-items:center;">
+                <span>Page {{ page }} / {{ totalPages }}</span>
+                <div style="display:flex;gap:var(--space-2);">
+                    {% if page > 1 %}<a class="btn btn-secondary btn-sm" href="{{ path('flux_hubspot_orders_index', filters|merge({page:page - 1})) }}">Precedent</a>{% endif %}
+                    {% if page < totalPages %}<a class="btn btn-secondary btn-sm" href="{{ path('flux_hubspot_orders_index', filters|merge({page:page + 1})) }}">Suivant</a>{% endif %}
+                </div>
+            </div>
+        {% endif %}
+    </div>
+
+    {% if watchSince %}
+        <script>
+            (() => {
+                const since = {{ watchSince|json_encode|raw }};
+                const statusUrl = {{ path('flux_hubspot_orders_sync_status')|json_encode|raw }};
+                const interval = window.setInterval(async () => {
+                    try {
+                        const response = await fetch(`${statusUrl}?since=${encodeURIComponent(since)}`, {headers:{'X-Requested-With':'XMLHttpRequest'}});
+                        if (!response.ok) return;
+                        const data = await response.json();
+                        if (data.completed) {
+                            window.clearInterval(interval);
+                            const label = document.getElementById('ordersSyncLabel');
+                            if (label) label.textContent = 'Synchronisation terminee';
+                            const url = new URL(window.location.href);
+                            url.searchParams.delete('watchSince');
+                            window.setTimeout(() => window.location.href = url.toString(), 800);
+                        }
+                    } catch (e) {}
+                }, 4000);
+            })();
+        </script>
+    {% endif %}
+{% endblock %}

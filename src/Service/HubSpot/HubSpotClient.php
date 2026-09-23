@@ -9,6 +9,7 @@ use Symfony\Contracts\HttpClient\Exception\RedirectionExceptionInterface;
 use Symfony\Contracts\HttpClient\Exception\ServerExceptionInterface;
 use Symfony\Contracts\HttpClient\Exception\TransportExceptionInterface;
 use Symfony\Contracts\HttpClient\HttpClientInterface;
+use Symfony\Contracts\HttpClient\ResponseInterface;
 
 class HubSpotClient
 {
@@ -41,7 +42,7 @@ class HubSpotClient
             'query' => $query,
         ]);
 
-        return $response->toArray(false);
+        return $this->decodeResponse($response);
     }
 
     /**
@@ -62,7 +63,7 @@ class HubSpotClient
             'query' => $query,
         ]);
 
-        return $response->toArray(false);
+        return $this->decodeResponse($response);
     }
 
     /**
@@ -81,7 +82,7 @@ class HubSpotClient
             'json' => $body,
         ]);
 
-        return $response->toArray(false);
+        return $this->decodeResponse($response);
     }
 
     /**
@@ -101,20 +102,10 @@ class HubSpotClient
             'query' => $query,
         ]);
 
-        $content = trim($response->getContent(false));
+        $statusCode = $response->getStatusCode();
+        $decoded = $this->decodeResponse($response);
 
-        if ($content === '') {
-            return [
-                'statusCode' => $response->getStatusCode(),
-            ];
-        }
-
-        $decoded = json_decode($content, true);
-
-        return is_array($decoded) ? $decoded : [
-            'statusCode' => $response->getStatusCode(),
-            'content' => $content,
-        ];
+        return $decoded !== [] ? $decoded : ['statusCode' => $statusCode];
     }
     /**
  * Mise à jour générique PATCH.
@@ -135,7 +126,7 @@ public function patch(string $path, array $body = [], array $query = []): array
         'json' => $body,
     ]);
 
-    return $response->toArray(false);
+    return $this->decodeResponse($response);
 }
 
     /**
@@ -286,8 +277,41 @@ public function getObject(string $objectType, string $objectId, array $query = [
         ]
     );
 
-    return $response->toArray(false);
+    return $this->decodeResponse($response);
 }
+
+    private function decodeResponse(ResponseInterface $response): array
+    {
+        $statusCode = $response->getStatusCode();
+        $content = trim($response->getContent(false));
+
+        if ($statusCode < 200 || $statusCode >= 300) {
+            $message = $content;
+            $decoded = json_decode($content, true);
+
+            if (is_array($decoded) && is_string($decoded['message'] ?? null)) {
+                $message = $decoded['message'];
+            }
+
+            throw new \RuntimeException(sprintf(
+                'Erreur API HubSpot [%d] : %s',
+                $statusCode,
+                $message !== '' ? $message : 'reponse vide'
+            ));
+        }
+
+        if ($content === '') {
+            return [];
+        }
+
+        $decoded = json_decode($content, true);
+
+        if (!is_array($decoded)) {
+            throw new \RuntimeException('Reponse JSON invalide de l API HubSpot.');
+        }
+
+        return $decoded;
+    }
 
     private function getHeaders(): array
     {

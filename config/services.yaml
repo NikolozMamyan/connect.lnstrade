@@ -8,6 +8,8 @@ parameters:
     hubspot_order_form_tax_rate_group_ids:
         '5.5': '115152085'
         '20': '115152086'
+    hubspot_delivery_order_pipeline: '3942112450'
+    hubspot_delivery_order_stage: '5659785460'
     base_uri_sage: '%env(SAGE_BASE_URI)%'
     sage_username: '%env(SAGE_USERNAME)%'
     sage_password: '%env(SAGE_PASSWORD)%'
