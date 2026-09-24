@@ -4,6 +4,7 @@ namespace App\Service\Flux;
 
 use App\Message\SyncClientMessage;
 use App\Message\SyncDeliveryOrderMessage;
+use App\Message\SyncDeliveryOrderHistoryMessage;
 use App\Message\SyncInvoiceMessage;
 use App\Message\SyncProductMessage;
 use App\Message\SyncProductStockMessage;
@@ -75,5 +76,13 @@ final class SyncJobDispatcher
         $this->messageBus->dispatch($message, [
             new DeduplicateStamp($deduplicationKey, self::DEDUPLICATION_TTL[$type]),
         ]);
+    }
+
+    public function dispatchDeliveryOrderHistory(\DateTimeImmutable $dateFrom, \DateTimeImmutable $dateTo): void
+    {
+        $this->messageBus->dispatch(
+            new SyncDeliveryOrderHistoryMessage($dateFrom->format('Y-m-d'), $dateTo->format('Y-m-d')),
+            [new DeduplicateStamp('queued-sync-delivery-order-history', 86400)],
+        );
     }
 }
