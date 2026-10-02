@@ -10,10 +10,6 @@
         .orders-field--search { flex:1;min-width:260px; }
         .orders-field label { font-size:12px;font-weight:600;color:var(--text-secondary); }
         .orders-field input,.orders-field select { width:100%;box-sizing:border-box;padding:var(--space-3) var(--space-4);border:var(--border-width) solid var(--border-color);border-radius:var(--border-radius-md);background:var(--bg-surface); }
-        .orders-period-switch { display:inline-flex;padding:4px;border:var(--border-width) solid var(--border-color);border-radius:var(--border-radius-md);background:var(--bg-base); }
-        .orders-period-switch input { position:absolute;opacity:0;pointer-events:none; }
-        .orders-period-switch label { padding:9px 18px;border-radius:calc(var(--border-radius-md) - 3px);font-size:13px;font-weight:700;color:var(--text-secondary);cursor:pointer;transition:.15s ease; }
-        .orders-period-switch input:checked + label { background:var(--color-brand-accent);color:#fff;box-shadow:0 1px 3px rgba(0,0,0,.12); }
         .orders-status { display:inline-flex;padding:4px 9px;border-radius:999px;font-size:11px;font-weight:700; }
         .orders-status--sent { background:var(--color-success-bg);color:var(--color-success); }
         .orders-status--failed { background:var(--color-error-bg);color:var(--color-error); }
@@ -42,25 +38,21 @@
     {% endif %}
 
     <div class="card" style="margin-bottom:var(--space-6);">
-        <div class="card-header"><span class="card-title">Analyser les BL et leurs factures</span></div>
-        <div class="card-body">
-            <form method="post" action="{{ path('flux_hubspot_orders_sync') }}" class="orders-toolbar">
-                <input type="hidden" name="_token" value="{{ csrf_token('flux_hubspot_orders_sync') }}">
-                <div class="orders-field">
-                    <label>Periode a analyser</label>
-                    <div class="orders-period-switch" role="radiogroup" aria-label="Periode a analyser">
-                        {% for days in [30, 60, 90] %}
-                            <input id="orders-period-{{ days }}" type="radio" name="period" value="{{ days }}" {{ filters.period == days ? 'checked' : '' }}>
-                            <label for="orders-period-{{ days }}">{{ days }} jours</label>
-                        {% endfor %}
+        <div class="card-body" style="display:flex;align-items:center;justify-content:space-between;gap:var(--space-5);flex-wrap:wrap;">
+            <div style="display:flex;align-items:center;gap:var(--space-4);min-width:260px;flex:1;">
+                <div class="stat-icon orange" style="flex:0 0 auto;"><i class="fas fa-file-excel"></i></div>
+                <div>
+                    <div style="font-size:15px;font-weight:700;color:var(--text-primary);">Suivi des corrections</div>
+                    <div style="margin-top:4px;font-size:12px;line-height:1.6;color:var(--text-muted);">
+                        Export Excel des entreprises et documents en erreur, avec les actions recommandees et les liens HubSpot utiles.
                     </div>
                 </div>
-                <button type="submit" class="btn btn-primary btn-md">
-                    <i class="fas fa-rotate"></i>
-                    Analyser et synchroniser
-                </button>
-                <span style="font-size:12px;color:var(--text-muted);">Du {{ filters.dateFrom|date('d/m/Y') }} au {{ filters.dateTo|date('d/m/Y') }}. Les documents identiques sont ignores et les factures actualisent les Orders lies.</span>
-            </form>
+            </div>
+            <a href="{{ path('flux_hubspot_orders_correction_report') }}" class="btn btn-secondary btn-md">
+                <i class="fas fa-download"></i>
+                Exporter les corrections
+                {% if statusCounts.failed|default(0) > 0 %}<span class="tag tag-warning">{{ statusCounts.failed }}</span>{% endif %}
+            </a>
         </div>
     </div>
 

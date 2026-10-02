@@ -7,7 +7,9 @@ use App\Repository\ErpDeliveryNoteRepository;
 use App\Repository\SyncLogRepository;
 use App\Service\Flux\SyncJobDispatcher;
 use App\Service\Log\SyncLogService;
+use App\Service\Report\DeliveryOrderCorrectionReportExporter;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
+use Symfony\Component\HttpFoundation\HeaderUtils;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -115,6 +117,19 @@ final class FluxHubspotOrdersController extends AbstractController
                 'level' => $latestLog->getLevel(),
                 'createdAt' => $latestLog->getCreatedAt()?->format(\DateTimeInterface::ATOM),
             ] : null,
+        ]);
+    }
+
+    #[Route('/corrections.xlsx', name: 'correction_report', methods: ['GET'])]
+    public function correctionReport(DeliveryOrderCorrectionReportExporter $reportExporter): Response
+    {
+        $report = $reportExporter->generate();
+
+        return new Response($report['content'], Response::HTTP_OK, [
+            'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            'Content-Disposition' => HeaderUtils::makeDisposition(HeaderUtils::DISPOSITION_ATTACHMENT, $report['filename']),
+            'Content-Length' => (string) strlen($report['content']),
+            'Cache-Control' => 'private, no-store, no-cache, must-revalidate',
         ]);
     }
 

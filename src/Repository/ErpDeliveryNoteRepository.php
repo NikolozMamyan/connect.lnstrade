@@ -84,6 +84,35 @@ class ErpDeliveryNoteRepository extends ServiceEntityRepository
         return $counts;
     }
 
+    /**
+     * @return list<array<string, mixed>>
+     */
+    public function findFailedForCorrectionReport(): array
+    {
+        return $this->createQueryBuilder('n')
+            ->select([
+                'n.piece AS piece',
+                'n.invoicePiece AS invoicePiece',
+                'n.sourceDocumentType AS sourceDocumentType',
+                'n.clientId AS clientId',
+                'n.clientName AS clientName',
+                'n.documentDate AS documentDate',
+                'n.amountIncludingTax AS amountIncludingTax',
+                'n.hubspotOrderId AS hubspotOrderId',
+                'n.errorMessage AS errorMessage',
+                'n.analyzedAt AS analyzedAt',
+                'n.updatedAt AS updatedAt',
+            ])
+            ->andWhere('n.status = :status')
+            ->setParameter('status', ErpDeliveryNote::STATUS_FAILED)
+            ->orderBy('n.clientName', 'ASC')
+            ->addOrderBy('n.clientId', 'ASC')
+            ->addOrderBy('n.documentDate', 'DESC')
+            ->addOrderBy('n.piece', 'ASC')
+            ->getQuery()
+            ->getArrayResult();
+    }
+
     private function createFilteredQueryBuilder(string $search, string $status): QueryBuilder
     {
         $queryBuilder = $this->createQueryBuilder('n');
