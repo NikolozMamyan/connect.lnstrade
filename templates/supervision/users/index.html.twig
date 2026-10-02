@@ -42,6 +42,7 @@
                             <th>Nom</th>
                             <th>Email</th>
                             <th>Role</th>
+                            <th>Activite</th>
                             <th>Cree le</th>
                             <th>Maj le</th>
                             <th style="text-align: right;">Actions</th>
@@ -65,6 +66,24 @@
                                         {% endif %}
                                     </span>
                                 </td>
+                                <td>
+                                    {% if user.lastActivityAt and user.lastActivityAt >= onlineSince %}
+                                        <span class="tag tag-success" title="Actif dans les 5 dernieres minutes">
+                                            <i class="fas fa-circle" style="font-size: 7px;"></i>
+                                            En ligne
+                                        </span>
+                                        <div style="margin-top: 4px; font-size: 11px; color: var(--text-muted);">
+                                            Actif a {{ user.lastActivityAt|date('H:i') }}
+                                        </div>
+                                    {% elseif user.lastActivityAt %}
+                                        <div style="font-size: 12px; font-weight: 600; color: var(--text-secondary);">
+                                            {{ user.lastActivityAt|date('d/m/Y H:i') }}
+                                        </div>
+                                        <div style="margin-top: 3px; font-size: 11px; color: var(--text-muted);">Derniere activite</div>
+                                    {% else %}
+                                        <span style="font-size: 12px; color: var(--text-muted);">Jamais connecte</span>
+                                    {% endif %}
+                                </td>
                                 <td>{{ user.createdAt ? user.createdAt|date('d/m/Y H:i') : '-' }}</td>
                                 <td>{{ user.updatedAt ? user.updatedAt|date('d/m/Y H:i') : '-' }}</td>
                                 <td style="text-align: right;">
@@ -81,7 +100,7 @@
                             </tr>
                         {% else %}
                             <tr>
-                                <td colspan="6" style="text-align: center; padding: 2rem;">
+                                <td colspan="7" style="text-align: center; padding: 2rem;">
                                     Aucun utilisateur enregistre.
                                 </td>
                             </tr>

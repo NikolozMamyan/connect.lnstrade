@@ -26,4 +26,12 @@ class UserTest extends TestCase
         self::assertSame('alice@example.test', $user->getEmail());
         self::assertSame(['ROLE_ADMIN', 'ROLE_USER'], $user->getRoles());
     }
+
+    public function testLastActivityCanBeRecorded(): void
+    {
+        $lastActivityAt = new \DateTimeImmutable('2026-10-02 14:30:00');
+        $user = (new User())->setLastActivityAt($lastActivityAt);
+
+        self::assertSame($lastActivityAt, $user->getLastActivityAt());
+    }
 }

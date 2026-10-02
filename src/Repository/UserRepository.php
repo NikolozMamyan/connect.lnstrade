@@ -25,6 +25,22 @@ class UserRepository extends ServiceEntityRepository
             ->getOneOrNullResult();
     }
 
+    public function updateLastActivity(User $user, \DateTimeImmutable $lastActivityAt): void
+    {
+        if (null === $user->getId()) {
+            return;
+        }
+
+        $this->createQueryBuilder('u')
+            ->update()
+            ->set('u.lastActivityAt', ':lastActivityAt')
+            ->where('u.id = :id')
+            ->setParameter('lastActivityAt', $lastActivityAt)
+            ->setParameter('id', $user->getId())
+            ->getQuery()
+            ->execute();
+    }
+
     /**
      * @return User[]
      */

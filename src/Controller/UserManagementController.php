@@ -25,6 +25,7 @@ class UserManagementController extends AbstractController
         return $this->render('supervision/users/index.html.twig', [
             'users' => $query !== '' ? $userRepository->searchByNameOrEmail($query) : $userRepository->findAllOrdered(),
             'searchQuery' => $query,
+            'onlineSince' => new \DateTimeImmutable('-5 minutes'),
         ]);
     }
 
