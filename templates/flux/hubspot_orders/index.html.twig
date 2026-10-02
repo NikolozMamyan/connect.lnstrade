@@ -2,9 +2,37 @@
 
 {% block page_title %}Orders HubSpot{% endblock %}
 {% block page_subtitle %}BL et factures Sage rapproches localement puis synchronises avec les Orders HubSpot.{% endblock %}
+{% block page_actions %}
+    <div class="orders-history-command">
+        <div class="orders-history-command__heading">
+            <span class="orders-history-command__icon"><i class="fas fa-terminal"></i></span>
+            <div>
+                <div class="orders-history-command__title">Rattrapage historique</div>
+                <div class="orders-history-command__hint">Commande serveur à exécuter ponctuellement pour reconstruire l’historique depuis 2025.</div>
+            </div>
+        </div>
+        <div class="orders-history-command__code">
+            <code id="ordersHistoryCommand">php bin/console app:sync:delivery-orders-history --env=prod --no-debug --no-interaction</code>
+            <button type="button" id="copyOrdersHistoryCommand" class="orders-history-command__copy" aria-label="Copier la commande">
+                <i class="fas fa-copy"></i>
+                <span>Copier</span>
+            </button>
+        </div>
+    </div>
+{% endblock %}
 
 {% block content %}
     <style>
+        .orders-history-command { width:min(570px,48vw);padding:14px;border:1px solid var(--border-color);border-radius:var(--border-radius-lg);background:linear-gradient(135deg,var(--bg-surface) 0%,var(--bg-base) 100%);box-shadow:var(--shadow-sm); }
+        .orders-history-command__heading { display:flex;align-items:center;gap:10px;margin-bottom:10px; }
+        .orders-history-command__icon { display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;flex:0 0 32px;border-radius:9px;background:var(--color-info-bg);color:var(--color-info); }
+        .orders-history-command__title { font-size:13px;font-weight:700;color:var(--text-primary); }
+        .orders-history-command__hint { margin-top:2px;font-size:11px;line-height:1.4;color:var(--text-muted); }
+        .orders-history-command__code { display:flex;align-items:center;gap:8px;padding:7px 7px 7px 11px;border:1px solid var(--border-color);border-radius:var(--border-radius-md);background:var(--bg-surface); }
+        .orders-history-command__code code { min-width:0;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:var(--font-mono);font-size:11px;color:var(--text-secondary); }
+        .orders-history-command__copy { display:inline-flex;align-items:center;gap:6px;flex:0 0 auto;padding:7px 10px;border:0;border-radius:7px;background:var(--color-brand-primary);color:#fff;font:600 11px var(--font-sans);cursor:pointer;transition:background var(--transition-base),transform var(--transition-base); }
+        .orders-history-command__copy:hover { background:var(--color-brand-accent);color:var(--color-brand-primary);transform:translateY(-1px); }
+        .orders-history-command__copy.is-copied { background:var(--color-success);color:#fff; }
         .orders-toolbar { display:flex;gap:var(--space-4);align-items:flex-end;flex-wrap:wrap; }
         .orders-field { display:flex;flex-direction:column;gap:var(--space-2);min-width:170px; }
         .orders-field--search { flex:1;min-width:260px; }
@@ -18,6 +46,7 @@
         .orders-sync-indicator { display:inline-flex;align-items:center;gap:8px;padding:7px 12px;border-radius:999px;background:var(--color-warning-bg);color:#9a3412;font-size:12px;font-weight:600; }
         .orders-spinner { width:13px;height:13px;border:2px solid rgba(249,115,22,.2);border-top-color:var(--color-warning);border-radius:50%;animation:orders-spin .9s linear infinite; }
         @keyframes orders-spin { to { transform:rotate(360deg); } }
+        @media (max-width:1100px) { .page-header { flex-direction:column; } .page-actions,.orders-history-command { width:100%; } }
         @media (max-width:900px) { .orders-table-wrap { overflow-x:auto; } }
     </style>
 
@@ -132,6 +161,32 @@
             </div>
         {% endif %}
     </div>
+
+    <script>
+        (() => {
+            const button = document.getElementById('copyOrdersHistoryCommand');
+            const command = document.getElementById('ordersHistoryCommand');
+
+            if (!button || !command) return;
+
+            button.addEventListener('click', async () => {
+                try {
+                    await navigator.clipboard.writeText(command.textContent.trim());
+                    button.classList.add('is-copied');
+                    button.querySelector('i').className = 'fas fa-check';
+                    button.querySelector('span').textContent = 'Copié';
+
+                    window.setTimeout(() => {
+                        button.classList.remove('is-copied');
+                        button.querySelector('i').className = 'fas fa-copy';
+                        button.querySelector('span').textContent = 'Copier';
+                    }, 1800);
+                } catch (error) {
+                    button.querySelector('span').textContent = 'Échec';
+                }
+            });
+        })();
+    </script>
 
     {% if watchSince %}
         <script>
