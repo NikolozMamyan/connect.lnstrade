@@ -12,6 +12,8 @@ use Symfony\Contracts\HttpClient\ResponseInterface;
 
 final class SageClient
 {
+    private const MAX_RATE_LIMIT_RETRIES = 2;
+
     private string $baseUri;
     private string $sageUsername;
     private string $sagePassword;
@@ -22,6 +24,7 @@ final class SageClient
     public function __construct(
         private readonly HttpClientInterface $httpClient,
         ParameterBagInterface $parameters,
+        private readonly ?SageApiRateLimiter $rateLimiter = null,
     ) {
         $this->baseUri = rtrim($parameters->get('base_uri_sage'), '/');
         $this->sageUsername = $parameters->get('sage_username');
@@ -119,7 +122,7 @@ final class SageClient
             $options['headers'] ?? []
         );
 
-        $response = $this->httpClient->request(
+        $response = $this->send(
             $method,
             $this->buildUrl($uri),
             $options
@@ -130,7 +133,7 @@ final class SageClient
 
             $options['headers']['Authorization'] = 'Bearer '.$this->getAccessToken();
 
-            $response = $this->httpClient->request(
+            $response = $this->send(
                 $method,
                 $this->buildUrl($uri),
                 $options
@@ -169,7 +172,7 @@ final class SageClient
      */
     private function authenticate(): string
     {
-        $response = $this->httpClient->request('POST', $this->buildUrl('/auth/login'), [
+        $response = $this->send('POST', $this->buildUrl('/auth/login'), [
             'headers' => [
                 'Accept' => 'application/json',
             ],
@@ -192,6 +195,45 @@ final class SageClient
         }
 
         return $token;
+    }
+
+    private function send(string $method, string $url, array $options): ResponseInterface
+    {
+        for ($attempt = 0; ; ++$attempt) {
+            $this->rateLimiter?->acquire();
+            $response = $this->httpClient->request($method, $url, $options);
+
+            if (429 !== $response->getStatusCode()
+                || null === $this->rateLimiter
+                || $attempt >= self::MAX_RATE_LIMIT_RETRIES
+            ) {
+                return $response;
+            }
+
+            $retryAfter = $this->getRetryAfterSeconds($response);
+            $response->getContent(false);
+            $this->rateLimiter->blockFor($retryAfter);
+        }
+    }
+
+    private function getRetryAfterSeconds(ResponseInterface $response): int
+    {
+        $headers = $response->getHeaders(false);
+        $value = $headers['retry-after'][0] ?? null;
+
+        if (\is_string($value) && is_numeric($value)) {
+            return max(1, (int) ceil((float) $value));
+        }
+
+        if (\is_string($value)) {
+            $retryAt = strtotime($value);
+
+            if (false !== $retryAt) {
+                return max(1, $retryAt - time());
+            }
+        }
+
+        return 60;
     }
 
     /**
