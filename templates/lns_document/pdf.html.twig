@@ -3,9 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <title>{{ document.title }}</title>
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&amp;family=IBM+Plex+Sans:ital,wght@0,400;0,600;1,400&amp;family=IBM+Plex+Serif:wght@500&amp;display=swap" rel="stylesheet">
     <style>
         @page { size: A4 portrait; margin: 26mm 0 14mm; }
-        body { margin: 0; padding: 0; color: #1c2128; font-family: DejaVu Sans, sans-serif; }
+        body { margin: 0; padding: 0; color: #1c2128; font-family: 'IBM Plex Sans', sans-serif; line-height: 1.5; }
         .page { position: relative; z-index: 1; page-break-after: always; }
         .page:last-child { page-break-after: auto; }
         .full-page { min-height: 256mm; }
@@ -13,51 +14,56 @@
         .page-background { position: fixed; }
         .page-surface { position: absolute; }
         .side-track { position: fixed; top: -26mm; right: 0; width: 10mm; height: 297mm; border-left: 1px solid #dedad0; }
-        .side-tab { position: absolute; z-index: 2; right: 0; width: 10mm; height: 46mm; color: #fff; font-size: 8px; text-align: center; text-transform: uppercase; }
-        .side-tab span { display: block; padding: 7mm 2mm 0; }
+        .side-track-local { position: absolute; z-index: 2; }
+        .side-tab { position: absolute; z-index: 2; right: 0; width: 10mm; height: 46mm; color: #fff; font: 9px 'IBM Plex Mono', monospace; letter-spacing: .16em; text-align: center; text-transform: uppercase; }
+        .side-tab span { position: absolute; top: 21.5mm; left: -18mm; width: 46mm; height: 3mm; line-height: 3mm; transform: rotate(90deg); transform-origin: center; }
         .side-tab.bronze { top: -16mm; background: #b9863e; }
-        .side-tab.navy { position: fixed; z-index: 0; top: 42mm; background: #181f29; color: #e4c793; }
-        .side-tab.toc { position: absolute; z-index: 2; }
-        .cover-dark { position: absolute; top: -26mm; left: 0; width: 210mm; height: 74mm; padding-top: 43mm; background: #10141b; border-bottom: 3px solid #b9863e; color: #fff; text-align: center; }
-        .logo-large { display: block; width: auto; height: 20mm; margin: 0 auto 8mm; }
-        .eyebrow { display: inline-block; padding: 2mm 5mm; border: 1px solid #806f52; border-radius: 12mm; color: #e4c793; font-size: 10px; letter-spacing: 2px; text-transform: uppercase; }
+        .side-tab.navy { position: fixed; z-index: 0; top: 100mm; background: #181f29; color: #e4c793; }
+        .side-tab.toc { position: absolute; z-index: 2; top: 42mm; }
+        .cover-dark { position: absolute; top: -26mm; left: 0; width: 210mm; height: 74.35mm; padding-top: 42.85mm; background: #10141b url('{{ backgrounds.cover }}') no-repeat; background-size: 100% 100%; border-bottom: 3px solid #b9863e; color: #fff; text-align: center; }
+        .logo-large { width: auto; height: 20mm; margin: 0; vertical-align: top; }
+        .cover-logo { height: 20mm; margin-bottom: 18px; }
+        .closing-logo { height: 20mm; margin-bottom: 16px; }
+        .eyebrow { display: inline-block; min-width: 86px; padding: 6px 16px; border: 1px solid #756b5c; border-radius: 999px; color: #fff; font: 11px/14.5px 'IBM Plex Mono', monospace; letter-spacing: .16em; text-align: center; text-transform: uppercase; }
         .cover-body { position: relative; padding: 112mm 22mm 34mm; }
-        .cover-title { margin: 0 0 5mm; font-family: DejaVu Serif, serif; font-size: 36px; font-weight: normal; line-height: 1.12; }
-        .cover-description { color: #767a82; font-size: 14px; line-height: 1.65; }
-        .meta { position: absolute; top: 232mm; right: 22mm; left: 22mm; width: 156mm; border-top: 2px solid #b9863e; border-collapse: collapse; }
-        .meta td { width: 33.33%; padding: 4mm 5mm 0 0; vertical-align: top; }
-        .meta-label { margin-bottom: 2mm; color: #767a82; font-size: 8px; letter-spacing: 1px; text-transform: uppercase; }
-        .meta-value { font-size: 10px; }
-        .band { position: fixed; top: -26mm; right: 0; left: 0; height: 18mm; padding: 8mm 20mm 0 16mm; background: #10141b; color: #fff; }
+        .cover-title { margin: 14px 0 12px; font: 500 40px/1.1 'IBM Plex Serif', serif; }
+        .cover-description { max-width: 150mm; color: #767a82; font-size: 15px; line-height: 1.6; }
+        .meta { position: absolute; top: 242mm; right: 22mm; left: 22mm; width: 166mm; border-top: 1.5px solid #b9863e; border-collapse: collapse; }
+        .meta td { width: 51.1mm; padding: 16px 24px 0 0; vertical-align: top; }
+        .meta td:last-child { padding-right: 0; }
+        .meta-label { margin-bottom: 4px; color: #767a82; font: 9px 'IBM Plex Mono', monospace; letter-spacing: .1em; text-transform: uppercase; }
+        .meta-value { font: 500 12px 'IBM Plex Mono', monospace; }
+        .band { position: fixed; top: -26mm; right: 0; left: 0; height: 17.5mm; padding: 8.5mm 20mm 0 16mm; background: #10141b url('{{ backgrounds.header }}') no-repeat; background-size: 100% 100%; color: #fff; }
         .band-logo { float: left; width: auto; height: 9mm; }
-        .running { float: right; max-width: 100mm; padding-top: 3mm; overflow: hidden; font-size: 8px; letter-spacing: 1px; text-align: right; text-transform: uppercase; white-space: nowrap; }
-        .content { padding: 12mm 20mm 12mm 16mm; }
+        .running { float: right; max-width: 60%; padding-top: 3mm; overflow: hidden; font: 500 9.5px 'IBM Plex Mono', monospace; letter-spacing: .06em; text-align: right; text-transform: uppercase; white-space: nowrap; }
+        .content { padding: 16mm 20mm 12mm 16mm; }
         h1, h2, h3, p, .cover-description { word-wrap: break-word; }
-        h2 { margin: 0; font-family: DejaVu Serif, serif; font-size: 24px; font-weight: normal; page-break-after: avoid; }
-        h3 { margin: 0 0 3mm; color: #8c6429; font-size: 11px; letter-spacing: .6px; text-transform: uppercase; page-break-after: avoid; }
-        p { margin: 0 0 4mm; color: #3c4450; font-size: 11px; line-height: 1.5; orphans: 3; widows: 3; }
-        .rule { width: 15mm; height: 1px; margin: 3mm 0 5mm; background: #b9863e; page-break-after: avoid; }
-        .footer { position: fixed; right: 10mm; bottom: -14mm; left: 0; height: 9mm; padding: 5mm 20mm 0 16mm; border-top: 1px solid #dedad0; color: #767a82; font-size: 8px; }
-        .toc-row { width: 100%; padding: 3mm 0; border-bottom: 1px solid #dedad0; font-size: 11px; page-break-inside: avoid; }
-        .toc-index { display: inline-block; width: 10mm; color: #8c6429; font-size: 9px; }
-        .toc-title { display: inline-block; width: 115mm; }
-        .toc-page { float: right; width: 10mm; color: #767a82; font-size: 9px; }
-        .block { margin-top: 5mm; }
+        h1, h2 { letter-spacing: -.3px; }
+        h2 { margin: 0; font: 500 26px/1.25 'IBM Plex Serif', serif; page-break-after: avoid; }
+        h3 { margin: 22px 0 10px; color: #8c6429; font-size: 13px; font-weight: 600; line-height: 1.25; letter-spacing: .05em; text-transform: uppercase; page-break-after: avoid; }
+        p { max-width: 150mm; margin: 0 0 12px; color: #3c4450; font-size: 13.5px; line-height: 1.7; orphans: 3; widows: 3; }
+        .rule { width: 56px; height: 2px; margin: 10px 0 22px; background: #b9863e; page-break-after: avoid; }
+        .footer { position: fixed; right: 10mm; bottom: -14mm; left: 0; height: 9mm; padding: 5mm 20mm 0 16mm; border-top: 1px solid #dedad0; color: #767a82; font: 9.5px 'IBM Plex Mono', monospace; }
+        .toc-row { width: 100%; padding: 9px 0; border-bottom: 1px solid #dedad0; font-size: 14px; page-break-inside: avoid; }
+        .toc-index { display: inline-block; width: 22px; margin-right: 10px; padding-top: 4px; color: #8c6429; font: 11px/14.5px 'IBM Plex Mono', monospace; vertical-align: top; }
+        .toc-title { display: inline-block; max-width: 90mm; vertical-align: top; }
+        .toc-page { float: right; width: 18px; color: #767a82; font: 11px 'IBM Plex Mono', monospace; }
+        .block { margin-top: 24px; }
         .block-image { page-break-inside: avoid; }
-        .content-image { margin: 4mm 0 0; text-align: center; page-break-inside: avoid; }
+        .content-image { max-width: 150mm; margin: 12px 0 0; text-align: center; page-break-inside: avoid; }
         .content-image img { display: block; max-width: 100%; max-height: 125mm; margin: 0 auto; }
-        .content-image-caption { margin-top: 2mm; color: #767a82; font-size: 9px; font-style: italic; }
-        table.content-table { width: 100%; margin-top: 4mm; border-collapse: collapse; table-layout: fixed; font-size: 10px; }
+        .content-image-caption { margin-top: 7px; color: #767a82; font-size: 11.5px; font-style: italic; }
+        table.content-table { width: 150mm; margin-top: 12px; border-collapse: collapse; table-layout: fixed; }
         .content-table thead { display: table-header-group; }
         .content-table tr { page-break-inside: avoid; }
-        .content-table th { padding: 2mm 3mm; border-bottom: 2px solid #b9863e; color: #767a82; font-size: 8px; font-weight: normal; letter-spacing: .5px; text-align: left; text-transform: uppercase; }
-        .content-table td { padding: 2mm 3mm; border-bottom: 1px solid #dedad0; color: #3c4450; vertical-align: top; word-wrap: break-word; }
+        .content-table th { padding: 8px 10px; border-bottom: 2px solid #b9863e; color: #767a82; font: 500 10px 'IBM Plex Mono', monospace; letter-spacing: .07em; text-align: left; text-transform: uppercase; }
+        .content-table td { padding: 9px 10px; border-bottom: 1px solid #dedad0; color: #3c4450; font-size: 12.5px; vertical-align: top; word-wrap: break-word; }
         .empty { color: #767a82; font-style: italic; text-align: center; }
         .closing { color: #fff; text-align: center; }
-        .closing .page-surface { background: #10141b; }
-        .closing-body { position: relative; padding-top: 82mm; }
-        .closing-rule { width: 17mm; height: 1px; margin: 7mm auto; background: #e4c793; }
-        .contact { color: #c5c6ca; font-size: 9px; line-height: 1.8; }
+        .closing .page-surface { background: #10141b url('{{ backgrounds.closing }}') no-repeat; background-size: 100% 100%; }
+        .closing-body { position: relative; padding-top: 100mm; }
+        .closing-rule { width: 64px; height: 2px; margin: 0 auto 16px; background: #e4c793; }
+        .contact { color: #c5c6ca; font: 11.5px 'IBM Plex Mono', monospace; line-height: 2; }
     </style>
 </head>
 <body>
@@ -72,9 +78,10 @@
 
 <section class="page full-page" data-pdf-page="cover">
     <div class="page-surface"></div>
+    <div class="side-track side-track-local"></div>
     <div class="side-tab bronze"><span>Couverture</span></div>
     <div class="cover-dark">
-        <img class="logo-large" src="https://lnstrade.fr/assets/images/logo-lns-white--VOD4sm.png" alt="LNS Trade">
+        <div class="cover-logo"><img class="logo-large" src="https://lnstrade.fr/assets/images/logo-lns-white--VOD4sm.png" alt="LNS Trade"></div>
         <span class="eyebrow">Document LNS</span>
     </div>
     <div class="cover-body">
@@ -98,8 +105,7 @@
             <div class="rule"></div>
             {% for page in document.content %}
                 <div class="toc-row">
-                    <span class="toc-index">{{ '%02d'|format(loop.index) }}</span>
-                    <span class="toc-title">{{ page.title }}</span>
+                    <span class="toc-index">{{ '%02d'|format(loop.index) }}</span><span class="toc-title" data-toc-title-index="{{ loop.index0 }}">{{ page.title }}</span>
                     <span class="toc-page" data-toc-index="{{ loop.index0 }}">&#160;</span>
                 </div>
             {% endfor %}
@@ -144,9 +150,10 @@
 
 <section class="page full-page closing" data-pdf-page="closing">
     <div class="page-surface"></div>
+    <div class="side-track side-track-local"></div>
     <div class="side-tab bronze" style="top: 216mm;"><span>Clôture</span></div>
     <div class="closing-body">
-        <img class="logo-large" src="https://lnstrade.fr/assets/images/logo-lns-white--VOD4sm.png" alt="LNS Trade">
+        <div class="closing-logo"><img class="logo-large" src="https://lnstrade.fr/assets/images/logo-lns-white--VOD4sm.png" alt="LNS Trade"></div>
         <div class="closing-rule"></div>
         <div class="contact">
             LNS Trade — 13 Quai Kléber, 67000 Strasbourg<br>
