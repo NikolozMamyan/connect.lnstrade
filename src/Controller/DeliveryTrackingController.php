@@ -2,10 +2,7 @@
 
 namespace App\Controller;
 
-use App\Entity\User;
 use App\Service\Erp\SageDeliveryTrackingService;
-use App\Service\Erp\SageOrderAnalyticsService;
-use App\Service\Security\CommercialAccessService;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -20,8 +17,6 @@ final class DeliveryTrackingController extends AbstractController
     public function index(
         Request $request,
         SageDeliveryTrackingService $trackingService,
-        SageOrderAnalyticsService $analyticsService,
-        CommercialAccessService $commercialAccessService,
     ): Response {
         $period = $request->query->getInt('period', 30);
         $period = in_array($period, self::ALLOWED_PERIODS, true) ? $period : 30;
@@ -32,10 +27,6 @@ final class DeliveryTrackingController extends AbstractController
         $page = max(1, $request->query->getInt('page', 1));
         $dateTo = new \DateTimeImmutable('today');
         $dateFrom = $dateTo->modify(sprintf('-%d days', $period - 1));
-        /** @var User|null $user */
-        $user = $this->getUser();
-        $isCommercialScope = $commercialAccessService->isCommercialUser($user);
-        $representative = null;
         $error = null;
         $tracking = [
             'rows' => [],
@@ -44,15 +35,7 @@ final class DeliveryTrackingController extends AbstractController
         ];
 
         try {
-            if ($isCommercialScope) {
-                $representative = $analyticsService->resolveRepresentantValueByEmail((string) $user?->getEmail());
-
-                if ($representative === null) {
-                    throw new \RuntimeException('Aucun représentant Sage actif n’est associé à votre compte.');
-                }
-            }
-
-            $tracking = $trackingService->getTracking($dateFrom, $dateTo, $representative);
+            $tracking = $trackingService->getTracking($dateFrom, $dateTo);
         } catch (\Throwable $exception) {
             $error = $exception->getMessage();
         }
@@ -96,15 +79,13 @@ final class DeliveryTrackingController extends AbstractController
                 'period' => $period,
                 'q' => (string) $request->query->get('q', ''),
                 'stage' => $stage,
-                'owner' => $isCommercialScope ? '' : $owner,
+                'owner' => $owner,
             ],
             'dateFrom' => $dateFrom,
             'dateTo' => $dateTo,
             'page' => $page,
             'total' => $total,
             'totalPages' => $totalPages,
-            'isCommercialScope' => $isCommercialScope,
-            'commercialScopeName' => $commercialAccessService->resolveCommercial($user)?->getFullName(),
         ]);
     }
 }
