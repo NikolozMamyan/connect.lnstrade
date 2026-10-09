@@ -1,0 +1,96 @@
+{% extends 'base.html.twig' %}
+
+{% block title %}Boîte à outils LNS{% endblock %}
+
+{% block stylesheets %}
+    <link rel="stylesheet" href="{{ asset('css/converters.css') }}">
+{% endblock %}
+
+{% block body %}
+    <div class="converter-page" data-converter>
+        <svg class="converter-symbols" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
+            <symbol id="icon-arrow" viewBox="0 0 24 24"><path d="M5 12h14m-6-6 6 6-6 6"/></symbol>
+            <symbol id="icon-external" viewBox="0 0 24 24"><path d="M7 17 17 7M7 7h10v10"/></symbol>
+            <symbol id="icon-upload" viewBox="0 0 24 24"><path d="M12 16V4m-5 5 5-5 5 5M4 16v4h16v-4"/></symbol>
+            <symbol id="icon-download" viewBox="0 0 24 24"><path d="M12 4v12m-5-5 5 5 5-5M4 17v3h16v-3"/></symbol>
+            <symbol id="icon-check" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></symbol>
+            <symbol id="icon-lock" viewBox="0 0 24 24"><rect x="5" y="10" width="14" height="11" rx="3"/><path d="M8 10V7a4 4 0 0 1 8 0v3m-4 5v2"/></symbol>
+            <symbol id="icon-close" viewBox="0 0 24 24"><path d="m6 6 12 12M6 18 18 6"/></symbol>
+        </svg>
+
+        <header class="converter-header">
+            <div class="converter-container converter-header__inner">
+                <div class="converter-brand">
+                    <a class="converter-brand__logo" href="{{ path('lns_converters') }}" aria-label="LNS Trade · Boîte à outils">
+                        <img src="{{ asset('images/lns-logo-white.png') }}" alt="LNS Trade" width="104" height="28">
+                    </a>
+                    <h1>Boîte à outils LNS</h1>
+                </div>
+                <nav class="converter-nav" aria-label="Accès à l’extranet">
+                    <a class="converter-nav__login" href="{{ path('app_login') }}">Se connecter</a>
+                    <a class="converter-nav__extranet" href="{{ path('app_dashboard') }}">Extranet <svg class="converter-icon" aria-hidden="true"><use href="#icon-external"/></svg></a>
+                </nav>
+            </div>
+        </header>
+
+        <main class="converter-container converter-main">
+            <section class="converter-workspace" aria-label="Convertisseur de fichiers">
+                <form class="converter-form" data-converter-form>
+                    <div class="converter-upload-panel">
+                        <h2 class="converter-step"><span>01</span> Votre fichier</h2>
+                        <input class="converter-sr-only" type="file" id="converter-file" accept=".xlsx" tabindex="-1" data-file-input>
+                        <label class="converter-dropzone" for="converter-file" tabindex="0" role="button" aria-label="Choisir un fichier Excel .xlsx" data-dropzone>
+                            <span class="converter-upload-icon"><svg class="converter-icon" aria-hidden="true"><use href="#icon-upload"/></svg></span>
+                            <strong data-drop-title>Déposez votre fichier Excel</strong>
+                            <span data-drop-description>Glissez-déposez votre fichier ici</span>
+                            <span class="converter-browse">Sélectionner un fichier <svg class="converter-icon" aria-hidden="true"><use href="#icon-arrow"/></svg></span>
+                            <small>.xlsx · 20 Mo maximum</small>
+                        </label>
+                        <div class="converter-file" data-selected-file hidden>
+                            <span class="converter-file__badge">X</span>
+                            <div class="converter-file__info"><strong data-file-name></strong><span data-file-meta></span></div>
+                            <button class="converter-remove" type="button" aria-label="Retirer le fichier" data-remove-file><svg class="converter-icon" aria-hidden="true"><use href="#icon-close"/></svg></button>
+                        </div>
+                        <p class="converter-local-note"><svg class="converter-icon" aria-hidden="true"><use href="#icon-lock"/></svg> Conversion locale. Aucun fichier envoyé au serveur.</p>
+                    </div>
+
+                    <div class="converter-options-panel">
+                        <h2 class="converter-step"><span>02</span> Conversion</h2>
+                        <div class="converter-field">
+                            <label for="converter-type">Convertisseur</label>
+                            <select id="converter-type" name="converter"><option value="xlsx-csv">Excel (.xlsx) → CSV (.csv)</option></select>
+                        </div>
+                        <div class="converter-field">
+                            <label for="converter-sheet">Feuille</label>
+                            <select id="converter-sheet" data-sheet-select disabled><option>Choisissez un fichier Excel</option></select>
+                        </div>
+                        <div class="converter-field">
+                            <label for="converter-separator">Séparateur CSV</label>
+                            <select id="converter-separator" data-separator-select><option value=";">Point-virgule ( ; )</option><option value=",">Virgule ( , )</option><option value="tab">Tabulation</option></select>
+                        </div>
+                        <div class="converter-output-format"><span>FORMAT DE SORTIE</span><strong><span class="converter-csv-tag">CSV</span> UTF-8 <svg class="converter-icon" aria-hidden="true"><use href="#icon-check"/></svg></strong></div>
+                        <button class="converter-submit" type="submit" data-convert-button disabled><span data-convert-label>Convertir et télécharger</span><svg class="converter-icon" aria-hidden="true"><use href="#icon-download"/></svg></button>
+                    </div>
+                </form>
+
+                <div class="converter-feedback" role="alert" data-converter-error hidden></div>
+                <div class="converter-success" role="status" aria-live="polite" data-converter-success hidden>
+                    <span class="converter-success__icon"><svg class="converter-icon" aria-hidden="true"><use href="#icon-check"/></svg></span>
+                    <div><strong>Conversion terminée</strong><p data-result-description></p></div>
+                    <a data-download-link>Télécharger à nouveau <svg class="converter-icon" aria-hidden="true"><use href="#icon-download"/></svg></a>
+                </div>
+                <section class="converter-preview" aria-labelledby="converter-preview-title" data-preview hidden>
+                    <div class="converter-preview__header"><h3 id="converter-preview-title">Aperçu du fichier</h3><span data-preview-summary></span></div>
+                    <div class="converter-preview__scroll"><table aria-label="Aperçu des premières lignes de la feuille Excel"><tbody data-preview-body></tbody></table></div>
+                    <p>Les 5 premières lignes et colonnes.</p>
+                </section>
+            </section>
+            <noscript><p class="converter-feedback">Activez JavaScript dans votre navigateur pour convertir un fichier Excel.</p></noscript>
+        </main>
+    </div>
+{% endblock %}
+
+{% block javascripts %}
+    <script src="{{ asset('lib/sheetjs/xlsx-0.20.3.min.js') }}" defer></script>
+    <script src="{{ asset('converters.js') }}" defer></script>
+{% endblock %}

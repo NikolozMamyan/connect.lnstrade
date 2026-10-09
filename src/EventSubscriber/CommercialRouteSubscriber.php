@@ -23,6 +23,7 @@ final class CommercialRouteSubscriber implements EventSubscriberInterface
         'app_index',
         'app_login',
         'app_logout',
+        'lns_converters',
     ];
 
     public function __construct(
