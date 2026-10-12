@@ -48,7 +48,7 @@ final class HubspotDeliveryOrderSyncServiceTest extends TestCase
                         'referenceArticle' => 'SKU-1',
                         'designationArticle' => 'Article test',
                         'qteArticle' => 2,
-                        'prixHTArticle' => 50,
+                        'prixHTArticle' => 50.002,
                         'montantArticle' => 100,
                         'tauxTva' => 20,
                     ]]),
@@ -159,6 +159,8 @@ final class HubspotDeliveryOrderSyncServiceTest extends TestCase
         self::assertSame(['line-789'], $storedDeliveryNote->getHubspotLineItemIds());
         self::assertSame('product-456', $lineItemPayload['properties']['hs_product_id']);
         self::assertSame('tax-20', $lineItemPayload['properties']['hs_tax_rate_group_id']);
+        self::assertSame(50.002, $lineItemPayload['properties']['price']);
+        self::assertArrayNotHasKey('discount', $lineItemPayload['properties']);
         self::assertSame('sage:0:3:BL001', $orderPayload['properties']['hs_external_order_id']);
         self::assertSame(120.0, $orderPayload['properties']['hs_total_price']);
         self::assertSame('Yes', $orderPayload['properties']['order_paid']);

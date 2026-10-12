@@ -20,6 +20,7 @@ final class HubspotDeliveryOrderSyncService
     private const SAGE_DOCUMENT_DOMAIN = 0;
     private const SAGE_DELIVERY_NOTE_TYPE = 3;
     private const SAGE_INVOICE_TYPES = [6, 7];
+    private const LINE_ROUNDING_TOLERANCE = 0.005001;
 
     /** @var array<string, array<string, mixed>|null> */
     private array $productCache = [];
@@ -925,6 +926,11 @@ final class HubspotDeliveryOrderSyncService
         $listedUnitPrice = $this->numeric($line['prixHTArticle'] ?? null) ?? 0.0;
         $lineAmount = $this->numeric($line['montantArticle'] ?? null);
         $netUnitPrice = $lineAmount !== null ? $lineAmount / $quantity : $listedUnitPrice;
+
+        if ($lineAmount !== null && abs(($listedUnitPrice * $quantity) - $lineAmount) <= self::LINE_ROUNDING_TOLERANCE) {
+            $netUnitPrice = $listedUnitPrice;
+        }
+
         $properties = [
             'name' => $name !== '' ? $name : ($reference !== '' ? $reference : 'Ligne Sage'),
             'quantity' => $quantity,
