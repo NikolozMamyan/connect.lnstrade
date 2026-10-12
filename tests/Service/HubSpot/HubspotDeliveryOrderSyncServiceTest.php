@@ -44,14 +44,24 @@ final class HubspotDeliveryOrderSyncServiceTest extends TestCase
                         'reference' => 'REF-CLIENT',
                         'champsLibres' => [],
                     ]]),
-                    ['GET', '/Document/line'] => self::jsonResponse([[
-                        'referenceArticle' => 'SKU-1',
-                        'designationArticle' => 'Article test',
-                        'qteArticle' => 2,
-                        'prixHTArticle' => 50.002,
-                        'montantArticle' => 100,
-                        'tauxTva' => 20,
-                    ]]),
+                    ['GET', '/Document/line'] => self::jsonResponse([
+                        [
+                            'referenceArticle' => 'SKU-1',
+                            'designationArticle' => 'Article test',
+                            'qteArticle' => 2,
+                            'prixHTArticle' => 60.002,
+                            'montantArticle' => 120,
+                            'tauxTva' => 20,
+                        ],
+                        [
+                            'referenceArticle' => 'ZREMISE',
+                            'designationArticle' => 'Remise commerciale',
+                            'qteArticle' => 1,
+                            'prixHTArticle' => -20,
+                            'montantArticle' => -20,
+                            'tauxTva' => 0,
+                        ],
+                    ]),
                     ['GET', '/Clients'] => self::jsonResponse([[
                         'reference' => 'CLI001',
                         'intitule' => 'Client test',
@@ -159,9 +169,11 @@ final class HubspotDeliveryOrderSyncServiceTest extends TestCase
         self::assertSame(['line-789'], $storedDeliveryNote->getHubspotLineItemIds());
         self::assertSame('product-456', $lineItemPayload['properties']['hs_product_id']);
         self::assertSame('tax-20', $lineItemPayload['properties']['hs_tax_rate_group_id']);
-        self::assertSame(50.002, $lineItemPayload['properties']['price']);
+        self::assertSame(60.002, $lineItemPayload['properties']['price']);
         self::assertArrayNotHasKey('discount', $lineItemPayload['properties']);
         self::assertSame('sage:0:3:BL001', $orderPayload['properties']['hs_external_order_id']);
+        self::assertSame(120.0, $orderPayload['properties']['hs_subtotal_price']);
+        self::assertSame(20.0, $orderPayload['properties']['hs_order_discount']);
         self::assertSame(120.0, $orderPayload['properties']['hs_total_price']);
         self::assertSame('Yes', $orderPayload['properties']['order_paid']);
         self::assertSame('DDP', $orderPayload['properties']['incoterm']);

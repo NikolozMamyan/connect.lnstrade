@@ -359,10 +359,10 @@ final class DeliveryOrderCorrectionReportExporter
 
         if (str_contains($normalized, 'price') && str_contains($normalized, 'must not be negative')) {
             return $this->correction(
-                'Prix negatif refuse par HubSpot',
-                'Verifier la ligne negative dans Sage et la transformer en remise ou en avoir compatible avant de relancer.',
-                'A corriger',
-                1,
+                'Remise Sage a resynchroniser',
+                'Le connecteur transforme maintenant les lignes negatives en remise globale HubSpot. Relancer la synchronisation.',
+                'A relancer',
+                2,
                 null,
             );
         }

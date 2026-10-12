@@ -417,6 +417,16 @@ final class HubspotDeliveryOrderSyncService
         array $warnings,
         bool $isInvoice,
     ): array {
+        $linesForHubSpot = $this->filterDiscountLines($lines);
+        $orderDiscount = $this->calculateOrderDiscount($lines);
+
+        if ($orderDiscount > 0.0) {
+            $warnings[] = sprintf(
+                'Les lignes negatives Sage ont ete consolidees en remise globale HubSpot de %.2f EUR HT.',
+                $orderDiscount,
+            );
+        }
+
         $existingOrderId = $deliveryNote->getHubspotOrderId()
             ?? $this->findExistingOrderId($deliveryNote->getSageKey());
 
@@ -430,7 +440,7 @@ final class HubspotDeliveryOrderSyncService
                 $lineItemIds = $this->synchronizeExistingLineItems(
                     $deliveryNote,
                     $existingOrderId,
-                    $lines,
+                    $linesForHubSpot,
                     $warnings,
                 );
                 $this->hubSpotClient->patch(
@@ -471,12 +481,12 @@ final class HubspotDeliveryOrderSyncService
         $ownerId = $this->resolveOwnerId((string) ($header['representant'] ?? ''), $warnings);
         $lineItemIds = $deliveryNote->getHubspotLineItemIds();
 
-        if (count($lineItemIds) > count($lines)) {
+        if (count($lineItemIds) > count($linesForHubSpot)) {
             throw new \RuntimeException('Le registre local contient plus de line items HubSpot que le document Sage.');
         }
 
-        for ($position = count($lineItemIds); $position < count($lines); ++$position) {
-            $line = $lines[$position];
+        for ($position = count($lineItemIds); $position < count($linesForHubSpot); ++$position) {
+            $line = $linesForHubSpot[$position];
             $properties = $this->buildLineItemProperties($line, $warnings);
             $response = $this->hubSpotClient->post(
                 sprintf('/crm/objects/%s/line_items', self::API_VERSION),
@@ -525,6 +535,47 @@ final class HubspotDeliveryOrderSyncService
             'existing' => false,
             'updated' => false,
         ];
+    }
+
+    /**
+     * @param list<array<string, mixed>> $lines
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function filterDiscountLines(array $lines): array
+    {
+        return array_values(array_filter(
+            $lines,
+            fn (array $line): bool => !$this->isDiscountLine($line),
+        ));
+    }
+
+    /**
+     * @param list<array<string, mixed>> $lines
+     */
+    private function calculateOrderDiscount(array $lines): float
+    {
+        $discount = 0.0;
+
+        foreach ($lines as $line) {
+            $lineAmount = $this->numeric($line['montantArticle'] ?? null);
+
+            if ($lineAmount !== null && $lineAmount < -0.000001) {
+                $discount += abs($lineAmount);
+            }
+        }
+
+        return round($discount, 6);
+    }
+
+    /**
+     * @param array<string, mixed> $line
+     */
+    private function isDiscountLine(array $line): bool
+    {
+        $lineAmount = $this->numeric($line['montantArticle'] ?? null);
+
+        return $lineAmount !== null && $lineAmount < -0.000001;
     }
 
     /**
@@ -994,6 +1045,7 @@ final class HubspotDeliveryOrderSyncService
         $freeFields = isset($header['champsLibres']) && is_array($header['champsLibres']) ? $header['champsLibres'] : [];
         $amountExcludingTax = $this->numeric($header['montantHT'] ?? null) ?? 0.0;
         $amountIncludingTax = $this->numeric($header['montantTTC'] ?? null) ?? 0.0;
+        $orderDiscount = $this->calculateOrderDiscount($lines);
         $documentName = match (true) {
             $deliveryNote->getInvoicePiece() === null => sprintf('BL %s', $deliveryNote->getPiece()),
             $deliveryNote->getInvoicePiece() === $deliveryNote->getPiece() => sprintf('Facture %s', $deliveryNote->getPiece()),
@@ -1002,7 +1054,8 @@ final class HubspotDeliveryOrderSyncService
         $properties = [
             'hs_order_name' => sprintf('%s%s', $documentName, $clientName !== '' ? ' - '.$clientName : ''),
             'hs_external_order_id' => $deliveryNote->getSageKey(),
-            'hs_subtotal_price' => $amountExcludingTax,
+            'hs_subtotal_price' => round($amountExcludingTax + $orderDiscount, 6),
+            'hs_order_discount' => $orderDiscount,
             'hs_tax' => round($amountIncludingTax - $amountExcludingTax, 6),
             'hs_total_price' => $amountIncludingTax,
             'hs_currency_code' => 'EUR',
