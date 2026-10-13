@@ -9,6 +9,7 @@ use App\Service\Erp\SageClient;
 use App\Service\Erp\SageDeliveryTrackingService;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
+use Psr\Log\NullLogger;
 use Symfony\Component\DependencyInjection\Container;
 use Symfony\Component\DependencyInjection\ParameterBag\ParameterBag;
 use Symfony\Component\DomCrawler\Crawler;
@@ -56,6 +57,7 @@ final class DeliveryTrackingControllerTest extends TestCase
                 'sage_password' => 'password',
             ])),
             $companyRepository,
+            new NullLogger(),
         );
 
         $user = (new User())->setEmail('anthony.chaoui@lnstrade.fr')->setRoles(['ROLE_COM']);

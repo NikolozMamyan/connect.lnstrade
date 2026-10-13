@@ -66,10 +66,26 @@
         .delivery-progress__labels { display:flex;justify-content:space-between;margin-top:5px;color:#a0a4b8;font-size:9px;font-weight:800;letter-spacing:.04em; }
         .delivery-progress__labels span.is-done { color:var(--text-secondary); }
         .delivery-table .delivery-payment-cell { width:1%;text-align:center;white-space:nowrap; }
-        .delivery-payment-badge { display:inline-flex;align-items:center;gap:7px;padding:5px 10px 5px 6px;border:1px solid var(--payment-border);border-radius:999px;background:var(--payment-bg);color:var(--payment-color);box-shadow:inset 0 1px 0 rgba(255,255,255,.8);font-size:11px;font-weight:800;line-height:20px; }
+        .delivery-payment-badge { display:inline-flex;align-items:center;gap:7px;padding:5px 10px 5px 6px;border:1px solid var(--payment-border);border-radius:999px;background:var(--payment-bg);color:var(--payment-color);box-shadow:inset 0 1px 0 rgba(255,255,255,.8);font-family:inherit;font-size:11px;font-weight:800;line-height:20px;cursor:help; }
+        .delivery-payment-badge:focus-visible { outline:2px solid var(--payment-color);outline-offset:3px; }
         .delivery-payment-badge__icon { display:grid;place-items:center;flex:0 0 20px;width:20px;height:20px;border-radius:50%;background:var(--payment-icon-bg);font-size:10px; }
         .delivery-payment-badge--unpaid { --payment-color:#92400e;--payment-bg:#fffbeb;--payment-border:#fde68a;--payment-icon-bg:#fef3c7; }
         .delivery-payment-badge--paid { --payment-color:#15803d;--payment-bg:#f0fdf4;--payment-border:#bbf7d0;--payment-icon-bg:#dcfce7; }
+        .delivery-payment-badge--unknown { --payment-color:#6b7280;--payment-bg:#f9fafb;--payment-border:#e5e7eb;--payment-icon-bg:#f3f4f6; }
+        .delivery-payment-tooltip { position:fixed;z-index:calc(var(--z-overlay) + 1);width:290px;max-width:calc(100vw - 24px);border:1px solid var(--payment-border);border-top:3px solid var(--payment-color);border-radius:16px;background:#fff;box-shadow:0 16px 40px rgba(26,31,60,.18);color:var(--text-primary);font-family:var(--font-sans);text-align:left;white-space:normal; }
+        .delivery-payment-tooltip__header { display:flex;align-items:center;gap:10px;padding:14px 16px;border-radius:13px 13px 0 0;background:linear-gradient(135deg,var(--payment-bg),#fff); }
+        .delivery-payment-tooltip__icon { display:grid;place-items:center;flex:0 0 32px;height:32px;border-radius:10px;background:var(--payment-icon-bg);color:var(--payment-color);font-size:13px; }
+        .delivery-payment-tooltip__title { margin:0;font-size:13px;font-weight:800;line-height:1.4; }
+        .delivery-payment-tooltip__piece { margin-top:3px;color:var(--text-muted);font-family:var(--font-mono);font-size:10px; }
+        .delivery-payment-tooltip__body { padding:0 16px 16px; }
+        .delivery-payment-tooltip__message { margin:0;color:var(--text-secondary);font-size:12px;line-height:1.6; }
+        .delivery-payment-tooltip__due { display:flex;align-items:center;gap:11px;margin-top:13px;padding:12px;border:1px solid var(--border-color);border-radius:11px;background:var(--bg-base); }
+        .delivery-payment-tooltip__calendar { display:grid;place-items:center;flex:0 0 32px;height:32px;border-radius:9px;background:#fff;color:var(--text-secondary);font-size:14px; }
+        .delivery-payment-tooltip__label { display:block;color:var(--text-muted);font-size:9px;font-weight:800;letter-spacing:.04em;text-transform:uppercase; }
+        .delivery-payment-tooltip__date { display:block;margin-top:3px;font-size:16px;font-weight:800;line-height:1.3; }
+        .delivery-payment-tooltip__missing { display:block;margin-top:3px;color:var(--text-secondary);font-size:12px;font-weight:600; }
+        .delivery-payment-tooltip__codes { display:flex;align-items:center;flex-wrap:wrap;gap:6px;margin-top:12px;color:var(--text-muted);font-size:11px; }
+        .delivery-payment-tooltip__code { padding:3px 7px;border-radius:6px;background:var(--payment-bg);color:var(--payment-color);font-family:var(--font-mono);font-size:10px;font-weight:700; }
         .delivery-date { white-space:nowrap;color:var(--text-secondary);font-size:12px; }
         .delivery-date strong { display:block;color:var(--text-primary);font-size:12px; }
         .delivery-empty { padding:54px 20px;text-align:center;color:var(--text-muted); }
@@ -138,7 +154,7 @@
                 <a class="btn btn-secondary btn-sm" href="{{ path('delivery_tracking_index', filters) }}" title="Actualiser les données Sage" aria-label="Actualiser les données Sage"><i class="fas fa-rotate"></i> Actualiser</a>
             </div>
         </div>
-        <div class="delivery-table-wrap">
+        <div class="delivery-table-wrap" data-controller="delivery-payment" data-action="keydown.esc@window->delivery-payment#hide scroll@window->delivery-payment#position:capture resize@window->delivery-payment#position pointerdown@document->delivery-payment#dismiss">
             <table class="delivery-table">
                 <thead><tr><th>Numéro de pièce</th><th>Client</th><th>Owner</th><th>Progression livraison</th><th class="delivery-payment-cell">Paiement</th><th>Création</th><th>Dernière évolution</th></tr></thead>
                 <tbody>
@@ -155,7 +171,22 @@
                                     <div class="delivery-progress__labels"><span class="{{ row.stageRank >= 1 ? 'is-done' : '' }}">BC</span><span class="{{ row.stageRank >= 2 ? 'is-done' : '' }}">BL</span><span class="{{ row.stageRank >= 3 ? 'is-done' : '' }}">FC</span></div>
                                 </div>
                             </td>
-                            <td class="delivery-payment-cell"><span class="delivery-payment-badge delivery-payment-badge--unpaid" title="Statut provisoire, en attente de confirmation du paiement."><span class="delivery-payment-badge__icon"><i class="fas fa-clock" aria-hidden="true"></i></span>Non payé</span></td>
+                            <td class="delivery-payment-cell">
+                                {% set paymentLabel = row.paymentStatus == 'paid' ? 'Payé' : (row.paymentStatus == 'unpaid' ? 'Non payé' : '—') %}
+                                {% set paymentIcon = row.paymentStatus == 'paid' ? 'fa-check' : (row.paymentStatus == 'unpaid' ? 'fa-clock' : 'fa-question') %}
+                                {% set paymentHeading = row.paymentStatus == 'paid' ? 'Paiement confirmé' : (row.paymentStatus == 'unpaid' ? 'Paiement en attente' : 'Paiement à vérifier') %}
+                                <button type="button" class="delivery-payment-badge delivery-payment-badge--{{ row.paymentStatus }}" aria-label="{{ paymentLabel == '—' ? 'Paiement non disponible' : paymentLabel }}" aria-describedby="payment-tooltip-{{ loop.index }}" data-action="mouseenter->delivery-payment#show mouseleave->delivery-payment#scheduleHide focus->delivery-payment#show blur->delivery-payment#scheduleHide click->delivery-payment#show"><span class="delivery-payment-badge__icon"><i class="fas {{ paymentIcon }}" aria-hidden="true"></i></span>{{ paymentLabel }}</button>
+                                <template>
+                                    <div id="payment-tooltip-{{ loop.index }}" role="tooltip" class="delivery-payment-tooltip delivery-payment-badge--{{ row.paymentStatus }}">
+                                        <div class="delivery-payment-tooltip__header"><span class="delivery-payment-tooltip__icon"><i class="fas {{ paymentIcon }}" aria-hidden="true"></i></span><div><div class="delivery-payment-tooltip__title">{{ paymentHeading }}</div><div class="delivery-payment-tooltip__piece">{{ row.piece }}</div></div></div>
+                                        <div class="delivery-payment-tooltip__body">
+                                            <p class="delivery-payment-tooltip__message">{% if row.paymentStatus == 'paid' %}Cette facture est entièrement lettrée en comptabilité.{% elseif row.paymentStatus == 'unpaid' %}Le règlement complet de cette facture n’est pas encore confirmé en comptabilité.{% elseif row.stage != 'fc' %}Le paiement est suivi sur la facture correspondante, une fois enregistrée en comptabilité.{% else %}Les informations disponibles ne permettent pas de confirmer le règlement de cette facture.{% endif %}</p>
+                                            <div class="delivery-payment-tooltip__due"><span class="delivery-payment-tooltip__calendar"><i class="fas fa-calendar-alt" aria-hidden="true"></i></span><div><span class="delivery-payment-tooltip__label">Échéance de règlement</span>{% if row.paymentDueAt %}<time class="delivery-payment-tooltip__date" datetime="{{ row.paymentDueAt|date('Y-m-d') }}">{{ row.paymentDueAt|date('d/m/Y') }}</time>{% else %}<span class="delivery-payment-tooltip__missing">Non disponible</span>{% endif %}</div></div>
+                                            {% if row.paymentCodes %}<div class="delivery-payment-tooltip__codes"><span>Lettrage</span>{% for code in row.paymentCodes %}<span class="delivery-payment-tooltip__code">{{ code }}</span>{% endfor %}</div>{% endif %}
+                                        </div>
+                                    </div>
+                                </template>
+                            </td>
                             <td class="delivery-date"><strong>{{ row.createdAt ? row.createdAt|date('d/m/Y') : '—' }}</strong>{{ row.createdAt ? row.createdAt|date('H:i') : 'Non disponible' }}</td>
                             <td class="delivery-date"><strong>{{ row.updatedAt ? row.updatedAt|date('d/m/Y') : '—' }}</strong>{{ row.updatedAt ? row.updatedAt|date('H:i') : 'Non disponible' }}</td>
                         </tr>

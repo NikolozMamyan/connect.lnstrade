@@ -3,6 +3,7 @@
 namespace App\Service\Erp;
 
 use App\Repository\HubspotCompanyRepository;
+use Psr\Log\LoggerInterface;
 
 final class SageDeliveryTrackingService
 {
@@ -12,6 +13,7 @@ final class SageDeliveryTrackingService
     public function __construct(
         private readonly SageClient $sageClient,
         private readonly HubspotCompanyRepository $companyRepository,
+        private readonly LoggerInterface $logger,
     ) {
     }
 
@@ -58,6 +60,7 @@ final class SageDeliveryTrackingService
         }
 
         $rows = array_values($rowsByPiece);
+        $this->applyPaymentStatuses($rows);
         $clientNames = $this->companyRepository->findNamesIndexedByErpIds(array_column($rows, 'clientId'));
 
         foreach ($rows as &$row) {
@@ -84,6 +87,84 @@ final class SageDeliveryTrackingService
             'summary' => $summary,
             'fetchedAt' => new \DateTimeImmutable(),
         ];
+    }
+
+    private function applyPaymentStatuses(array &$rows): void
+    {
+        if (!array_filter($rows, static fn (array $row): bool => $row['stage'] === 'fc')) {
+            return;
+        }
+
+        try {
+            $entries = $this->extractList($this->sageClient->get('/Document/lettrage'));
+        } catch (\Throwable $exception) {
+            $this->logger->warning('Impossible de charger les lettrages Sage pour le suivi livraison.', [
+                'exception' => $exception,
+            ]);
+
+            return;
+        }
+
+        $entriesByClientAndPiece = [];
+
+        foreach ($entries as $entry) {
+            $clientId = trim((string) ($entry['Client'] ?? ''));
+            $piece = trim((string) ($entry['Piece'] ?? ''));
+
+            if ($clientId !== '' && $piece !== '') {
+                $entriesByClientAndPiece[$clientId][$piece][] = $entry;
+            }
+        }
+
+        foreach ($rows as &$row) {
+            $documentEntries = $entriesByClientAndPiece[$row['clientId']][$row['piece']] ?? [];
+
+            if ($row['stage'] !== 'fc' || $documentEntries === []) {
+                continue;
+            }
+
+            $allKnown = true;
+            $allPaid = true;
+            $paidByJournal = [];
+            $dueAt = null;
+            $unpaidDueAt = null;
+
+            foreach ($documentEntries as $entry) {
+                $letter = $entry['Lettre'] ?? null;
+                $isPaid = in_array($letter, [1, '1'], true);
+                $allKnown = $allKnown && in_array($letter, [0, 1, '0', '1'], true);
+                $allPaid = $allPaid && $isPaid;
+                $journal = trim((string) ($entry['Journal'] ?? ''));
+
+                if ($journal !== '') {
+                    $paidByJournal[$journal] = ($paidByJournal[$journal] ?? true) && $isPaid;
+                }
+
+                $code = trim((string) ($entry['Lettrage'] ?? ''));
+
+                if ($code !== '') {
+                    $row['paymentCodes'][] = $code;
+                }
+
+                $entryDueAt = $this->toDate($entry["Date d'échéance"] ?? null);
+
+                if ($entryDueAt !== null && (int) $entryDueAt->format('Y') > 1900) {
+                    if ($dueAt === null || $entryDueAt < $dueAt) {
+                        $dueAt = $entryDueAt;
+                    }
+
+                    if (!$isPaid && ($unpaidDueAt === null || $entryDueAt < $unpaidDueAt)) {
+                        $unpaidDueAt = $entryDueAt;
+                    }
+                }
+            }
+
+            $allKnown = $allKnown && count(array_unique($paidByJournal)) <= 1;
+            $row['paymentStatus'] = $allKnown ? ($allPaid ? 'paid' : 'unpaid') : 'unknown';
+            $row['paymentCodes'] = array_values(array_unique($row['paymentCodes']));
+            $row['paymentDueAt'] = $unpaidDueAt ?? $dueAt;
+        }
+        unset($row);
     }
 
     private function isTrackableDocument(int $type, string $piece): bool
@@ -143,6 +224,9 @@ final class SageDeliveryTrackingService
             },
             'sourceType' => $type,
             'sageStatus' => trim((string) ($header['statut'] ?? '')),
+            'paymentStatus' => 'unknown',
+            'paymentCodes' => [],
+            'paymentDueAt' => null,
         ];
     }
 
