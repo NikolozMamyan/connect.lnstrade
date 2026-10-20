@@ -11,6 +11,17 @@ parameters:
         '20': '115152086'
     hubspot_delivery_order_pipeline: '3942112450'
     hubspot_delivery_order_stage: '5659785460'
+    hubspot_delivery_order_excluded_client_ids:
+        - '9DACHSER'
+        - '9JUNG'
+        - '9EDTRANS'
+        - '9STEFRESTAURATION'
+        - '9LNSTR'
+        - '9LISALHUILLIER'
+        - '9LOGISTIQUESERV'
+        - '9MEDIATOONLIC'
+        - '9STEFT'
+        - '9STEFTS'
     delivery_order_report_recipient: 'corentin.bury@lnstrade.fr'
     base_uri_sage: '%env(SAGE_BASE_URI)%'
     sage_username: '%env(SAGE_USERNAME)%'
@@ -50,6 +61,10 @@ services:
         arguments:
             $maxCalls: '%sage_api_rate_limit%'
             $intervalSeconds: '%sage_api_rate_interval%'
+
+    App\Service\HubSpot\HubspotDeliveryOrderSyncService:
+        arguments:
+            $excludedClientIds: '%hubspot_delivery_order_excluded_client_ids%'
 
     App\EventSubscriber\SessionRenewalSubscriber:
         arguments:

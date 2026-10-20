@@ -37,6 +37,9 @@ final class HubspotDeliveryOrderSyncService
     /** @var array<string, list<array<string, mixed>>> */
     private array $sageListCache = [];
 
+    /** @var array<string, true> */
+    private array $excludedClientIds = [];
+
     public function __construct(
         private readonly SageClient $sageClient,
         private readonly HubSpotClient $hubSpotClient,
@@ -50,7 +53,15 @@ final class HubspotDeliveryOrderSyncService
         private readonly string $orderStage,
         #[Autowire('%hubspot_order_form_tax_rate_group_ids%')]
         private readonly array $taxRateGroupIds,
+        array $excludedClientIds = [],
     ) {
+        foreach ($excludedClientIds as $clientId) {
+            $clientId = strtoupper(trim((string) $clientId));
+
+            if ($clientId !== '') {
+                $this->excludedClientIds[$clientId] = true;
+            }
+        }
     }
 
     /**
@@ -237,6 +248,13 @@ final class HubspotDeliveryOrderSyncService
         $isInvoice = in_array($documentType, self::SAGE_INVOICE_TYPES, true);
         ++$result['analyzed'];
         ++$result[$isInvoice ? 'invoicesAnalyzed' : 'deliveryNotesAnalyzed'];
+
+        if (isset($this->excludedClientIds[strtoupper(trim((string) ($header['tiers'] ?? '')))])) {
+            ++$result['skipped'];
+
+            return;
+        }
+
         $deliveryNote = $this->resolveLocalRecord($header, $documentType);
 
         if (!$isInvoice && $deliveryNote?->getInvoicePiece() !== null) {

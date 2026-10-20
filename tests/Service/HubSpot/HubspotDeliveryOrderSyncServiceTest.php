@@ -499,6 +499,67 @@ final class HubspotDeliveryOrderSyncServiceTest extends TestCase
         self::assertSame('BC009', $updatedOrderPayload['properties']['order_reference']);
     }
 
+    public function testExcludedSupplierIsSkippedBeforeAnyLocalOrHubSpotWrite(): void
+    {
+        $sageClient = new SageClient(
+            new MockHttpClient(static function (string $method, string $url): MockResponse {
+                $path = (string) parse_url($url, PHP_URL_PATH);
+                parse_str((string) parse_url($url, PHP_URL_QUERY), $query);
+
+                if ($method === 'POST' && $path === '/auth/login') {
+                    return self::jsonResponse(['accessToken' => 'sage-token']);
+                }
+
+                if ($method === 'GET' && $path === '/Document/header') {
+                    return (int) ($query['type'] ?? -1) === 3
+                        ? self::jsonResponse([[
+                            'piece' => 'BL-FOURNISSEUR',
+                            'tiers' => '9DACHSER',
+                            'date' => '2026-10-20T00:00:00+02:00',
+                        ]])
+                        : self::jsonResponse([]);
+                }
+
+                throw new \RuntimeException(sprintf('Unexpected Sage request: %s %s', $method, $path));
+            }),
+            $this->parameters(),
+        );
+        $hubSpotClient = new HubSpotClient(
+            new MockHttpClient(static function (string $method, string $url): never {
+                throw new \RuntimeException(sprintf('Unexpected HubSpot request: %s %s', $method, $url));
+            }),
+            $this->parameters(),
+        );
+        $repository = $this->createMock(ErpDeliveryNoteRepository::class);
+        $repository->expects(self::never())->method('findOneBySageKey');
+        $repository->expects(self::never())->method('findOneByInvoicePiece');
+        $entityManager = $this->createMock(EntityManagerInterface::class);
+        $entityManager->expects(self::never())->method('persist');
+        $entityManager->expects(self::never())->method('flush');
+        $service = new HubspotDeliveryOrderSyncService(
+            $sageClient,
+            $hubSpotClient,
+            $repository,
+            $this->createStub(CommercialRepository::class),
+            $entityManager,
+            new NullLogger(),
+            'pipeline-orders',
+            'stage-invoiced',
+            ['20' => 'tax-20'],
+            [' 9dachser '],
+        );
+
+        $result = $service->sync(new \DateTimeImmutable('2026-10-01'), new \DateTimeImmutable('2026-10-20'));
+
+        self::assertSame(1, $result['analyzed']);
+        self::assertSame(1, $result['deliveryNotesAnalyzed']);
+        self::assertSame(0, $result['invoicesAnalyzed']);
+        self::assertSame(1, $result['skipped']);
+        self::assertSame(0, $result['discovered']);
+        self::assertSame(0, $result['sent']);
+        self::assertSame(0, $result['failed']);
+    }
+
     public function testHubSpotErrorsAreThrownInsteadOfBeingTreatedAsSuccessfulResponses(): void
     {
         $client = new HubSpotClient(
