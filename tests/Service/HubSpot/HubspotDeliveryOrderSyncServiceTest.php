@@ -102,10 +102,6 @@ final class HubspotDeliveryOrderSyncServiceTest extends TestCase
                     return self::jsonResponse(['results' => []]);
                 }
 
-                if ($method === 'POST' && $path === '/crm/objects/2026-09/companies/search') {
-                    return self::jsonResponse(['results' => [['id' => 'company-123']]]);
-                }
-
                 if ($method === 'GET' && $path === '/crm/objects/2026-09/contacts/321') {
                     return self::jsonResponse(['id' => '321', 'properties' => ['email' => 'jean@example.test']]);
                 }
@@ -156,6 +152,9 @@ final class HubspotDeliveryOrderSyncServiceTest extends TestCase
             'pipeline-orders',
             'stage-invoiced',
             ['20' => 'tax-20'],
+            [],
+            [],
+            [' cli001 ' => ' company-123 '],
         );
 
         $firstResult = $service->sync(new \DateTimeImmutable('2026-09-01'), new \DateTimeImmutable('2026-09-23'));
@@ -182,6 +181,7 @@ final class HubspotDeliveryOrderSyncServiceTest extends TestCase
             static fn (array $association): int => (int) $association['types'][0]['associationTypeId'],
             $orderPayload['associations'],
         ));
+        self::assertSame('company-123', $orderPayload['associations'][0]['to']['id']);
 
         $hubspotRequestsAfterFirstRun = $hubspotRequests;
         $secondResult = $service->sync(new \DateTimeImmutable('2026-09-01'), new \DateTimeImmutable('2026-09-23'));
@@ -499,7 +499,7 @@ final class HubspotDeliveryOrderSyncServiceTest extends TestCase
         self::assertSame('BC009', $updatedOrderPayload['properties']['order_reference']);
     }
 
-    public function testExcludedSupplierIsSkippedBeforeAnyLocalOrHubSpotWrite(): void
+    public function testExcludedSupplierAndDocumentAreSkippedBeforeAnyLocalOrHubSpotWrite(): void
     {
         $sageClient = new SageClient(
             new MockHttpClient(static function (string $method, string $url): MockResponse {
@@ -512,11 +512,18 @@ final class HubspotDeliveryOrderSyncServiceTest extends TestCase
 
                 if ($method === 'GET' && $path === '/Document/header') {
                     return (int) ($query['type'] ?? -1) === 3
-                        ? self::jsonResponse([[
-                            'piece' => 'BL-FOURNISSEUR',
-                            'tiers' => '9DACHSER',
-                            'date' => '2026-10-20T00:00:00+02:00',
-                        ]])
+                        ? self::jsonResponse([
+                            [
+                                'piece' => 'BL-FOURNISSEUR',
+                                'tiers' => '9DACHSER',
+                                'date' => '2026-10-20T00:00:00+02:00',
+                            ],
+                            [
+                                'piece' => 'FA-MANUELLE',
+                                'tiers' => 'CLIENT-ACTIF',
+                                'date' => '2026-10-20T00:00:00+02:00',
+                            ],
+                        ])
                         : self::jsonResponse([]);
                 }
 
@@ -547,14 +554,15 @@ final class HubspotDeliveryOrderSyncServiceTest extends TestCase
             'stage-invoiced',
             ['20' => 'tax-20'],
             [' 9dachser '],
+            [' fa-manuelle '],
         );
 
         $result = $service->sync(new \DateTimeImmutable('2026-10-01'), new \DateTimeImmutable('2026-10-20'));
 
-        self::assertSame(1, $result['analyzed']);
-        self::assertSame(1, $result['deliveryNotesAnalyzed']);
+        self::assertSame(2, $result['analyzed']);
+        self::assertSame(2, $result['deliveryNotesAnalyzed']);
         self::assertSame(0, $result['invoicesAnalyzed']);
-        self::assertSame(1, $result['skipped']);
+        self::assertSame(2, $result['skipped']);
         self::assertSame(0, $result['discovered']);
         self::assertSame(0, $result['sent']);
         self::assertSame(0, $result['failed']);

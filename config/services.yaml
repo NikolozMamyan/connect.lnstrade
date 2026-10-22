@@ -22,6 +22,21 @@ parameters:
         - '9MEDIATOONLIC'
         - '9STEFT'
         - '9STEFTS'
+    hubspot_delivery_order_excluded_pieces:
+        - 'BL002189'
+        - 'FA002494'
+        - 'FA000458'
+        - 'FA000240'
+        - 'FA000567'
+        - 'FA000438'
+        - 'FA000354'
+        - 'FA000568'
+        - 'FA001150'
+        - 'FA000546'
+    hubspot_delivery_order_company_ids:
+        'BTBKIKIMANGA': '422607287483'
+        'CARREFOURMABONS': '132134684877'
+        '9GEEK': '150880569544'
     delivery_order_report_recipient: 'corentin.bury@lnstrade.fr'
     base_uri_sage: '%env(SAGE_BASE_URI)%'
     sage_username: '%env(SAGE_USERNAME)%'
@@ -65,6 +80,8 @@ services:
     App\Service\HubSpot\HubspotDeliveryOrderSyncService:
         arguments:
             $excludedClientIds: '%hubspot_delivery_order_excluded_client_ids%'
+            $excludedPieces: '%hubspot_delivery_order_excluded_pieces%'
+            $companyIdsByClientId: '%hubspot_delivery_order_company_ids%'
 
     App\EventSubscriber\SessionRenewalSubscriber:
         arguments:

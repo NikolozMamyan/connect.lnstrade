@@ -40,6 +40,12 @@ final class HubspotDeliveryOrderSyncService
     /** @var array<string, true> */
     private array $excludedClientIds = [];
 
+    /** @var array<string, true> */
+    private array $excludedPieces = [];
+
+    /** @var array<string, string> */
+    private array $companyIdsByClientId = [];
+
     public function __construct(
         private readonly SageClient $sageClient,
         private readonly HubSpotClient $hubSpotClient,
@@ -54,12 +60,31 @@ final class HubspotDeliveryOrderSyncService
         #[Autowire('%hubspot_order_form_tax_rate_group_ids%')]
         private readonly array $taxRateGroupIds,
         array $excludedClientIds = [],
+        array $excludedPieces = [],
+        array $companyIdsByClientId = [],
     ) {
         foreach ($excludedClientIds as $clientId) {
             $clientId = strtoupper(trim((string) $clientId));
 
             if ($clientId !== '') {
                 $this->excludedClientIds[$clientId] = true;
+            }
+        }
+
+        foreach ($excludedPieces as $piece) {
+            $piece = strtoupper(trim((string) $piece));
+
+            if ($piece !== '') {
+                $this->excludedPieces[$piece] = true;
+            }
+        }
+
+        foreach ($companyIdsByClientId as $clientId => $companyId) {
+            $clientId = strtoupper(trim((string) $clientId));
+            $companyId = trim((string) $companyId);
+
+            if ($clientId !== '' && $companyId !== '') {
+                $this->companyIdsByClientId[$clientId] = $companyId;
             }
         }
     }
@@ -249,7 +274,9 @@ final class HubspotDeliveryOrderSyncService
         ++$result['analyzed'];
         ++$result[$isInvoice ? 'invoicesAnalyzed' : 'deliveryNotesAnalyzed'];
 
-        if (isset($this->excludedClientIds[strtoupper(trim((string) ($header['tiers'] ?? '')))])) {
+        if (isset($this->excludedClientIds[strtoupper(trim((string) ($header['tiers'] ?? '')))])
+            || isset($this->excludedPieces[strtoupper($piece)])
+        ) {
             ++$result['skipped'];
 
             return;
@@ -799,6 +826,12 @@ final class HubspotDeliveryOrderSyncService
 
     private function resolveCompanyId(string $clientId): string
     {
+        $normalizedClientId = strtoupper(trim($clientId));
+
+        if (isset($this->companyIdsByClientId[$normalizedClientId])) {
+            return $this->companyCache[$clientId] = $this->companyIdsByClientId[$normalizedClientId];
+        }
+
         if (isset($this->companyCache[$clientId])) {
             return $this->companyCache[$clientId];
         }
