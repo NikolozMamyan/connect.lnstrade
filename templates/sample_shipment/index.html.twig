@@ -1,0 +1,299 @@
+{% extends 'base.html.twig' %}
+
+{% block title %}Envoi d'échantillons · LNS Trade{% endblock %}
+
+{% block stylesheets %}
+    {{ importmap('sample-shipment') }}
+    <meta name="theme-color" content="#111936">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Échantillons">
+    <link rel="manifest" href="/echantillons/manifest.webmanifest">
+    <link rel="apple-touch-icon" href="/echantillons/icon.svg">
+{% endblock %}
+
+{% block body %}
+    <div
+        class="sample-app"
+        data-sample-app
+        data-authenticated="{{ sampleAccessGranted ? 'true' : 'false' }}"
+        data-auth-url="{{ path('sample_shipment_authenticate') }}"
+        data-products-url="{{ path('sample_shipment_products') }}"
+        data-submit-url="{{ path('sample_shipment_submit') }}"
+        data-auth-csrf="{{ authCsrfToken }}"
+        data-submit-csrf="{{ submitCsrfToken }}"
+    >
+        <header class="sample-header">
+            <div class="sample-header__inner">
+                <a class="sample-brand" href="{{ path('sample_shipment_index') }}" aria-label="Accueil échantillons">
+                    <span class="sample-brand__mark">LS</span>
+                    <span>
+                        <strong>LNS Trade</strong>
+                        <small>Salle d'échantillons</small>
+                    </span>
+                </a>
+
+                <button class="sample-install" type="button" data-install-button hidden>
+                    <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M12 3v12m0 0 4-4m-4 4-4-4M5 19h14"/></svg>
+                    Installer
+                </button>
+            </div>
+        </header>
+
+        <div class="sample-toast" data-toast role="status" aria-live="polite" hidden></div>
+
+        {% if not sampleAccessGranted %}
+            <main class="sample-gate">
+                <section class="sample-gate__card">
+                    <div class="sample-gate__icon">
+                        <svg aria-hidden="true" viewBox="0 0 24 24"><rect x="5" y="10" width="14" height="11" rx="3"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>
+                    </div>
+                    <span class="sample-eyebrow">Accès collaborateur</span>
+                    <h1>Prêt à préparer un envoi ?</h1>
+                    <p>Saisissez le code de l'appareil pour accéder au scanner d'échantillons.</p>
+
+                    <form class="sample-pin-form" data-pin-form novalidate>
+                        <label for="sample-pin">Code d'accès</label>
+                        <input id="sample-pin" name="pin" type="password" inputmode="numeric" autocomplete="one-time-code" maxlength="12" placeholder="••••••" required autofocus>
+                        <p class="sample-field-error" data-pin-error></p>
+                        <button class="sample-button sample-button--primary sample-button--wide" type="submit">
+                            <span>Ouvrir le scanner</span>
+                            <svg aria-hidden="true" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></svg>
+                        </button>
+                    </form>
+                    <p class="sample-gate__hint">L'accès sera mémorisé 30 jours sur ce téléphone.</p>
+                </section>
+            </main>
+        {% else %}
+            <main class="sample-main">
+                <section class="sample-hero">
+                    <div>
+                        <span class="sample-eyebrow">Expédition rapide</span>
+                        <h1>Nouvel envoi d'échantillons</h1>
+                        <p>Scannez les produits, renseignez le destinataire et créez le bon de commande Sage.</p>
+                    </div>
+                    <div class="sample-online" data-online-status>
+                        <span></span>
+                        <strong>En ligne</strong>
+                    </div>
+                </section>
+
+                <nav class="sample-progress" aria-label="Étapes de l'envoi">
+                    <div class="sample-progress__item is-active" data-progress-step="1">
+                        <span>1</span><strong>Produits</strong>
+                    </div>
+                    <i></i>
+                    <div class="sample-progress__item" data-progress-step="2">
+                        <span>2</span><strong>Destinataire</strong>
+                    </div>
+                    <i></i>
+                    <div class="sample-progress__item" data-progress-step="3">
+                        <span>3</span><strong>Vérification</strong>
+                    </div>
+                </nav>
+
+                <section class="sample-step is-active" data-step="1">
+                    <div class="sample-card sample-scan-card">
+                        <div class="sample-card__heading">
+                            <div>
+                                <span class="sample-card__number">01</span>
+                                <h2>Scanner les produits</h2>
+                                <p>Un nouveau scan du même article augmente automatiquement sa quantité.</p>
+                            </div>
+                            <button class="sample-camera-button" type="button" data-open-camera>
+                                <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M4 7h3l2-3h6l2 3h3v13H4z"/><circle cx="12" cy="13" r="4"/></svg>
+                                Caméra
+                            </button>
+                        </div>
+
+                        <form class="sample-search" data-product-search autocomplete="off">
+                            <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M3 5h3v14H3M9 5v14m3-14v14m4-14v14m3-14h2v14h-2"/></svg>
+                            <input data-search-input type="search" inputmode="search" placeholder="Scanner ou rechercher une référence…" aria-label="Code-barres, référence ou désignation">
+                            <button type="submit">Rechercher</button>
+                        </form>
+                        <p class="sample-search__hint">La douchette fonctionne directement dans ce champ. Appuyez sur Entrée pour valider.</p>
+                        <div class="sample-search-results" data-search-results hidden></div>
+                    </div>
+
+                    <div class="sample-card sample-cart-card">
+                        <div class="sample-card__heading sample-card__heading--compact">
+                            <div>
+                                <h2>Produits sélectionnés</h2>
+                                <p data-cart-summary>Aucun produit pour le moment</p>
+                            </div>
+                            <span class="sample-count" data-cart-count>0</span>
+                        </div>
+                        <div class="sample-cart" data-cart></div>
+                        <div class="sample-empty" data-cart-empty>
+                            <span>
+                                <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M5 8h14l-1 12H6L5 8Zm3 0V6a4 4 0 0 1 8 0v2"/></svg>
+                            </span>
+                            <strong>Votre sélection est vide</strong>
+                            <p>Scannez un premier produit pour commencer.</p>
+                        </div>
+                    </div>
+
+                    <div class="sample-actions sample-actions--end">
+                        <button class="sample-button sample-button--primary" type="button" data-next-products disabled>
+                            Continuer
+                            <svg aria-hidden="true" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></svg>
+                        </button>
+                    </div>
+                </section>
+
+                <section class="sample-step" data-step="2">
+                    <form class="sample-card sample-recipient" data-recipient-form novalidate>
+                        <div class="sample-card__heading">
+                            <div>
+                                <span class="sample-card__number">02</span>
+                                <h2>Adresse de destination</h2>
+                                <p>Ces informations seront utilisées uniquement pour ce bon de commande.</p>
+                            </div>
+                        </div>
+
+                        <div class="sample-form-grid">
+                            <div class="sample-field sample-field--wide">
+                                <label for="sample-company">Entreprise <b>*</b></label>
+                                <input id="sample-company" name="company" maxlength="150" autocomplete="organization" required placeholder="Nom de l'entreprise">
+                                <p class="sample-field-error" data-error-for="company"></p>
+                            </div>
+                            <div class="sample-field sample-field--wide">
+                                <label for="sample-contact">Nom du contact</label>
+                                <input id="sample-contact" name="contactName" maxlength="150" autocomplete="name" placeholder="Prénom et nom du destinataire">
+                                <p class="sample-field-error" data-error-for="contactName"></p>
+                            </div>
+                            <div class="sample-field sample-field--wide">
+                                <label for="sample-address">Adresse <b>*</b></label>
+                                <input id="sample-address" name="address" maxlength="150" autocomplete="address-line1" required placeholder="Numéro et voie">
+                                <p class="sample-field-error" data-error-for="address"></p>
+                            </div>
+                            <div class="sample-field sample-field--wide">
+                                <label for="sample-address-complement">Complément d'adresse</label>
+                                <input id="sample-address-complement" name="addressComplement" maxlength="150" autocomplete="address-line2" placeholder="Bâtiment, étage, service…">
+                                <p class="sample-field-error" data-error-for="addressComplement"></p>
+                            </div>
+                            <div class="sample-field">
+                                <label for="sample-postal-code">Code postal <b>*</b></label>
+                                <input id="sample-postal-code" name="postalCode" maxlength="32" autocomplete="postal-code" required>
+                                <p class="sample-field-error" data-error-for="postalCode"></p>
+                            </div>
+                            <div class="sample-field">
+                                <label for="sample-city">Ville <b>*</b></label>
+                                <input id="sample-city" name="city" maxlength="100" autocomplete="address-level2" required>
+                                <p class="sample-field-error" data-error-for="city"></p>
+                            </div>
+                            <div class="sample-field">
+                                <label for="sample-country">Pays <b>*</b></label>
+                                <input id="sample-country" name="country" maxlength="100" autocomplete="country-name" required value="France">
+                                <p class="sample-field-error" data-error-for="country"></p>
+                            </div>
+                            <div class="sample-field">
+                                <label for="sample-phone">Téléphone</label>
+                                <input id="sample-phone" name="phone" type="tel" maxlength="50" autocomplete="tel">
+                                <p class="sample-field-error" data-error-for="phone"></p>
+                            </div>
+                            <div class="sample-field sample-field--wide">
+                                <label for="sample-email">E-mail</label>
+                                <input id="sample-email" name="email" type="email" maxlength="180" autocomplete="email" placeholder="contact@entreprise.com">
+                                <p class="sample-field-error" data-error-for="email"></p>
+                            </div>
+                            <div class="sample-field sample-field--wide">
+                                <label for="sample-message">Message de livraison</label>
+                                <textarea id="sample-message" name="message" maxlength="1000" rows="4" placeholder="Horaires, accès, personne à contacter…"></textarea>
+                                <p class="sample-field-error" data-error-for="message"></p>
+                            </div>
+                        </div>
+                    </form>
+
+                    <div class="sample-actions">
+                        <button class="sample-button sample-button--secondary" type="button" data-back-products>
+                            <svg aria-hidden="true" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></svg>
+                            Retour
+                        </button>
+                        <button class="sample-button sample-button--primary" type="button" data-next-recipient>
+                            Vérifier l'envoi
+                            <svg aria-hidden="true" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></svg>
+                        </button>
+                    </div>
+                </section>
+
+                <section class="sample-step" data-step="3">
+                    <div class="sample-card sample-review">
+                        <div class="sample-card__heading">
+                            <div>
+                                <span class="sample-card__number">03</span>
+                                <h2>Vérifier avant l'envoi</h2>
+                                <p>Le BC sera créé sous le client Sage <strong>9ECH</strong>, avec des prix à 0 €.</p>
+                            </div>
+                            <span class="sample-zero-badge">Total 0,00 €</span>
+                        </div>
+
+                        <div class="sample-review__grid">
+                            <section>
+                                <span class="sample-review__label">Destinataire</span>
+                                <div data-review-recipient></div>
+                            </section>
+                            <section>
+                                <span class="sample-review__label">Produits</span>
+                                <div data-review-products></div>
+                            </section>
+                        </div>
+
+                        <div class="sample-submit-error" data-submit-error hidden></div>
+                    </div>
+
+                    <div class="sample-actions">
+                        <button class="sample-button sample-button--secondary" type="button" data-back-recipient>
+                            <svg aria-hidden="true" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></svg>
+                            Modifier
+                        </button>
+                        <button class="sample-button sample-button--primary sample-button--send" type="button" data-submit-shipment>
+                            <span class="sample-spinner" aria-hidden="true"></span>
+                            <span data-submit-label>Créer le BC Sage</span>
+                            <svg aria-hidden="true" viewBox="0 0 24 24"><path d="m22 2-7 20-4-9-9-4 20-7Z"/></svg>
+                        </button>
+                    </div>
+                </section>
+
+                <section class="sample-step" data-step="4">
+                    <div class="sample-card sample-success">
+                        <div class="sample-success__icon">
+                            <svg aria-hidden="true" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></svg>
+                        </div>
+                        <span class="sample-eyebrow">Envoi enregistré</span>
+                        <h2>Le bon de commande est créé</h2>
+                        <p>Les produits ont été transmis à Sage sous le client échantillons.</p>
+                        <div class="sample-success__reference">
+                            <span>Référence</span>
+                            <strong data-success-reference>—</strong>
+                        </div>
+                        <p class="sample-success__sage" data-success-sage hidden></p>
+                        <button class="sample-button sample-button--primary" type="button" data-new-shipment>Préparer un nouvel envoi</button>
+                    </div>
+                </section>
+
+                <p class="sample-install-help" data-install-help hidden>Sur iPhone : ouvrez le menu Partager puis choisissez « Sur l'écran d'accueil ».</p>
+            </main>
+
+            <div class="sample-camera" data-camera-modal hidden>
+                <div class="sample-camera__backdrop" data-close-camera></div>
+                <section class="sample-camera__panel" role="dialog" aria-modal="true" aria-label="Scanner un code-barres">
+                    <div class="sample-camera__header">
+                        <div>
+                            <strong>Scanner un produit</strong>
+                            <span>Placez le code-barres dans le cadre</span>
+                        </div>
+                        <button type="button" data-close-camera aria-label="Fermer le scanner">×</button>
+                    </div>
+                    <div class="sample-camera__viewport">
+                        <video data-camera-video playsinline muted></video>
+                        <div class="sample-camera__frame"><i></i><i></i><i></i><i></i></div>
+                        <div class="sample-camera__line"></div>
+                    </div>
+                    <p class="sample-camera__status" data-camera-status>Autorisation de la caméra en cours…</p>
+                </section>
+            </div>
+        {% endif %}
+    </div>
+{% endblock %}

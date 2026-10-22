@@ -48,6 +48,7 @@ parameters:
         - 'corentin.bury@lnstrade.fr'
         - 'nikoloz.mamyan@lnstrade.fr'
     order_form_upload_dir: '%kernel.project_dir%/var/uploads/order_forms'
+    sample_shipment_pin: '%env(SAMPLE_SHIPMENT_PIN)%'
     # sage_client_id: '%env(default::SAGE_CLIENT_ID)%'
     # sage_client_secret: '%env(default::SAGE_CLIENT_SECRET)%'    
 
@@ -86,3 +87,12 @@ services:
     App\EventSubscriber\SessionRenewalSubscriber:
         arguments:
             $sessionLifetime: '%app.session_lifetime%'
+
+    App\Service\SampleShipment\SampleShipmentAccessService:
+        arguments:
+            $pin: '%sample_shipment_pin%'
+            $appSecret: '%kernel.secret%'
+
+    App\Controller\SampleShipmentController:
+        arguments:
+            $sampleShipmentAuthLimiter: '@limiter.sample_shipment_auth'

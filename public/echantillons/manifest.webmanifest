@@ -1,0 +1,20 @@
+{
+  "name": "Envoi d'échantillons LNS Trade",
+  "short_name": "Échantillons",
+  "description": "Scanner et expédier les échantillons LNS Trade.",
+  "lang": "fr-FR",
+  "start_url": "/echantillons",
+  "scope": "/echantillons",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#f4f6fa",
+  "theme_color": "#111936",
+  "icons": [
+    {
+      "src": "/echantillons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

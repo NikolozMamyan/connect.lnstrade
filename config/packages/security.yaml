@@ -28,6 +28,7 @@ security:
         - { path: ^/login$, roles: PUBLIC_ACCESS }
         - { path: ^/lns/convertiseurs$, roles: PUBLIC_ACCESS }
         - { path: ^/order-form, roles: PUBLIC_ACCESS }
+        - { path: ^/echantillons, roles: PUBLIC_ACCESS }
         - { path: ^/flux/webhook$, roles: PUBLIC_ACCESS }
         - { path: ^/flux, roles: ROLE_USER }
         - { path: ^/supervision, roles: ROLE_USER }

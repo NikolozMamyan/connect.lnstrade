@@ -25,6 +25,35 @@ class ErpProductRepository extends ServiceEntityRepository
             ->getOneOrNullResult();
     }
 
+    public function findOneByBarcode(string $barcode): ?ErpProduct
+    {
+        return $this->createQueryBuilder('p')
+            ->andWhere('p.codeBarre = :barcode')
+            ->setParameter('barcode', trim($barcode))
+            ->getQuery()
+            ->getOneOrNullResult();
+    }
+
+    /**
+     * @return ErpProduct[]
+     */
+    public function searchForSamples(string $term, int $limit = 12): array
+    {
+        $term = trim($term);
+
+        return $this->createQueryBuilder('p')
+            ->addSelect('CASE WHEN p.codeBarre = :exact OR p.reference = :exact THEN 0 ELSE 1 END AS HIDDEN exact_match')
+            ->andWhere('LOWER(p.reference) LIKE :term OR LOWER(p.designation) LIKE :term OR p.codeBarre LIKE :rawTerm')
+            ->setParameter('exact', $term)
+            ->setParameter('term', '%'.mb_strtolower($term).'%')
+            ->setParameter('rawTerm', '%'.$term.'%')
+            ->orderBy('exact_match', 'ASC')
+            ->addOrderBy('p.reference', 'ASC')
+            ->setMaxResults($limit)
+            ->getQuery()
+            ->getResult();
+    }
+
     /**
      * @return ErpProduct[]
      */

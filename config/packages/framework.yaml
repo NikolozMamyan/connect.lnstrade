@@ -12,6 +12,12 @@ framework:
         cookie_httponly: true
         cookie_samesite: lax
 
+    rate_limiter:
+        sample_shipment_auth:
+            policy: fixed_window
+            limit: 5
+            interval: '15 minutes'
+
     #esi: true
     #fragments: true
 

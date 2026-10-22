@@ -16,6 +16,10 @@ return [
         'path' => './assets/app.js',
         'entrypoint' => true,
     ],
+    'sample-shipment' => [
+        'path' => './assets/sample_shipment.js',
+        'entrypoint' => true,
+    ],
     '@hotwired/stimulus' => [
         'version' => '3.2.2',
     ],
@@ -24,5 +28,14 @@ return [
     ],
     '@hotwired/turbo' => [
         'version' => '7.3.0',
+    ],
+    '@zxing/browser' => [
+        'version' => '0.2.1',
+    ],
+    '@zxing/library' => [
+        'version' => '0.23.0',
+    ],
+    'ts-custom-error' => [
+        'version' => '3.3.1',
     ],
 ];
