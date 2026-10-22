@@ -5,6 +5,7 @@ namespace App\Controller;
 use App\Entity\ErpProduct;
 use App\Repository\ErpProductRepository;
 use App\Service\SampleShipment\SampleShipmentAccessService;
+use App\Service\SampleShipment\SampleShipmentBusyException;
 use App\Service\SampleShipment\SampleShipmentService;
 use App\Service\SampleShipment\SampleShipmentValidationException;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
@@ -131,6 +132,8 @@ final class SampleShipmentController extends AbstractController
                 'message' => $exception->getMessage(),
                 'errors' => $exception->getErrors(),
             ], Response::HTTP_UNPROCESSABLE_ENTITY);
+        } catch (SampleShipmentBusyException $exception) {
+            return $this->errorResponse($exception->getMessage(), Response::HTTP_CONFLICT);
         } catch (\Throwable) {
             return $this->errorResponse(
                 'L’envoi vers Sage a échoué. La demande a été conservée et peut être relancée.',

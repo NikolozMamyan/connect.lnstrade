@@ -58,11 +58,10 @@ final class SampleShipmentServiceTest extends TestCase
                 ['POST', '/auth/login'] => self::jsonResponse(['accessToken' => 'token']),
                 ['GET', '/Clients'] => self::jsonResponse([]),
                 ['POST', '/Clients'] => self::jsonResponse(['success' => true]),
-                ['GET', '/Livraisons'] => self::jsonResponse([[
-                    'client' => '9ECH',
-                    'intitule' => 'Ancienne adresse #000001',
-                    'livraisonPrincipal' => true,
-                ]]),
+                ['GET', '/Livraisons'] => new MockResponse('{"message":"Aucune livraison trouvée pour les critères fournis."}', [
+                    'http_code' => 404,
+                    'response_headers' => ['content-type: application/json'],
+                ]),
                 ['PATCH', '/Livraisons'] => self::jsonResponse(['success' => true]),
                 ['POST', '/Livraisons'] => self::jsonResponse(['success' => true]),
                 ['POST', '/order'] => self::jsonResponse(['piece' => 'BC001234']),
@@ -99,14 +98,11 @@ final class SampleShipmentServiceTest extends TestCase
         ]);
 
         $deliveryPayload = $this->requestBody($requests, 'POST', '/Livraisons');
-        $previousDeliveryPayload = $this->requestBody($requests, 'PATCH', '/Livraisons');
         $orderPayload = $this->requestBody($requests, 'POST', '/order');
         self::assertSame('9ECH', $deliveryPayload['client']);
         self::assertSame('Boutique Démo #000042', $deliveryPayload['intitule']);
         self::assertSame('12 rue du Test', $deliveryPayload['adresse']);
         self::assertTrue($deliveryPayload['livraisonPrincipal']);
-        self::assertSame('Ancienne adresse #000001', $previousDeliveryPayload['intitule']);
-        self::assertFalse($previousDeliveryPayload['livraisonPrincipal']);
         self::assertSame('9ECH', $orderPayload['numClient']);
         self::assertSame(0, $orderPayload['orderLines'][0]['prixHT']);
         self::assertSame(3, $orderPayload['orderLines'][0]['quantite']);

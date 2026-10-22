@@ -42,8 +42,8 @@ final class SampleShipmentService
 
         $requestLock = $this->lockFactory->createLock('sample-shipment-'.hash('sha256', $requestToken), 180);
 
-        if (!$requestLock->acquire(true)) {
-            throw new \RuntimeException('Cet envoi est déjà en cours de traitement.');
+        if (!$requestLock->acquire()) {
+            throw new SampleShipmentBusyException('Cet envoi est déjà en cours de traitement.');
         }
 
         try {
@@ -75,8 +75,8 @@ final class SampleShipmentService
 
             $exportLock = $this->lockFactory->createLock('sample-shipment-sage-export', 180);
 
-            if (!$exportLock->acquire(true)) {
-                throw new \RuntimeException('Un autre envoi d’échantillons est en cours. Réessayez dans quelques instants.');
+            if (!$exportLock->acquire()) {
+                throw new SampleShipmentBusyException('Un autre envoi d’échantillons est en cours. Réessayez dans quelques instants.');
             }
 
             try {
@@ -231,7 +231,7 @@ final class SampleShipmentService
             'commentaire' => $recipient['message'],
             'livraisonPrincipal' => true,
         ];
-        $existingDeliveries = $this->extractList($this->sageClient->get('/Livraisons', ['client' => self::CLIENT_ID]));
+        $existingDeliveries = $this->findExistingDeliveries();
         $targetExists = false;
 
         foreach ($existingDeliveries as $existingDelivery) {
@@ -256,6 +256,24 @@ final class SampleShipmentService
             $this->sageClient->patch('/Livraisons', $delivery + ['nouveauIntitule' => $deliveryLabel]);
         } else {
             $this->sageClient->post('/Livraisons', $delivery);
+        }
+    }
+
+    /**
+     * Sage returns 404 when a client has no delivery address yet.
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function findExistingDeliveries(): array
+    {
+        try {
+            return $this->extractList($this->sageClient->get('/Livraisons', ['client' => self::CLIENT_ID]));
+        } catch (\RuntimeException $exception) {
+            if (str_contains($exception->getMessage(), 'Erreur API Sage [404]')) {
+                return [];
+            }
+
+            throw $exception;
         }
     }
 
