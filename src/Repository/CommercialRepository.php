@@ -29,4 +29,17 @@ class CommercialRepository extends ServiceEntityRepository
             ->getQuery()
             ->getResult();
     }
+
+    /** @return Commercial[] */
+    public function findActiveSageRepresentatives(): array
+    {
+        return $this->createQueryBuilder('c')
+            ->andWhere('c.isActive = :active')
+            ->andWhere('c.sageFirstName IS NOT NULL AND c.sageLastName IS NOT NULL')
+            ->setParameter('active', true)
+            ->orderBy('c.sageLastName', 'ASC')
+            ->addOrderBy('c.sageFirstName', 'ASC')
+            ->getQuery()
+            ->getResult();
+    }
 }

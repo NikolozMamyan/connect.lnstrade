@@ -4,10 +4,12 @@ namespace App\Controller;
 
 use App\Entity\ErpProduct;
 use App\Repository\ErpProductRepository;
+use App\Repository\CommercialRepository;
 use App\Service\SampleShipment\SampleShipmentAccessService;
 use App\Service\SampleShipment\SampleShipmentBusyException;
 use App\Service\SampleShipment\SampleShipmentService;
 use App\Service\SampleShipment\SampleShipmentValidationException;
+use App\Service\SampleShipment\SampleShipmentNotificationException;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
@@ -28,10 +30,14 @@ final class SampleShipmentController extends AbstractController
         Request $request,
         SampleShipmentAccessService $accessService,
         CsrfTokenManagerInterface $csrfTokenManager,
+        CommercialRepository $commercialRepository,
     ): Response
     {
+        $granted = $accessService->isGranted($request);
+
         return $this->render('sample_shipment/index.html.twig', [
-            'sampleAccessGranted' => $accessService->isGranted($request),
+            'sampleAccessGranted' => $granted,
+            'representatives' => $granted ? $commercialRepository->findActiveSageRepresentatives() : [],
             'authCsrfToken' => $csrfTokenManager->getToken('sample-shipment-auth')->getValue(),
             'submitCsrfToken' => $csrfTokenManager->getToken('sample-shipment-submit')->getValue(),
         ]);
@@ -134,6 +140,8 @@ final class SampleShipmentController extends AbstractController
             ], Response::HTTP_UNPROCESSABLE_ENTITY);
         } catch (SampleShipmentBusyException $exception) {
             return $this->errorResponse($exception->getMessage(), Response::HTTP_CONFLICT);
+        } catch (SampleShipmentNotificationException $exception) {
+            return $this->errorResponse($exception->getMessage(), Response::HTTP_SERVICE_UNAVAILABLE);
         } catch (\Throwable) {
             return $this->errorResponse(
                 'L’envoi vers Sage a échoué. La demande a été conservée et peut être relancée.',

@@ -3,11 +3,15 @@
 namespace App\Tests\Service\SampleShipment;
 
 use App\Entity\ErpProduct;
+use App\Entity\Commercial;
 use App\Entity\SampleShipment;
+use App\Message\SampleShipmentNotificationMessage;
+use App\Repository\CommercialRepository;
 use App\Repository\ErpProductRepository;
 use App\Repository\SampleShipmentRepository;
 use App\Service\Erp\SageClient;
 use App\Service\SampleShipment\SampleShipmentService;
+use App\Service\Mailer\SampleShipmentMailer;
 use Doctrine\ORM\EntityManagerInterface;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
@@ -17,6 +21,8 @@ use Symfony\Component\HttpClient\MockHttpClient;
 use Symfony\Component\HttpClient\Response\MockResponse;
 use Symfony\Component\Lock\LockFactory;
 use Symfony\Component\Lock\Store\InMemoryStore;
+use Symfony\Component\Messenger\Envelope;
+use Symfony\Component\Messenger\MessageBusInterface;
 
 final class SampleShipmentServiceTest extends TestCase
 {
@@ -82,10 +88,14 @@ final class SampleShipmentServiceTest extends TestCase
             ])),
             new LockFactory(new InMemoryStore()),
             new NullLogger(),
+            $this->commercialRepository(),
+            $this->messageBus(),
+            $this->createStub(SampleShipmentMailer::class),
         );
 
         $result = $service->submit([
             'requestToken' => 'request-token-0001',
+            'representativeId' => 7,
             'company' => 'Boutique Démo',
             'contactName' => 'Marie Martin',
             'address' => '12 rue du Test',
@@ -96,7 +106,7 @@ final class SampleShipmentServiceTest extends TestCase
             'phone' => '0102030405',
             'email' => 'marie@example.com',
             'message' => 'Livrer le matin',
-            'lines' => [['reference' => $reference, 'quantity' => 3]],
+            'lines' => [['reference' => $reference, 'quantity' => 3, 'expiryDate' => '2027-03-15']],
         ]);
 
         $deliveryPayload = $this->requestBody($requests, 'POST', '/Livraisons');
@@ -108,8 +118,10 @@ final class SampleShipmentServiceTest extends TestCase
         self::assertSame('9ECH', $orderPayload['numClient']);
         self::assertNotFalse(\DateTimeImmutable::createFromFormat(\DateTimeInterface::ATOM, $orderPayload['dateCommande']));
         self::assertSame($orderPayload['dateCommande'], $orderPayload['dateLivraison']);
-        self::assertSame('Corentin', $orderPayload['ownerFirstName']);
-        self::assertSame('BURY', $orderPayload['ownerName']);
+        self::assertSame('Sonita', $orderPayload['ownerFirstName']);
+        self::assertSame('SIEK', $orderPayload['ownerName']);
+        self::assertLessThanOrEqual(17, strlen($orderPayload['referenceCommande']));
+        self::assertArrayNotHasKey('expiryDate', $orderPayload['orderLines'][0]);
         self::assertSame($reference, $orderPayload['orderLines'][0]['reference']);
         self::assertSame(0, $orderPayload['orderLines'][0]['prixHT']);
         self::assertSame(3, $orderPayload['orderLines'][0]['quantite']);
@@ -134,6 +146,7 @@ final class SampleShipmentServiceTest extends TestCase
             ['numClient' => '9ECH'],
             ['piece' => 'BC001235'],
         );
+        $shipment->markNotified();
         $productRepository = $this->createMock(ErpProductRepository::class);
         $productRepository->expects(self::never())->method('findIndexedByReferences');
         $shipmentRepository = $this->createMock(SampleShipmentRepository::class);
@@ -154,6 +167,9 @@ final class SampleShipmentServiceTest extends TestCase
             ])),
             new LockFactory(new InMemoryStore()),
             new NullLogger(),
+            $this->commercialRepository(),
+            $this->messageBus(),
+            $this->createStub(SampleShipmentMailer::class),
         );
 
         $result = $service->submit(['requestToken' => 'request-token-0002']);
@@ -161,6 +177,27 @@ final class SampleShipmentServiceTest extends TestCase
         self::assertTrue($result['idempotent']);
         self::assertSame('ECH-20261022-000043', $result['reference']);
         self::assertSame('BC001235', $result['sageDocument']);
+    }
+
+    private function commercialRepository(): CommercialRepository
+    {
+        $repository = $this->createStub(CommercialRepository::class);
+        $repository->method('find')->willReturn((new Commercial())->setSageFirstName('Sonita')->setSageLastName('SIEK'));
+
+        return $repository;
+    }
+
+    private function messageBus(): MessageBusInterface
+    {
+        $bus = $this->createStub(MessageBusInterface::class);
+        $bus->method('dispatch')->willReturnCallback(static function (object $message): Envelope {
+            self::assertInstanceOf(SampleShipmentNotificationMessage::class, $message);
+            self::assertSame(42, $message->shipmentId);
+
+            return new Envelope($message);
+        });
+
+        return $bus;
     }
 
     /**

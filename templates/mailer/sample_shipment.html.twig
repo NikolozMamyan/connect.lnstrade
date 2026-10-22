@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head><meta charset="UTF-8"><title>{{ subject }}</title></head>
+<body style="margin:0;padding:24px;background:#f4f6fa;color:#111936;font-family:Arial,sans-serif">
+{% set recipient = shipment.recipient %}
+{% set representative = shipment.representative %}
+<div style="max-width:760px;margin:auto;padding:28px;background:#fff;border-radius:16px">
+    <p style="color:#008f7b;font-weight:bold">LNS TRADE · ÉCHANTILLONS</p>
+    <h1 style="font-size:24px">Nouvel envoi à préparer</h1>
+    <p>Le bon de commande à <strong>0 €</strong> a été créé dans Sage pour le client <strong>9ECH</strong>.</p>
+    <p>
+        <strong>BC Sage :</strong> {{ shipment.sageDocument ?? 'Numéro non retourné par Sage' }}<br>
+        <strong>Référence :</strong> {{ shipment.orderReference }}<br>
+        <strong>Date :</strong> {{ shipment.sentAt|date('d/m/Y H:i', 'Europe/Paris') }}<br>
+        <strong>Représentant :</strong> {{ representative.firstName }} {{ representative.lastName }}
+    </p>
+    <h2 style="font-size:18px">Livraison</h2>
+    <p>
+        <strong>{{ recipient.company }}</strong><br>
+        {% if recipient.contactName %}{{ recipient.contactName }}<br>{% endif %}
+        {{ recipient.address }}<br>
+        {% if recipient.addressComplement %}{{ recipient.addressComplement }}<br>{% endif %}
+        {{ recipient.postalCode }} {{ recipient.city }}<br>
+        {{ recipient.country }}
+    </p>
+    <p>
+        <strong>Lieu de livraison Sage :</strong> {{ shipment.deliveryLabel }}<br>
+        <strong>Téléphone :</strong> {{ recipient.phone ?: '—' }}<br>
+        <strong>E-mail :</strong> {{ recipient.email ?: '—' }}
+    </p>
+    {% if recipient.message %}<p><strong>Instructions :</strong><br>{{ recipient.message|nl2br }}</p>{% endif %}
+    <h2 style="font-size:18px">Produits et lots à sélectionner</h2>
+    <table style="width:100%;border-collapse:collapse;text-align:left">
+        <thead><tr style="background:#e4faf6">
+            <th style="padding:10px">Référence / Produit</th>
+            <th style="padding:10px">Quantité</th>
+            <th style="padding:10px">Date de péremption</th>
+        </tr></thead>
+        <tbody>
+        {% for line in shipment.lines %}
+            <tr>
+                <td style="padding:10px;border-bottom:1px solid #e3e7ef"><strong>{{ line.reference }}</strong><br>{{ line.designation }}</td>
+                <td style="padding:10px;border-bottom:1px solid #e3e7ef">{{ line.quantity }}</td>
+                <td style="padding:10px;border-bottom:1px solid #e3e7ef">{{ line.expiryDate|date('d/m/Y') }}</td>
+            </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    <p style="font-size:12px;color:#5d657d">Les dates de péremption sont renseignées par le commercial pour guider le choix des lots. Elles ne sont pas transmises à Sage.</p>
+</div>
+</body>
+</html>

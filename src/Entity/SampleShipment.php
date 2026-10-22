@@ -66,6 +66,12 @@ class SampleShipment
     #[ORM\Column(name: 'order_lines', type: Types::JSON)]
     private array $lines = [];
 
+    #[ORM\Column(type: Types::JSON, nullable: true)]
+    private ?array $representative = null;
+
+    #[ORM\Column(name: 'notification_sent_at', type: Types::DATETIME_IMMUTABLE, nullable: true)]
+    private ?\DateTimeImmutable $notificationSentAt = null;
+
     #[ORM\Column(name: 'sage_payload', type: Types::JSON, nullable: true)]
     private ?array $sagePayload = null;
 
@@ -126,6 +132,78 @@ class SampleShipment
         return $this->sageResponse;
     }
 
+    public function getSagePayload(): ?array
+    {
+        return $this->sagePayload;
+    }
+
+    public function getSageDocument(): ?string
+    {
+        $response = $this->sageResponse ?? [];
+        $piece = trim((string) ($response['piece'] ?? $response['numeroPiece'] ?? $response['doPiece'] ?? ''));
+
+        if ($piece !== '') {
+            return $piece;
+        }
+
+        return preg_match('/\bBC\d+\b/u', (string) ($response['message'] ?? ''), $matches) ? $matches[0] : null;
+    }
+
+    public function getRecipient(): array
+    {
+        return [
+            'company' => $this->company,
+            'contactName' => $this->contactName,
+            'address' => $this->address,
+            'addressComplement' => $this->addressComplement,
+            'postalCode' => $this->postalCode,
+            'city' => $this->city,
+            'country' => $this->country,
+            'phone' => $this->phone,
+            'email' => $this->email,
+            'message' => $this->message,
+        ];
+    }
+
+    public function getLines(): array
+    {
+        return $this->lines;
+    }
+
+    public function getRepresentative(): ?array
+    {
+        return $this->representative;
+    }
+
+    public function setRepresentative(array $representative): static
+    {
+        $this->representative = $representative;
+
+        return $this;
+    }
+
+    public function getCreatedAt(): \DateTimeImmutable
+    {
+        return $this->createdAt;
+    }
+
+    public function getSentAt(): ?\DateTimeImmutable
+    {
+        return $this->sentAt;
+    }
+
+    public function isNotified(): bool
+    {
+        return $this->notificationSentAt !== null;
+    }
+
+    public function markNotified(): static
+    {
+        $this->notificationSentAt = new \DateTimeImmutable();
+
+        return $this;
+    }
+
     public function setRecipient(array $recipient): static
     {
         $this->company = $recipient['company'];
@@ -160,10 +238,11 @@ class SampleShipment
         return $this;
     }
 
-    public function prepareExport(string $orderReference, string $deliveryLabel): static
+    public function prepareExport(string $orderReference, string $deliveryLabel, array $sagePayload = []): static
     {
         $this->orderReference = $orderReference;
         $this->deliveryLabel = $deliveryLabel;
+        $this->sagePayload = $sagePayload;
         $this->updatedAt = new \DateTimeImmutable();
 
         return $this;

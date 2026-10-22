@@ -93,7 +93,10 @@ if (root) {
         });
     } else {
         let cart = loadCart();
-        let currentStep = 1;
+        let currentStep = 0;
+        let submitting = false;
+        let activeRequestToken = localStorage.getItem(TOKEN_KEY);
+        let draftGeneration = 0;
         let scannerControls = null;
         let scannerBusy = false;
         let lastScannedCode = '';
@@ -109,6 +112,8 @@ if (root) {
         const searchInput = root.querySelector('[data-search-input]');
         const searchResults = root.querySelector('[data-search-results]');
         const recipientForm = root.querySelector('[data-recipient-form]');
+        const representativeForm = root.querySelector('[data-representative-form]');
+        const representativeSelect = root.querySelector('[data-representative-select]');
         const cameraModal = root.querySelector('[data-camera-modal]');
         const cameraVideo = root.querySelector('[data-camera-video]');
         const cameraStatus = root.querySelector('[data-camera-status]');
@@ -125,7 +130,8 @@ if (root) {
         }
 
         function saveCart() {
-            localStorage.setItem(CART_KEY, JSON.stringify(cart));
+            if (cart.length) localStorage.setItem(CART_KEY, JSON.stringify(cart));
+            else localStorage.removeItem(CART_KEY);
         }
 
         function totalQuantity() {
@@ -142,7 +148,7 @@ if (root) {
             cartEmpty.hidden = cart.length > 0;
             nextProducts.disabled = cart.length === 0;
 
-            cart.forEach((item) => {
+            cart.forEach((item, index) => {
                 const row = document.createElement('article');
                 row.className = 'sample-cart-item';
                 row.dataset.reference = item.reference;
@@ -173,7 +179,23 @@ if (root) {
                 remove.setAttribute('aria-label', `Supprimer ${item.reference}`);
                 remove.textContent = '×';
 
-                row.append(identity, quantityControl, remove);
+                const expiry = document.createElement('div');
+                expiry.className = 'sample-field sample-cart-item__expiry';
+                const expiryLabel = document.createElement('label');
+                expiryLabel.htmlFor = `sample-expiry-${index}`;
+                expiryLabel.textContent = 'Date de péremption *';
+                const expiryInput = document.createElement('input');
+                expiryInput.id = expiryLabel.htmlFor;
+                expiryInput.type = 'date';
+                expiryInput.required = true;
+                expiryInput.dataset.expiryDate = '';
+                expiryInput.value = item.expiryDate || '';
+                const expiryError = document.createElement('p');
+                expiryError.className = 'sample-field-error';
+                expiryError.dataset.errorFor = `lines.${index}.expiryDate`;
+                expiry.append(expiryLabel, expiryInput, expiryError);
+
+                row.append(identity, quantityControl, remove, expiry);
                 cartElement.append(row);
             });
 
@@ -181,6 +203,7 @@ if (root) {
         }
 
         function addProduct(product) {
+            if (submitting || currentStep !== 1) return;
             const existing = cart.find((item) => item.reference === product.reference);
 
             if (existing) {
@@ -191,6 +214,7 @@ if (root) {
                     designation: product.designation || product.reference,
                     barcode: product.barcode || null,
                     quantity: 1,
+                    expiryDate: '',
                 });
             }
 
@@ -267,10 +291,12 @@ if (root) {
             event.preventDefault();
             const query = searchInput.value.trim();
             if (!query) return;
+            const generation = draftGeneration;
 
             searchForm.classList.add('is-loading');
             try {
                 const data = await searchProducts(query);
+                if (generation !== draftGeneration || currentStep !== 1) return;
                 renderSearchResults(data.products || []);
             } catch (error) {
                 showToast(error.message, 'error');
@@ -290,6 +316,7 @@ if (root) {
         });
 
         cartElement?.addEventListener('click', (event) => {
+            if (submitting) return;
             const button = event.target.closest('[data-cart-action]');
             const row = event.target.closest('[data-reference]');
             if (!button || !row) return;
@@ -304,8 +331,29 @@ if (root) {
             renderCart();
         });
 
+        cartElement?.addEventListener('input', (event) => {
+            if (!event.target.matches('[data-expiry-date]')) return;
+            const row = event.target.closest('[data-reference]');
+            const item = cart.find((candidate) => candidate.reference === row.dataset.reference);
+            if (item) {
+                item.expiryDate = event.target.value;
+                row.querySelector('[data-error-for]').textContent = '';
+                saveCart();
+            }
+        });
+
+        function validateProducts() {
+            if (!cart.length) return false;
+            return Array.from(cartElement.querySelectorAll('[data-expiry-date]')).every((input) => input.reportValidity());
+        }
+
         function goToStep(step) {
             currentStep = step;
+            root.querySelector('[data-progress]').hidden = step === 0 || step === 4;
+            const selectedRepresentative = root.querySelector('[data-selected-representative]');
+            selectedRepresentative.hidden = step === 0 || step === 4;
+            selectedRepresentative.textContent = representativeSelect.value ? `Représentant : ${representativeSelect.selectedOptions[0].textContent}` : '';
+            if (step === 3) root.querySelector('[data-submit-shipment]').disabled = submitting || !cart.length;
             root.querySelectorAll('[data-step]').forEach((panel) => {
                 panel.classList.toggle('is-active', Number(panel.dataset.step) === step);
             });
@@ -328,6 +376,7 @@ if (root) {
         }
 
         function renderReview() {
+            root.querySelector('[data-review-representative]').textContent = `Représentant : ${representativeSelect.selectedOptions[0].textContent}`;
             const recipient = recipientData();
             const recipientBox = root.querySelector('[data-review-recipient]');
             const productsBox = root.querySelector('[data-review-products]');
@@ -351,7 +400,7 @@ if (root) {
                 const title = document.createElement('strong');
                 title.textContent = item.designation || item.reference;
                 const reference = document.createElement('small');
-                reference.textContent = item.reference;
+                reference.textContent = `${item.reference} · Péremption : ${item.expiryDate.split('-').reverse().join('/')}`;
                 copy.append(title, reference);
                 const quantity = document.createElement('b');
                 quantity.textContent = `× ${item.quantity}`;
@@ -360,11 +409,20 @@ if (root) {
             });
         }
 
-        root.querySelector('[data-next-products]')?.addEventListener('click', () => {
-            if (cart.length) goToStep(2);
+        representativeForm?.addEventListener('submit', (event) => {
+            event.preventDefault();
+            if (!representativeForm.reportValidity()) return;
+            goToStep(1);
+            searchInput.focus();
         });
-        root.querySelector('[data-back-products]')?.addEventListener('click', () => goToStep(1));
-        root.querySelector('[data-back-recipient]')?.addEventListener('click', () => goToStep(2));
+        root.querySelector('[data-back-representative]')?.addEventListener('click', () => {
+            if (!submitting) goToStep(0);
+        });
+        root.querySelector('[data-next-products]')?.addEventListener('click', () => {
+            if (validateProducts()) goToStep(2);
+        });
+        root.querySelector('[data-back-products]')?.addEventListener('click', () => { if (!submitting) goToStep(1); });
+        root.querySelector('[data-back-recipient]')?.addEventListener('click', () => { if (!submitting) goToStep(2); });
         root.querySelector('[data-next-recipient]')?.addEventListener('click', () => {
             clearFieldErrors();
             if (!recipientForm.reportValidity()) return;
@@ -373,15 +431,46 @@ if (root) {
         });
 
         function requestToken() {
-            let token = localStorage.getItem(TOKEN_KEY);
-            if (!token) {
-                token = window.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}`;
-                localStorage.setItem(TOKEN_KEY, token);
+            if (!activeRequestToken) {
+                activeRequestToken = localStorage.getItem(TOKEN_KEY) || window.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}`;
+                localStorage.setItem(TOKEN_KEY, activeRequestToken);
             }
-            return token;
+            return activeRequestToken;
+        }
+
+        function resetDraft() {
+            draftGeneration += 1;
+            closeCamera();
+            cart = [];
+            activeRequestToken = null;
+            localStorage.removeItem(TOKEN_KEY);
+            recipientForm.reset();
+            representativeForm.reset();
+            searchForm.reset();
+            searchResults.replaceChildren();
+            searchResults.hidden = true;
+            root.querySelector('[data-review-recipient]').replaceChildren();
+            root.querySelector('[data-review-products]').replaceChildren();
+            root.querySelector('[data-review-representative]').textContent = '';
+            root.querySelector('[data-selected-representative]').textContent = '';
+            root.querySelector('[data-submit-error]').hidden = true;
+            root.querySelector('[data-submit-error]').textContent = '';
+            root.querySelector('[data-success-reference]').textContent = '—';
+            root.querySelector('[data-success-sage]').textContent = '';
+            root.querySelector('[data-success-sage]').hidden = true;
+            lastScannedCode = '';
+            lastScannedAt = 0;
+            clearFieldErrors();
+            renderCart();
         }
 
         root.querySelector('[data-submit-shipment]')?.addEventListener('click', async () => {
+            if (submitting || currentStep !== 3 || !cart.length) return;
+            if (!representativeForm.reportValidity()) { goToStep(0); return; }
+            if (!validateProducts()) { goToStep(1); return; }
+            if (!recipientForm.reportValidity()) { goToStep(2); return; }
+            submitting = true;
+            const generation = draftGeneration;
             const button = root.querySelector('[data-submit-shipment]');
             const submitError = root.querySelector('[data-submit-error]');
             const label = root.querySelector('[data-submit-label]');
@@ -400,21 +489,22 @@ if (root) {
                         ...recipientData(),
                         requestToken: requestToken(),
                         csrfToken: root.dataset.submitCsrf,
-                        lines: cart.map((item) => ({ reference: item.reference, quantity: item.quantity })),
+                        representativeId: representativeSelect.value,
+                        lines: cart.map((item) => ({ reference: item.reference, quantity: item.quantity, expiryDate: item.expiryDate })),
                     }),
                 });
                 const data = await readJson(response);
+                if (generation !== draftGeneration) return;
+                resetDraft();
                 root.querySelector('[data-success-reference]').textContent = data.reference;
                 const sageDocument = root.querySelector('[data-success-sage]');
                 if (data.sageDocument) {
                     sageDocument.textContent = `Document Sage : ${data.sageDocument}`;
                     sageDocument.hidden = false;
                 }
-                cart = [];
-                saveCart();
-                localStorage.removeItem(TOKEN_KEY);
                 goToStep(4);
             } catch (error) {
+                if (generation !== draftGeneration) return;
                 if (error.status === 401) {
                     window.location.reload();
                     return;
@@ -428,19 +518,29 @@ if (root) {
                 submitError.textContent = error.message;
                 submitError.hidden = false;
             } finally {
-                button.disabled = false;
+                submitting = false;
+                button.disabled = currentStep !== 3 || !cart.length;
                 button.classList.remove('is-loading');
                 label.textContent = 'Créer le BC Sage';
             }
         });
 
         root.querySelector('[data-new-shipment]')?.addEventListener('click', () => {
-            recipientForm.reset();
-            recipientForm.elements.country.value = 'France';
-            root.querySelector('[data-success-sage]').hidden = true;
-            renderCart();
-            goToStep(1);
-            searchInput.focus();
+            goToStep(0);
+            representativeSelect.focus();
+        });
+
+        window.addEventListener('storage', (event) => {
+            if (event.key === TOKEN_KEY && event.newValue === null && (!activeRequestToken || event.oldValue === activeRequestToken)) {
+                resetDraft();
+                goToStep(0);
+            }
+        });
+        window.addEventListener('pageshow', (event) => {
+            if (event.persisted && !localStorage.getItem(CART_KEY)) {
+                resetDraft();
+                goToStep(0);
+            }
         });
 
         async function openCamera() {
@@ -458,10 +558,12 @@ if (root) {
                     lastScannedCode = code;
                     lastScannedAt = now;
                     scannerBusy = true;
+                    const generation = draftGeneration;
                     cameraStatus.textContent = `Code détecté : ${code}`;
 
                     try {
                         const data = await lookupBarcode(code);
+                        if (generation !== draftGeneration || currentStep !== 1) return;
                         addProduct(data.product);
                         cameraStatus.textContent = `${data.product.reference} ajouté · continuez à scanner`;
                         cameraStatus.dataset.type = 'success';

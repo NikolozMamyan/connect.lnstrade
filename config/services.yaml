@@ -49,6 +49,7 @@ parameters:
         - 'nikoloz.mamyan@lnstrade.fr'
     order_form_upload_dir: '%kernel.project_dir%/var/uploads/order_forms'
     sample_shipment_pin: '%env(SAMPLE_SHIPMENT_PIN)%'
+    sample_shipment_notification_recipient: 'adv@lnstrade.fr'
     # sage_client_id: '%env(default::SAGE_CLIENT_ID)%'
     # sage_client_secret: '%env(default::SAGE_CLIENT_SECRET)%'    
 

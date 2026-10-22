@@ -26,6 +26,12 @@ class Commercial
     #[ORM\Column(name: 'hubspot_id', length: 64, nullable: true)]
     private ?string $hubspotId = null;
 
+    #[ORM\Column(name: 'sage_first_name', length: 100, nullable: true)]
+    private ?string $sageFirstName = null;
+
+    #[ORM\Column(name: 'sage_last_name', length: 100, nullable: true)]
+    private ?string $sageLastName = null;
+
     #[ORM\Column(name: 'last_name', length: 100)]
     #[Assert\NotBlank]
     #[Assert\Length(max: 100)]
@@ -91,6 +97,30 @@ class Commercial
     public function getLastName(): ?string
     {
         return $this->lastName;
+    }
+
+    public function getSageFirstName(): ?string
+    {
+        return $this->sageFirstName;
+    }
+
+    public function setSageFirstName(?string $firstName): static
+    {
+        $this->sageFirstName = $firstName;
+
+        return $this;
+    }
+
+    public function getSageLastName(): ?string
+    {
+        return $this->sageLastName;
+    }
+
+    public function setSageLastName(?string $lastName): static
+    {
+        $this->sageLastName = $lastName;
+
+        return $this;
     }
 
     public function setLastName(string $lastName): static

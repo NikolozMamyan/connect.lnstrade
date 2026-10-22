@@ -79,7 +79,34 @@
                     </div>
                 </section>
 
-                <nav class="sample-progress" aria-label="Étapes de l'envoi">
+                <section class="sample-step is-active" data-step="0">
+                    <form class="sample-card sample-representative" data-representative-form autocomplete="off">
+                        <div class="sample-card__heading">
+                            <div>
+                                <span class="sample-eyebrow">Avant de commencer</span>
+                                <h2>Qui prépare cet envoi ?</h2>
+                                <p>Sélectionnez votre nom pour vous attribuer le bon de commande.</p>
+                            </div>
+                        </div>
+                        <div class="sample-field">
+                            <label for="sample-representative">Représentant <b>*</b></label>
+                            <select id="sample-representative" name="representativeId" required data-representative-select>
+                                <option value="">Choisir mon nom…</option>
+                                {% for representative in representatives %}
+                                    <option value="{{ representative.id }}">{{ representative.sageFirstName }} {{ representative.sageLastName }}</option>
+                                {% endfor %}
+                            </select>
+                            <p class="sample-field-error" data-error-for="representativeId"></p>
+                        </div>
+                        <div class="sample-actions sample-actions--end">
+                            <button class="sample-button sample-button--primary" type="submit"{{ representatives is empty ? ' disabled' : '' }}>Commencer l'envoi</button>
+                        </div>
+                        {% if representatives is empty %}<p>Aucun représentant n'est disponible. Contactez l'administrateur.</p>{% endif %}
+                    </form>
+                </section>
+
+                <p class="sample-selected-representative" data-selected-representative hidden></p>
+                <nav class="sample-progress" aria-label="Étapes de l'envoi" data-progress hidden>
                     <div class="sample-progress__item is-active" data-progress-step="1">
                         <span>1</span><strong>Produits</strong>
                     </div>
@@ -93,7 +120,7 @@
                     </div>
                 </nav>
 
-                <section class="sample-step is-active" data-step="1">
+                <section class="sample-step" data-step="1">
                     <div class="sample-card sample-scan-card">
                         <div class="sample-card__heading">
                             <div>
@@ -125,6 +152,7 @@
                             <span class="sample-count" data-cart-count>0</span>
                         </div>
                         <div class="sample-cart" data-cart></div>
+                        <p class="sample-field-error" data-error-for="lines"></p>
                         <div class="sample-empty" data-cart-empty>
                             <span>
                                 <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M5 8h14l-1 12H6L5 8Zm3 0V6a4 4 0 0 1 8 0v2"/></svg>
@@ -134,7 +162,8 @@
                         </div>
                     </div>
 
-                    <div class="sample-actions sample-actions--end">
+                    <div class="sample-actions">
+                        <button class="sample-button sample-button--secondary" type="button" data-back-representative>Représentant</button>
                         <button class="sample-button sample-button--primary" type="button" data-next-products disabled>
                             Continuer
                             <svg aria-hidden="true" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></svg>
@@ -229,6 +258,7 @@
                             <span class="sample-zero-badge">Total 0,00 €</span>
                         </div>
 
+                        <p class="sample-selected-representative" data-review-representative></p>
                         <div class="sample-review__grid">
                             <section>
                                 <span class="sample-review__label">Destinataire</span>
@@ -264,6 +294,7 @@
                         <span class="sample-eyebrow">Envoi enregistré</span>
                         <h2>Le bon de commande est créé</h2>
                         <p>Les produits ont été transmis à Sage sous le client échantillons.</p>
+                        <p>Le récapitulatif destiné à l'ADV est programmé. Vous pouvez préparer un nouvel envoi.</p>
                         <div class="sample-success__reference">
                             <span>Référence</span>
                             <strong data-success-reference>—</strong>

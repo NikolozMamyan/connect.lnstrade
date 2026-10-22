@@ -3,20 +3,23 @@
 namespace App\Service\SampleShipment;
 
 use App\Entity\ErpProduct;
+use App\Entity\Commercial;
 use App\Entity\SampleShipment;
+use App\Message\SampleShipmentNotificationMessage;
+use App\Repository\CommercialRepository;
 use App\Repository\ErpProductRepository;
 use App\Repository\SampleShipmentRepository;
 use App\Service\Erp\SageClient;
+use App\Service\Mailer\SampleShipmentMailer;
 use Doctrine\ORM\EntityManagerInterface;
 use Psr\Log\LoggerInterface;
 use Symfony\Component\Lock\LockFactory;
+use Symfony\Component\Messenger\MessageBusInterface;
 
 final class SampleShipmentService
 {
     private const CLIENT_ID = '9ECH';
     private const CLIENT_NAME = 'CLIENT ECHANTILLONS LNS TRADE';
-    private const OWNER_FIRST_NAME = 'Corentin';
-    private const OWNER_NAME = 'BURY';
     private const DELIVERY_INSTRUCTION_MAX_LENGTH = 69;
 
     public function __construct(
@@ -26,6 +29,9 @@ final class SampleShipmentService
         private readonly SageClient $sageClient,
         private readonly LockFactory $lockFactory,
         private readonly LoggerInterface $logger,
+        private readonly CommercialRepository $commercialRepository,
+        private readonly MessageBusInterface $messageBus,
+        private readonly SampleShipmentMailer $mailer,
     ) {
     }
 
@@ -52,7 +58,21 @@ final class SampleShipmentService
             $shipment = $this->shipmentRepository->findOneByRequestToken($requestToken);
 
             if ($shipment instanceof SampleShipment && $shipment->isSent()) {
+                $this->queueNotification($shipment);
+
                 return $this->successResult($shipment, true);
+            }
+
+            if ($shipment instanceof SampleShipment && $shipment->getSagePayload() !== null) {
+                $existingOrder = $this->findExistingOrder($shipment);
+
+                if ($existingOrder !== null) {
+                    $shipment->markSent((string) $shipment->getOrderReference(), (string) $shipment->getDeliveryLabel(), $shipment->getSagePayload(), $existingOrder);
+                    $this->entityManager->flush();
+                    $this->queueNotification($shipment);
+
+                    return $this->successResult($shipment, true);
+                }
             }
 
             $normalized = $this->normalizeInput($input);
@@ -65,14 +85,15 @@ final class SampleShipmentService
             $shipment
                 ->setRecipient($normalized['recipient'])
                 ->setLines($normalized['lines'])
+                ->setRepresentative($normalized['representative'])
                 ->markProcessing();
             $this->entityManager->flush();
 
             $orderReference = $shipment->getOrderReference()
-                ?? sprintf('ECH-%s-%06d', (new \DateTimeImmutable())->format('Ymd'), $shipment->getId());
-            $deliveryLabel = $shipment->getDeliveryLabel()
-                ?? $this->buildDeliveryLabel($normalized['recipient']['company'], (int) $shipment->getId());
-            $shipment->prepareExport($orderReference, $deliveryLabel);
+                ?? sprintf('ECH-%s-%06d', (new \DateTimeImmutable())->format('ymd'), $shipment->getId());
+            $deliveryLabel = $this->buildDeliveryLabel($normalized['recipient']['company'], (int) $shipment->getId());
+            $orderPayload = $this->buildOrderPayload($orderReference, $normalized);
+            $shipment->prepareExport($orderReference, $deliveryLabel, $orderPayload);
             $this->entityManager->flush();
 
             $exportLock = $this->lockFactory->createLock('sample-shipment-sage-export', 180);
@@ -84,7 +105,6 @@ final class SampleShipmentService
             try {
                 $this->ensureSampleClientExists();
                 $this->upsertDeliveryAddress($deliveryLabel, $normalized['recipient']);
-                $orderPayload = $this->buildOrderPayload($orderReference, $normalized);
                 $sageResponse = $this->sageClient->post('/Order', $orderPayload);
             } finally {
                 $exportLock->release();
@@ -92,6 +112,7 @@ final class SampleShipmentService
 
             $shipment->markSent($orderReference, $deliveryLabel, $orderPayload, $sageResponse);
             $this->entityManager->flush();
+            $this->queueNotification($shipment);
 
             return $this->successResult($shipment, false);
         } catch (SampleShipmentValidationException $exception) {
@@ -113,14 +134,91 @@ final class SampleShipmentService
         }
     }
 
+    public function sendNotification(int $shipmentId): void
+    {
+        $lock = $this->lockFactory->createLock('sample-shipment-notification-'.$shipmentId, 180);
+
+        if (!$lock->acquire()) {
+            throw new SampleShipmentBusyException('L’e-mail de cet envoi est déjà en cours de traitement.');
+        }
+
+        try {
+            $shipment = $this->shipmentRepository->find($shipmentId);
+
+            if (!$shipment instanceof SampleShipment || !$shipment->isSent() || $shipment->isNotified()) {
+                return;
+            }
+
+            $this->mailer->send($shipment);
+            $shipment->markNotified();
+            $this->entityManager->flush();
+        } finally {
+            $lock->release();
+        }
+    }
+
+    private function queueNotification(SampleShipment $shipment): void
+    {
+        if ($shipment->isNotified()) {
+            return;
+        }
+
+        try {
+            $this->messageBus->dispatch(new SampleShipmentNotificationMessage((int) $shipment->getId()));
+        } catch (\Throwable $exception) {
+            throw new SampleShipmentNotificationException('Le BC est créé dans Sage, mais l’e-mail ADV n’a pas pu être programmé. Réessayez : seul l’e-mail sera repris.', 0, $exception);
+        }
+    }
+
+    private function findExistingOrder(SampleShipment $shipment): ?array
+    {
+        $reference = (string) $shipment->getOrderReference();
+
+        if ($reference === '' || strlen($reference) > 17) {
+            return null;
+        }
+
+        try {
+            $orders = $this->extractList($this->sageClient->get('/Document/header', [
+                'domaine' => 0,
+                'type' => 1,
+                'tiers' => self::CLIENT_ID,
+                'dateDebut' => $shipment->getCreatedAt()->format('Y-m-d'),
+                'dateFin' => (new \DateTimeImmutable('tomorrow'))->format('Y-m-d'),
+            ]));
+        } catch (\RuntimeException $exception) {
+            if (str_contains($exception->getMessage(), 'Erreur API Sage [404]')) {
+                return null;
+            }
+
+            throw $exception;
+        }
+
+        foreach ($orders as $order) {
+            if (trim((string) ($order['reference'] ?? '')) === $reference && trim((string) ($order['piece'] ?? '')) !== '') {
+                return $order;
+            }
+        }
+
+        return null;
+    }
+
     /**
      * @param array<string, mixed> $input
      *
-     * @return array{recipient: array<string, ?string>, lines: list<array{reference: string, designation: string, quantity: int}>}
+     * @return array{recipient: array<string, ?string>, representative: array{id: int, firstName: string, lastName: string}, lines: list<array{reference: string, designation: string, quantity: int, expiryDate: string}>}
      */
     private function normalizeInput(array $input): array
     {
         $errors = [];
+        $representativeId = filter_var($input['representativeId'] ?? null, FILTER_VALIDATE_INT);
+        $commercial = $representativeId !== false && $representativeId > 0
+            ? $this->commercialRepository->find($representativeId)
+            : null;
+
+        if (!$commercial instanceof Commercial || !$commercial->isActive() || !$commercial->getSageFirstName() || !$commercial->getSageLastName()) {
+            $errors['representativeId'] = 'Sélectionnez un représentant Sage valide.';
+        }
         $recipient = [
             'company' => $this->requiredString($input, 'company', 150, 'Entreprise', $errors),
             'contactName' => $this->optionalString($input, 'contactName', 150, 'Contact', $errors),
@@ -148,8 +246,9 @@ final class SampleShipmentService
         }
 
         $quantities = [];
+        $expiryDates = [];
 
-        foreach ($rawLines as $rawLine) {
+        foreach ($rawLines as $index => $rawLine) {
             if (!is_array($rawLine)) {
                 $errors['lines'] = 'Une ligne produit est invalide.';
                 continue;
@@ -157,6 +256,18 @@ final class SampleShipmentService
 
             $reference = trim((string) ($rawLine['reference'] ?? ''));
             $quantity = filter_var($rawLine['quantity'] ?? null, FILTER_VALIDATE_INT);
+            $expiryDate = $rawLine['expiryDate'] ?? null;
+            $parsedDate = is_string($expiryDate) && preg_match('/^\d{4}-\d{2}-\d{2}$/D', $expiryDate)
+                ? \DateTimeImmutable::createFromFormat('!Y-m-d', $expiryDate)
+                : false;
+
+            if (!$parsedDate || $parsedDate->format('Y-m-d') !== $expiryDate) {
+                $errors['lines.'.$index.'.expiryDate'] = 'Renseignez une date de péremption valide pour ce produit.';
+            } elseif (isset($expiryDates[$reference]) && $expiryDates[$reference] !== $expiryDate) {
+                $errors['lines.'.$index.'.expiryDate'] = 'Une même référence doit avoir une seule date de péremption.';
+            } else {
+                $expiryDates[$reference] = $expiryDate;
+            }
 
             if ($reference === '' || mb_strlen($reference) > 64 || $quantity === false || $quantity < 1 || $quantity > 999) {
                 $errors['lines'] = 'Une référence ou une quantité produit est invalide.';
@@ -186,10 +297,19 @@ final class SampleShipmentService
                 'reference' => (string) $reference,
                 'designation' => trim((string) $product->getDesignation()),
                 'quantity' => $quantity,
+                'expiryDate' => $expiryDates[$reference],
             ];
         }
 
-        return ['recipient' => $recipient, 'lines' => $lines];
+        return [
+            'recipient' => $recipient,
+            'representative' => [
+                'id' => (int) $commercial->getId(),
+                'firstName' => $commercial->getSageFirstName(),
+                'lastName' => $commercial->getSageLastName(),
+            ],
+            'lines' => $lines,
+        ];
     }
 
     private function ensureSampleClientExists(): void
@@ -289,7 +409,7 @@ final class SampleShipmentService
     }
 
     /**
-     * @param array{recipient: array<string, ?string>, lines: list<array{reference: string, designation: string, quantity: int}>} $normalized
+     * @param array{recipient: array<string, ?string>, representative: array{id: int, firstName: string, lastName: string}, lines: list<array{reference: string, designation: string, quantity: int, expiryDate: string}>} $normalized
      *
      * @return array<string, mixed>
      */
@@ -307,8 +427,8 @@ final class SampleShipmentService
             'referenceCommande' => $orderReference,
             'statut' => 'Saisi',
             'modeExpedition' => 'Standard',
-            'ownerFirstName' => self::OWNER_FIRST_NAME,
-            'ownerName' => self::OWNER_NAME,
+            'ownerFirstName' => $normalized['representative']['firstName'],
+            'ownerName' => $normalized['representative']['lastName'],
             'instructionDeLivraison' => mb_substr($instruction, 0, self::DELIVERY_INSTRUCTION_MAX_LENGTH),
             'orderLines' => array_map(static fn (array $line): array => [
                 'reference' => $line['reference'],
@@ -378,14 +498,11 @@ final class SampleShipmentService
      */
     private function successResult(SampleShipment $shipment, bool $idempotent): array
     {
-        $response = $shipment->getSageResponse() ?? [];
-        $sageDocument = trim((string) ($response['piece'] ?? $response['numeroPiece'] ?? $response['doPiece'] ?? ''));
-
         return [
             'success' => true,
             'idempotent' => $idempotent,
             'reference' => (string) $shipment->getOrderReference(),
-            'sageDocument' => $sageDocument !== '' ? $sageDocument : null,
+            'sageDocument' => $shipment->getSageDocument(),
         ];
     }
 }
