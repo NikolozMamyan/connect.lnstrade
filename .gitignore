@@ -20,3 +20,4 @@
 ###< symfony/asset-mapper ###
 /src/Controller/Doc.php
 /src/Controller/Test/
+/passasion.md

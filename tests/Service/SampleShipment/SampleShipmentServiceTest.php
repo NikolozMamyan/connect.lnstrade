@@ -9,6 +9,7 @@ use App\Repository\SampleShipmentRepository;
 use App\Service\Erp\SageClient;
 use App\Service\SampleShipment\SampleShipmentService;
 use Doctrine\ORM\EntityManagerInterface;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\NullLogger;
 use Symfony\Component\DependencyInjection\ParameterBag\ParameterBag;
@@ -19,17 +20,18 @@ use Symfony\Component\Lock\Store\InMemoryStore;
 
 final class SampleShipmentServiceTest extends TestCase
 {
-    public function testSubmitCreatesDedicatedDeliveryAndZeroPricedOrder(): void
+    #[DataProvider('productReferenceProvider')]
+    public function testSubmitCreatesDedicatedDeliveryAndZeroPricedOrder(string $reference): void
     {
         $product = (new ErpProduct())
-            ->setReference('ART-001')
+            ->setReference($reference)
             ->setDesignation('Produit test')
             ->setCodeBarre('3760000000012');
         $productRepository = $this->createMock(ErpProductRepository::class);
         $productRepository->expects(self::once())
             ->method('findIndexedByReferences')
-            ->with(['ART-001'])
-            ->willReturn(['ART-001' => $product]);
+            ->with([$reference])
+            ->willReturn([$reference => $product]);
 
         $shipmentRepository = $this->createMock(SampleShipmentRepository::class);
         $shipmentRepository->expects(self::once())
@@ -64,7 +66,7 @@ final class SampleShipmentServiceTest extends TestCase
                 ]),
                 ['PATCH', '/Livraisons'] => self::jsonResponse(['success' => true]),
                 ['POST', '/Livraisons'] => self::jsonResponse(['success' => true]),
-                ['POST', '/order'] => self::jsonResponse(['piece' => 'BC001234']),
+                ['POST', '/Order'] => self::jsonResponse(['piece' => 'BC001234']),
                 default => throw new \RuntimeException(sprintf('Unexpected Sage request: %s %s', $method, $path)),
             };
         });
@@ -94,23 +96,34 @@ final class SampleShipmentServiceTest extends TestCase
             'phone' => '0102030405',
             'email' => 'marie@example.com',
             'message' => 'Livrer le matin',
-            'lines' => [['reference' => 'ART-001', 'quantity' => 3]],
+            'lines' => [['reference' => $reference, 'quantity' => 3]],
         ]);
 
         $deliveryPayload = $this->requestBody($requests, 'POST', '/Livraisons');
-        $orderPayload = $this->requestBody($requests, 'POST', '/order');
+        $orderPayload = $this->requestBody($requests, 'POST', '/Order');
         self::assertSame('9ECH', $deliveryPayload['client']);
         self::assertSame('Boutique Démo #000042', $deliveryPayload['intitule']);
         self::assertSame('12 rue du Test', $deliveryPayload['adresse']);
         self::assertTrue($deliveryPayload['livraisonPrincipal']);
         self::assertSame('9ECH', $orderPayload['numClient']);
+        self::assertNotFalse(\DateTimeImmutable::createFromFormat(\DateTimeInterface::ATOM, $orderPayload['dateCommande']));
+        self::assertSame($orderPayload['dateCommande'], $orderPayload['dateLivraison']);
         self::assertSame('Corentin', $orderPayload['ownerFirstName']);
         self::assertSame('BURY', $orderPayload['ownerName']);
+        self::assertSame($reference, $orderPayload['orderLines'][0]['reference']);
         self::assertSame(0, $orderPayload['orderLines'][0]['prixHT']);
         self::assertSame(3, $orderPayload['orderLines'][0]['quantite']);
         self::assertSame('Boutique Démo - Livrer le matin', $orderPayload['instructionDeLivraison']);
         self::assertSame('BC001234', $result['sageDocument']);
         self::assertFalse($result['idempotent']);
+    }
+
+    public static function productReferenceProvider(): array
+    {
+        return [
+            'alphanumeric' => ['ART-001'],
+            'numeric' => ['123456'],
+        ];
     }
 
     public function testSubmitReturnsAnAlreadySentShipmentWithoutCallingSage(): void

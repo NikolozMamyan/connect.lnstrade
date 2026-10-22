@@ -85,7 +85,7 @@ final class SampleShipmentService
                 $this->ensureSampleClientExists();
                 $this->upsertDeliveryAddress($deliveryLabel, $normalized['recipient']);
                 $orderPayload = $this->buildOrderPayload($orderReference, $normalized);
-                $sageResponse = $this->sageClient->post('/order', $orderPayload);
+                $sageResponse = $this->sageClient->post('/Order', $orderPayload);
             } finally {
                 $exportLock->release();
             }
@@ -183,7 +183,7 @@ final class SampleShipmentService
             /** @var ErpProduct $product */
             $product = $products[$reference];
             $lines[] = [
-                'reference' => $reference,
+                'reference' => (string) $reference,
                 'designation' => trim((string) $product->getDesignation()),
                 'quantity' => $quantity,
             ];
@@ -295,7 +295,7 @@ final class SampleShipmentService
      */
     private function buildOrderPayload(string $orderReference, array $normalized): array
     {
-        $date = (new \DateTimeImmutable())->format('Y-m-d');
+        $date = (new \DateTimeImmutable())->format(\DateTimeInterface::ATOM);
         $company = trim((string) $normalized['recipient']['company']);
         $message = trim((string) $normalized['recipient']['message']);
         $instruction = $company.($message !== '' ? ' - '.$message : ' - Echantillons');
