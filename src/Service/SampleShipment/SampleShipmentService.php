@@ -15,6 +15,8 @@ final class SampleShipmentService
 {
     private const CLIENT_ID = '9ECH';
     private const CLIENT_NAME = 'CLIENT ECHANTILLONS LNS TRADE';
+    private const OWNER_FIRST_NAME = 'Corentin';
+    private const OWNER_NAME = 'BURY';
     private const DELIVERY_INSTRUCTION_MAX_LENGTH = 69;
 
     public function __construct(
@@ -305,6 +307,8 @@ final class SampleShipmentService
             'referenceCommande' => $orderReference,
             'statut' => 'Saisi',
             'modeExpedition' => 'Standard',
+            'ownerFirstName' => self::OWNER_FIRST_NAME,
+            'ownerName' => self::OWNER_NAME,
             'instructionDeLivraison' => mb_substr($instruction, 0, self::DELIVERY_INSTRUCTION_MAX_LENGTH),
             'orderLines' => array_map(static fn (array $line): array => [
                 'reference' => $line['reference'],

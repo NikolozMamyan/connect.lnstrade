@@ -104,6 +104,8 @@ final class SampleShipmentServiceTest extends TestCase
         self::assertSame('12 rue du Test', $deliveryPayload['adresse']);
         self::assertTrue($deliveryPayload['livraisonPrincipal']);
         self::assertSame('9ECH', $orderPayload['numClient']);
+        self::assertSame('Corentin', $orderPayload['ownerFirstName']);
+        self::assertSame('BURY', $orderPayload['ownerName']);
         self::assertSame(0, $orderPayload['orderLines'][0]['prixHT']);
         self::assertSame(3, $orderPayload['orderLines'][0]['quantite']);
         self::assertSame('Boutique Démo - Livrer le matin', $orderPayload['instructionDeLivraison']);
