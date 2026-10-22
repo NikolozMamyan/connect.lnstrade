@@ -1,9 +1,9 @@
-const CACHE_NAME = 'lns-samples-v1';
-const OFFLINE_URL = '/echantillons/offline.html';
+const CACHE_NAME = 'lns-samples-v2';
+const OFFLINE_URL = '/sample-shipment-pwa/offline.html';
 const CORE_ASSETS = [
   OFFLINE_URL,
-  '/echantillons/manifest.webmanifest',
-  '/echantillons/icon.svg'
+  '/sample-shipment-pwa/manifest.webmanifest',
+  '/sample-shipment-pwa/icon.svg'
 ];
 
 self.addEventListener('install', (event) => {

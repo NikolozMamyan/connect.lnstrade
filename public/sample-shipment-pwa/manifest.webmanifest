@@ -11,7 +11,7 @@
   "theme_color": "#111936",
   "icons": [
     {
-      "src": "/echantillons/icon.svg",
+      "src": "/sample-shipment-pwa/icon.svg",
       "sizes": "any",
       "type": "image/svg+xml",
       "purpose": "any maskable"
