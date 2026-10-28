@@ -33,6 +33,26 @@ button { -webkit-tap-highlight-color: transparent; }
 
 .sample-app { min-height: 100vh; }
 
+.sample-app--consumption {
+    --sample-ink: #431407;
+    --sample-ink-soft: #7c5b4b;
+    --sample-accent: #f97316;
+    --sample-accent-dark: #c2410c;
+    --sample-accent-pale: #fff1e6;
+    --sample-border: #f0ded2;
+    --sample-bg: #fff8f2;
+    color: var(--sample-ink);
+    background: radial-gradient(circle at 8% 5%, rgba(249, 115, 22, .13), transparent 24rem), var(--sample-bg);
+}
+.sample-app--consumption .sample-brand__mark,
+.sample-app--consumption .sample-camera-button { background: #ea580c; box-shadow: 0 10px 24px rgba(234, 88, 12, .2); }
+.sample-app--consumption .sample-button--primary { background: linear-gradient(135deg, #c2410c, #ea580c); box-shadow: 0 12px 24px rgba(234, 88, 12, .18); }
+.sample-app--consumption .sample-success__icon { background: linear-gradient(135deg, #ea580c, #fdba74); box-shadow: 0 16px 36px rgba(234, 88, 12, .2); }
+.sample-app--consumption .sample-progress__item.is-active span { box-shadow: 0 0 0 5px rgba(249, 115, 22, .16); }
+.sample-app--consumption .sample-camera__frame i { border-color: #fdba74; }
+.sample-app--consumption .sample-camera__line { background: #fdba74; box-shadow: 0 0 15px #f97316; }
+.sample-app--consumption .sample-review__grid--single { grid-template-columns: 1fr; }
+
 .sample-header {
     position: sticky;
     top: 0;

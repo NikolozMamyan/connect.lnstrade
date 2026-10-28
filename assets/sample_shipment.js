@@ -5,8 +5,10 @@ const root = document.querySelector('[data-sample-app]');
 
 if (root) {
     const authenticated = root.dataset.authenticated === 'true';
-    const CART_KEY = 'lns-sample-shipment-cart-v1';
-    const TOKEN_KEY = 'lns-sample-shipment-token-v1';
+    const internalConsumption = root.dataset.internalConsumption === 'true';
+    const storagePrefix = internalConsumption ? 'lns-internal-consumption' : 'lns-sample-shipment';
+    const CART_KEY = `${storagePrefix}-cart-v1`;
+    const TOKEN_KEY = `${storagePrefix}-token-v1`;
     const toast = root.querySelector('[data-toast]');
     let toastTimer;
     let installPrompt;
@@ -51,7 +53,7 @@ if (root) {
 
     if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => {
-            navigator.serviceWorker.register('/sample-shipment-service-worker.js', { scope: '/echantillons' }).catch(() => {});
+            navigator.serviceWorker.register(root.dataset.serviceWorker, { scope: root.dataset.pwaScope }).catch(() => {});
         });
     }
 
@@ -93,7 +95,7 @@ if (root) {
         });
     } else {
         let cart = loadCart();
-        let currentStep = 0;
+        let currentStep = internalConsumption ? 1 : 0;
         let submitting = false;
         let activeRequestToken = localStorage.getItem(TOKEN_KEY);
         let draftGeneration = 0;
@@ -144,7 +146,7 @@ if (root) {
             cartCount.textContent = String(quantity);
             cartSummary.textContent = quantity === 0
                 ? 'Aucun produit pour le moment'
-                : `${quantity} échantillon${quantity > 1 ? 's' : ''} · ${cart.length} référence${cart.length > 1 ? 's' : ''}`;
+                : `${quantity} ${internalConsumption ? 'produit' : 'échantillon'}${quantity > 1 ? 's' : ''} · ${cart.length} référence${cart.length > 1 ? 's' : ''}`;
             cartEmpty.hidden = cart.length > 0;
             nextProducts.disabled = cart.length === 0;
 
@@ -220,7 +222,7 @@ if (root) {
 
             renderCart();
             signalSuccess();
-            showToast(`${product.reference} ajouté à l’envoi.`);
+            showToast(`${product.reference} ajouté${internalConsumption ? ' à votre consommation.' : ' à l’envoi.'}`);
         }
 
         function signalSuccess() {
@@ -351,8 +353,10 @@ if (root) {
             currentStep = step;
             root.querySelector('[data-progress]').hidden = step === 0 || step === 4;
             const selectedRepresentative = root.querySelector('[data-selected-representative]');
-            selectedRepresentative.hidden = step === 0 || step === 4;
-            selectedRepresentative.textContent = representativeSelect.value ? `Représentant : ${representativeSelect.selectedOptions[0].textContent}` : '';
+            if (selectedRepresentative) {
+                selectedRepresentative.hidden = step === 0 || step === 4;
+                selectedRepresentative.textContent = representativeSelect.value ? `Représentant : ${representativeSelect.selectedOptions[0].textContent}` : '';
+            }
             if (step === 3) root.querySelector('[data-submit-shipment]').disabled = submitting || !cart.length;
             root.querySelectorAll('[data-step]').forEach((panel) => {
                 panel.classList.toggle('is-active', Number(panel.dataset.step) === step);
@@ -366,6 +370,7 @@ if (root) {
         }
 
         function recipientData() {
+            if (internalConsumption) return {};
             return Object.fromEntries(Array.from(new FormData(recipientForm).entries()).map(([key, value]) => [key, value.trim()]));
         }
 
@@ -376,23 +381,25 @@ if (root) {
         }
 
         function renderReview() {
-            root.querySelector('[data-review-representative]').textContent = `Représentant : ${representativeSelect.selectedOptions[0].textContent}`;
+            if (!internalConsumption) root.querySelector('[data-review-representative]').textContent = `Représentant : ${representativeSelect.selectedOptions[0].textContent}`;
             const recipient = recipientData();
             const recipientBox = root.querySelector('[data-review-recipient]');
             const productsBox = root.querySelector('[data-review-products]');
-            recipientBox.replaceChildren();
+            recipientBox?.replaceChildren();
             productsBox.replaceChildren();
 
-            const company = document.createElement('strong');
-            company.textContent = recipient.company;
-            const address = document.createElement('p');
-            address.textContent = [recipient.contactName, recipient.address, recipient.addressComplement, `${recipient.postalCode} ${recipient.city}`, recipient.country]
-                .filter(Boolean)
-                .join('\n');
-            const contacts = document.createElement('small');
-            contacts.textContent = [recipient.phone, recipient.email].filter(Boolean).join(' · ');
-            recipientBox.append(company, address);
-            if (contacts.textContent) recipientBox.append(contacts);
+            if (!internalConsumption) {
+                const company = document.createElement('strong');
+                company.textContent = recipient.company;
+                const address = document.createElement('p');
+                address.textContent = [recipient.contactName, recipient.address, recipient.addressComplement, `${recipient.postalCode} ${recipient.city}`, recipient.country]
+                    .filter(Boolean)
+                    .join('\n');
+                const contacts = document.createElement('small');
+                contacts.textContent = [recipient.phone, recipient.email].filter(Boolean).join(' · ');
+                recipientBox.append(company, address);
+                if (contacts.textContent) recipientBox.append(contacts);
+            }
 
             cart.forEach((item) => {
                 const row = document.createElement('div');
@@ -419,10 +426,12 @@ if (root) {
             if (!submitting) goToStep(0);
         });
         root.querySelector('[data-next-products]')?.addEventListener('click', () => {
-            if (validateProducts()) goToStep(2);
+            if (!validateProducts()) return;
+            if (internalConsumption) renderReview();
+            goToStep(internalConsumption ? 3 : 2);
         });
         root.querySelector('[data-back-products]')?.addEventListener('click', () => { if (!submitting) goToStep(1); });
-        root.querySelector('[data-back-recipient]')?.addEventListener('click', () => { if (!submitting) goToStep(2); });
+        root.querySelector('[data-back-recipient]')?.addEventListener('click', () => { if (!submitting) goToStep(internalConsumption ? 1 : 2); });
         root.querySelector('[data-next-recipient]')?.addEventListener('click', () => {
             clearFieldErrors();
             if (!recipientForm.reportValidity()) return;
@@ -444,15 +453,17 @@ if (root) {
             cart = [];
             activeRequestToken = null;
             localStorage.removeItem(TOKEN_KEY);
-            recipientForm.reset();
-            representativeForm.reset();
+            recipientForm?.reset();
+            representativeForm?.reset();
             searchForm.reset();
             searchResults.replaceChildren();
             searchResults.hidden = true;
-            root.querySelector('[data-review-recipient]').replaceChildren();
+            root.querySelector('[data-review-recipient]')?.replaceChildren();
             root.querySelector('[data-review-products]').replaceChildren();
-            root.querySelector('[data-review-representative]').textContent = '';
-            root.querySelector('[data-selected-representative]').textContent = '';
+            if (!internalConsumption) {
+                root.querySelector('[data-review-representative]').textContent = '';
+                root.querySelector('[data-selected-representative]').textContent = '';
+            }
             root.querySelector('[data-submit-error]').hidden = true;
             root.querySelector('[data-submit-error]').textContent = '';
             root.querySelector('[data-success-reference]').textContent = '—';
@@ -466,9 +477,9 @@ if (root) {
 
         root.querySelector('[data-submit-shipment]')?.addEventListener('click', async () => {
             if (submitting || currentStep !== 3 || !cart.length) return;
-            if (!representativeForm.reportValidity()) { goToStep(0); return; }
+            if (!internalConsumption && !representativeForm.reportValidity()) { goToStep(0); return; }
             if (!validateProducts()) { goToStep(1); return; }
-            if (!recipientForm.reportValidity()) { goToStep(2); return; }
+            if (!internalConsumption && !recipientForm.reportValidity()) { goToStep(2); return; }
             submitting = true;
             const generation = draftGeneration;
             const button = root.querySelector('[data-submit-shipment]');
@@ -489,7 +500,7 @@ if (root) {
                         ...recipientData(),
                         requestToken: requestToken(),
                         csrfToken: root.dataset.submitCsrf,
-                        representativeId: representativeSelect.value,
+                        ...(!internalConsumption ? { representativeId: representativeSelect.value } : {}),
                         lines: cart.map((item) => ({ reference: item.reference, quantity: item.quantity, expiryDate: item.expiryDate })),
                     }),
                 });
@@ -521,25 +532,26 @@ if (root) {
                 submitting = false;
                 button.disabled = currentStep !== 3 || !cart.length;
                 button.classList.remove('is-loading');
-                label.textContent = 'Créer le BC Sage';
+                label.textContent = internalConsumption ? 'Envoyer à Sage' : 'Créer le BC Sage';
             }
         });
 
         root.querySelector('[data-new-shipment]')?.addEventListener('click', () => {
-            goToStep(0);
-            representativeSelect.focus();
+            goToStep(internalConsumption ? 1 : 0);
+            if (internalConsumption) searchInput.focus();
+            else representativeSelect.focus();
         });
 
         window.addEventListener('storage', (event) => {
             if (event.key === TOKEN_KEY && event.newValue === null && (!activeRequestToken || event.oldValue === activeRequestToken)) {
                 resetDraft();
-                goToStep(0);
+                goToStep(internalConsumption ? 1 : 0);
             }
         });
         window.addEventListener('pageshow', (event) => {
             if (event.persisted && !localStorage.getItem(CART_KEY)) {
                 resetDraft();
-                goToStep(0);
+                goToStep(internalConsumption ? 1 : 0);
             }
         });
 

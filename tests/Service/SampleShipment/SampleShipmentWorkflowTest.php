@@ -35,6 +35,7 @@ final class SampleShipmentWorkflowTest extends TestCase
     private MessageBusInterface $bus;
     private array $requests = [];
     private array $dispatched = [];
+    private int $nextShipmentId = 42;
 
     protected function setUp(): void
     {
@@ -204,6 +205,121 @@ final class SampleShipmentWorkflowTest extends TestCase
         self::assertSame([], $this->requests);
     }
 
+    public function testConsumptionCreatesOneFixedClientAndAddressAndReusesThem(): void
+    {
+        $this->commercials = $this->createMock(CommercialRepository::class);
+        $this->commercials->expects(self::never())->method('find');
+        $this->mailer = $this->createMock(SampleShipmentMailer::class);
+        $this->mailer->expects(self::never())->method('send');
+        $notFound = static fn (): MockResponse => new MockResponse('{"message":"Not found"}', ['http_code' => 404]);
+        $service = $this->service([
+            ['accessToken' => 'token'], $notFound(), ['success' => true], $notFound(), ['success' => true], ['piece' => 'BC003001'],
+            [['reference' => 'CONSOLNS']], [['intitule' => 'LNS CONSO', 'livraisonPrincipal' => true]], ['success' => true], ['piece' => 'BC003002'],
+        ]);
+        $input = [
+            'requestToken' => 'consumption-request-0042',
+            'lines' => $this->input()['lines'],
+            'company' => 'Must be ignored', 'address' => 'Must be ignored', 'representativeId' => 999,
+        ];
+
+        $result = $service->submitConsumption($input);
+
+        self::assertSame('BC003001', $result['sageDocument']);
+        self::assertTrue($this->shipment->isConsumption());
+        self::assertSame('13 quai Kleber', $this->shipment->getRecipient()['address']);
+        self::assertSame('67000', $this->shipment->getRecipient()['postalCode']);
+        self::assertSame('Strasbourg', $this->shipment->getRecipient()['city']);
+        self::assertSame('LNS CONSO', $this->shipment->getDeliveryLabel());
+        self::assertSame('Corentin', $this->shipment->getRepresentative()['firstName']);
+        self::assertSame('BURY', $this->shipment->getRepresentative()['lastName']);
+        self::assertSame('2027-03-15', $this->shipment->getLines()[0]['expiryDate']);
+        self::assertTrue($service->submitConsumption($input)['idempotent']);
+        self::assertCount(6, $this->requests);
+        $service->sendNotification(42);
+
+        $this->shipment = null;
+        $input['requestToken'] = 'consumption-request-0043';
+        $service->submitConsumption($input);
+        $clientCreates = array_values(array_filter($this->requests, static fn (array $request): bool => $request[0] === 'POST' && $request[1] === '/Clients'));
+        $addressCreates = array_values(array_filter($this->requests, static fn (array $request): bool => $request[0] === 'POST' && $request[1] === '/Livraisons'));
+        $orders = array_values(array_filter($this->requests, static fn (array $request): bool => $request[0] === 'POST' && $request[1] === '/Order'));
+        self::assertCount(1, $clientCreates);
+        self::assertSame('CONSOLNS', $clientCreates[0][2]['reference']);
+        self::assertCount(1, $addressCreates);
+        self::assertSame('CONSOLNS', $addressCreates[0][2]['client']);
+        self::assertSame('67000', $addressCreates[0][2]['codePostal']);
+        self::assertCount(2, $orders);
+        self::assertNotSame($orders[0][2]['referenceCommande'], $orders[1][2]['referenceCommande']);
+        foreach ($orders as $order) {
+            self::assertSame('CONSOLNS', $order[2]['numClient']);
+            self::assertSame('Corentin', $order[2]['ownerFirstName']);
+            self::assertSame('BURY', $order[2]['ownerName']);
+            self::assertStringStartsWith('CNS-', $order[2]['referenceCommande']);
+            self::assertLessThanOrEqual(17, strlen($order[2]['referenceCommande']));
+            self::assertSame(0, $order[2]['orderLines'][0]['prixHT']);
+            self::assertSame(3, $order[2]['orderLines'][0]['quantite']);
+            self::assertSame('ART-001', $order[2]['orderLines'][0]['reference']);
+            self::assertArrayNotHasKey('expiryDate', $order[2]['orderLines'][0]);
+        }
+        self::assertSame([], $this->dispatched);
+    }
+
+    #[DataProvider('invalidExpiryDates')]
+    public function testConsumptionRequiresARealExpiryDate(mixed $expiryDate): void
+    {
+        $input = ['requestToken' => 'consumption-request-0042', 'lines' => $this->input()['lines']];
+        $input['lines'][0]['expiryDate'] = $expiryDate;
+
+        try {
+            $this->service()->submitConsumption($input);
+            self::fail('Consumption expiry dates must be validated.');
+        } catch (SampleShipmentValidationException $exception) {
+            self::assertArrayHasKey('lines.0.expiryDate', $exception->getErrors());
+            self::assertArrayNotHasKey('representativeId', $exception->getErrors());
+            self::assertArrayNotHasKey('company', $exception->getErrors());
+        }
+        self::assertSame([], $this->requests);
+    }
+
+    public function testConsumptionRetryRecoversTheOrderUsingItsOwnSageClient(): void
+    {
+        $this->prepareShipment(SampleShipment::PURPOSE_CONSUMPTION);
+        $service = $this->service([
+            ['accessToken' => 'token'], [['reference' => 'CNS-261022-000042', 'piece' => 'BC003001']],
+        ]);
+
+        $result = $service->submitConsumption(['requestToken' => 'request-token-0042']);
+
+        self::assertTrue($result['idempotent']);
+        self::assertSame('BC003001', $result['sageDocument']);
+        self::assertSame('CONSOLNS', $this->requests[1][3]['tiers']);
+        self::assertCount(2, $this->requests);
+        self::assertSame([], $this->dispatched);
+    }
+
+    #[DataProvider('shipmentPurposes')]
+    public function testRequestTokensCannotCrossBetweenConsumptionAndSamples(string $purpose): void
+    {
+        $this->prepareShipment($purpose);
+        $this->shipment->markSent((string) $this->shipment->getOrderReference(), 'Lieu', [], ['piece' => 'BC003001']);
+        $service = $this->service();
+
+        try {
+            if ($purpose === SampleShipment::PURPOSE_SAMPLES) $service->submitConsumption($this->input());
+            else $service->submit($this->input());
+            self::fail('A request token cannot be reused in the other flow.');
+        } catch (SampleShipmentValidationException $exception) {
+            self::assertArrayHasKey('requestToken', $exception->getErrors());
+        }
+        self::assertSame([], $this->requests);
+        self::assertSame([], $this->dispatched);
+    }
+
+    public static function shipmentPurposes(): array
+    {
+        return [[SampleShipment::PURPOSE_SAMPLES], [SampleShipment::PURPOSE_CONSUMPTION]];
+    }
+
     private function input(): array
     {
         return [
@@ -219,15 +335,15 @@ final class SampleShipmentWorkflowTest extends TestCase
         ];
     }
 
-    private function prepareShipment(): void
+    private function prepareShipment(string $purpose = SampleShipment::PURPOSE_SAMPLES): void
     {
         $recipient = $this->input() + ['addressComplement' => null, 'phone' => null, 'email' => null, 'message' => null];
         $recipient['company'] = 'Ancienne entreprise';
-        $this->shipment = (new SampleShipment('request-token-0042'))
+        $this->shipment = (new SampleShipment('request-token-0042', $purpose))
             ->setRecipient($recipient)
             ->setLines($this->input()['lines'])
             ->setRepresentative(['id' => 7, 'firstName' => 'Sonita', 'lastName' => 'SIEK'])
-            ->prepareExport('ECH-261022-000042', 'Ancienne entreprise #000042', ['numClient' => '9ECH'])
+            ->prepareExport(($purpose === SampleShipment::PURPOSE_CONSUMPTION ? 'CNS' : 'ECH').'-261022-000042', 'Ancienne entreprise #000042', ['numClient' => $purpose === SampleShipment::PURPOSE_CONSUMPTION ? 'CONSOLNS' : '9ECH'])
             ->markFailed('Connection interrupted');
         (new \ReflectionProperty($this->shipment, 'id'))->setValue($this->shipment, 42);
     }
@@ -241,15 +357,18 @@ final class SampleShipmentWorkflowTest extends TestCase
         $shipments->method('find')->willReturnCallback(fn (): ?SampleShipment => $this->shipment);
         $entityManager = $this->createStub(EntityManagerInterface::class);
         $entityManager->method('persist')->willReturnCallback(function (SampleShipment $shipment): void {
-            (new \ReflectionProperty($shipment, 'id'))->setValue($shipment, 42);
+            (new \ReflectionProperty($shipment, 'id'))->setValue($shipment, $this->nextShipmentId++);
             $this->shipment = $shipment;
         });
         $client = new MockHttpClient(function (string $method, string $url, array $options) use (&$responses): MockResponse {
             $body = !empty($options['body']) ? json_decode($options['body'], true, 512, JSON_THROW_ON_ERROR) : null;
-            $this->requests[] = [$method, parse_url($url, PHP_URL_PATH), $body];
+            parse_str((string) parse_url($url, PHP_URL_QUERY), $query);
+            $this->requests[] = [$method, parse_url($url, PHP_URL_PATH), $body, $query];
             self::assertNotEmpty($responses, 'Unexpected Sage request: '.$method.' '.$url);
 
-            return new MockResponse(json_encode(array_shift($responses), JSON_THROW_ON_ERROR), ['response_headers' => ['content-type: application/json']]);
+            $response = array_shift($responses);
+
+            return $response instanceof MockResponse ? $response : new MockResponse(json_encode($response, JSON_THROW_ON_ERROR), ['response_headers' => ['content-type: application/json']]);
         });
 
         return new SampleShipmentService(

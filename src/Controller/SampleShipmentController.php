@@ -10,6 +10,7 @@ use App\Service\SampleShipment\SampleShipmentBusyException;
 use App\Service\SampleShipment\SampleShipmentService;
 use App\Service\SampleShipment\SampleShipmentValidationException;
 use App\Service\SampleShipment\SampleShipmentNotificationException;
+use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
@@ -18,37 +19,46 @@ use Symfony\Component\Routing\Attribute\Route;
 use Symfony\Component\Security\Csrf\CsrfTokenManagerInterface;
 use Symfony\Component\RateLimiter\RateLimiterFactory;
 
-#[Route('/echantillons', name: 'sample_shipment_')]
 final class SampleShipmentController extends AbstractController
 {
-    public function __construct(private readonly RateLimiterFactory $sampleShipmentAuthLimiter)
+    public function __construct(
+        private readonly RateLimiterFactory $sampleShipmentAuthLimiter,
+        private readonly SampleShipmentAccessService $sampleAccessService,
+        #[Autowire(service: 'app.internal_consumption_access')]
+        private readonly SampleShipmentAccessService $consumptionAccessService,
+    )
     {
     }
 
-    #[Route('', name: 'index', methods: ['GET'])]
+    #[Route('/echantillons', name: 'sample_shipment_index', methods: ['GET'])]
+    #[Route('/consommation', name: 'internal_consumption_index', defaults: ['internalConsumption' => true], methods: ['GET'])]
     public function index(
         Request $request,
-        SampleShipmentAccessService $accessService,
         CsrfTokenManagerInterface $csrfTokenManager,
         CommercialRepository $commercialRepository,
     ): Response
     {
-        $granted = $accessService->isGranted($request);
+        $granted = $this->accessService($request)->isGranted($request);
+        $consumption = $request->attributes->getBoolean('internalConsumption');
 
         return $this->render('sample_shipment/index.html.twig', [
             'sampleAccessGranted' => $granted,
-            'representatives' => $granted ? $commercialRepository->findActiveSageRepresentatives() : [],
-            'authCsrfToken' => $csrfTokenManager->getToken('sample-shipment-auth')->getValue(),
-            'submitCsrfToken' => $csrfTokenManager->getToken('sample-shipment-submit')->getValue(),
+            'internalConsumption' => $consumption,
+            'routePrefix' => $consumption ? 'internal_consumption_' : 'sample_shipment_',
+            'representatives' => $granted && !$consumption ? $commercialRepository->findActiveSageRepresentatives() : [],
+            'authCsrfToken' => $csrfTokenManager->getToken($this->csrfId($request, 'auth'))->getValue(),
+            'submitCsrfToken' => $csrfTokenManager->getToken($this->csrfId($request, 'submit'))->getValue(),
         ]);
     }
 
-    #[Route('/authentifier', name: 'authenticate', methods: ['POST'])]
-    public function authenticate(Request $request, SampleShipmentAccessService $accessService): JsonResponse
+    #[Route('/echantillons/authentifier', name: 'sample_shipment_authenticate', methods: ['POST'])]
+    #[Route('/consommation/authentifier', name: 'internal_consumption_authenticate', defaults: ['internalConsumption' => true], methods: ['POST'])]
+    public function authenticate(Request $request): JsonResponse
     {
+        $accessService = $this->accessService($request);
         $payload = $this->jsonPayload($request);
 
-        if (!$this->isCsrfTokenValid('sample-shipment-auth', (string) ($payload['csrfToken'] ?? ''))) {
+        if (!$this->isCsrfTokenValid($this->csrfId($request, 'auth'), (string) ($payload['csrfToken'] ?? ''))) {
             return $this->errorResponse('La session a expiré. Rechargez la page.', Response::HTTP_FORBIDDEN);
         }
 
@@ -75,13 +85,13 @@ final class SampleShipmentController extends AbstractController
         return $response;
     }
 
-    #[Route('/api/produits', name: 'products', methods: ['GET'])]
+    #[Route('/echantillons/api/produits', name: 'sample_shipment_products', methods: ['GET'])]
+    #[Route('/consommation/api/produits', name: 'internal_consumption_products', defaults: ['internalConsumption' => true], methods: ['GET'])]
     public function products(
         Request $request,
-        SampleShipmentAccessService $accessService,
         ErpProductRepository $productRepository,
     ): JsonResponse {
-        if (!$accessService->isGranted($request)) {
+        if (!$this->accessService($request)->isGranted($request)) {
             return $this->errorResponse('Accès expiré. Saisissez de nouveau le code.', Response::HTTP_UNAUTHORIZED);
         }
 
@@ -112,26 +122,30 @@ final class SampleShipmentController extends AbstractController
         ]);
     }
 
-    #[Route('/api/envois', name: 'submit', methods: ['POST'])]
+    #[Route('/echantillons/api/envois', name: 'sample_shipment_submit', methods: ['POST'])]
+    #[Route('/consommation/api/envois', name: 'internal_consumption_submit', defaults: ['internalConsumption' => true], methods: ['POST'])]
     public function submit(
         Request $request,
-        SampleShipmentAccessService $accessService,
         SampleShipmentService $shipmentService,
     ): JsonResponse {
-        if (!$accessService->isGranted($request)) {
+        if (!$this->accessService($request)->isGranted($request)) {
             return $this->errorResponse('Accès expiré. Saisissez de nouveau le code.', Response::HTTP_UNAUTHORIZED);
         }
 
         $payload = $this->jsonPayload($request);
 
-        if (!$this->isCsrfTokenValid('sample-shipment-submit', (string) ($payload['csrfToken'] ?? ''))) {
+        if (!$this->isCsrfTokenValid($this->csrfId($request, 'submit'), (string) ($payload['csrfToken'] ?? ''))) {
             return $this->errorResponse('La session a expiré. Rechargez la page.', Response::HTTP_FORBIDDEN);
         }
 
         unset($payload['csrfToken']);
 
         try {
-            return new JsonResponse($shipmentService->submit($payload), Response::HTTP_CREATED);
+            $result = $request->attributes->getBoolean('internalConsumption')
+                ? $shipmentService->submitConsumption($payload)
+                : $shipmentService->submit($payload);
+
+            return new JsonResponse($result, Response::HTTP_CREATED);
         } catch (SampleShipmentValidationException $exception) {
             return new JsonResponse([
                 'success' => false,
@@ -148,6 +162,16 @@ final class SampleShipmentController extends AbstractController
                 Response::HTTP_BAD_GATEWAY
             );
         }
+    }
+
+    private function accessService(Request $request): SampleShipmentAccessService
+    {
+        return $request->attributes->getBoolean('internalConsumption') ? $this->consumptionAccessService : $this->sampleAccessService;
+    }
+
+    private function csrfId(Request $request, string $action): string
+    {
+        return ($request->attributes->getBoolean('internalConsumption') ? 'internal-consumption-' : 'sample-shipment-').$action;
     }
 
     /**

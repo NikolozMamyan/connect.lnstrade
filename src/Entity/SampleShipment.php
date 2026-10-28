@@ -15,6 +15,8 @@ class SampleShipment
     public const STATUS_PROCESSING = 'processing';
     public const STATUS_SENT = 'sent';
     public const STATUS_FAILED = 'failed';
+    public const PURPOSE_SAMPLES = 'samples';
+    public const PURPOSE_CONSUMPTION = 'consumption';
 
     #[ORM\Id]
     #[ORM\GeneratedValue]
@@ -23,6 +25,9 @@ class SampleShipment
 
     #[ORM\Column(name: 'request_token', length: 64)]
     private string $requestToken;
+
+    #[ORM\Column(length: 16, options: ['default' => 'samples'])]
+    private string $purpose = self::PURPOSE_SAMPLES;
 
     #[ORM\Column(length: 16)]
     private string $status = self::STATUS_PROCESSING;
@@ -90,9 +95,10 @@ class SampleShipment
     #[ORM\Column(name: 'updated_at', type: Types::DATETIME_IMMUTABLE)]
     private \DateTimeImmutable $updatedAt;
 
-    public function __construct(string $requestToken)
+    public function __construct(string $requestToken, string $purpose = self::PURPOSE_SAMPLES)
     {
         $this->requestToken = trim($requestToken);
+        $this->purpose = $purpose;
         $this->createdAt = new \DateTimeImmutable();
         $this->updatedAt = $this->createdAt;
     }
@@ -110,6 +116,16 @@ class SampleShipment
     public function getStatus(): string
     {
         return $this->status;
+    }
+
+    public function getPurpose(): string
+    {
+        return $this->purpose;
+    }
+
+    public function isConsumption(): bool
+    {
+        return $this->purpose === self::PURPOSE_CONSUMPTION;
     }
 
     public function isSent(): bool

@@ -13,6 +13,7 @@ use App\Service\Erp\SageClient;
 use App\Service\Mailer\SampleShipmentMailer;
 use Doctrine\ORM\EntityManagerInterface;
 use Psr\Log\LoggerInterface;
+use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Symfony\Component\Lock\LockFactory;
 use Symfony\Component\Messenger\MessageBusInterface;
 
@@ -20,6 +21,9 @@ final class SampleShipmentService
 {
     private const CLIENT_ID = '9ECH';
     private const CLIENT_NAME = 'CLIENT ECHANTILLONS LNS TRADE';
+    private const CONSUMPTION_CLIENT_ID = 'CONSOLNS';
+    private const CONSUMPTION_CLIENT_NAME = 'CONSOMMATION INTERNE LNS TRADE';
+    private const CONSUMPTION_DELIVERY_LABEL = 'LNS CONSO';
     private const DELIVERY_INSTRUCTION_MAX_LENGTH = 69;
 
     public function __construct(
@@ -32,6 +36,10 @@ final class SampleShipmentService
         private readonly CommercialRepository $commercialRepository,
         private readonly MessageBusInterface $messageBus,
         private readonly SampleShipmentMailer $mailer,
+        #[Autowire('%internal_consumption_owner_first_name%')]
+        private readonly string $consumptionOwnerFirstName = 'Corentin',
+        #[Autowire('%internal_consumption_owner_last_name%')]
+        private readonly string $consumptionOwnerLastName = 'BURY',
     ) {
     }
 
@@ -42,6 +50,17 @@ final class SampleShipmentService
      */
     public function submit(array $input): array
     {
+        return $this->submitForPurpose($input, SampleShipment::PURPOSE_SAMPLES);
+    }
+
+    public function submitConsumption(array $input): array
+    {
+        return $this->submitForPurpose($input, SampleShipment::PURPOSE_CONSUMPTION);
+    }
+
+    private function submitForPurpose(array $input, string $purpose): array
+    {
+        $consumption = $purpose === SampleShipment::PURPOSE_CONSUMPTION;
         $requestToken = trim((string) ($input['requestToken'] ?? ''));
 
         if (!preg_match('/^[A-Za-z0-9-]{16,64}$/', $requestToken)) {
@@ -56,6 +75,10 @@ final class SampleShipmentService
 
         try {
             $shipment = $this->shipmentRepository->findOneByRequestToken($requestToken);
+
+            if ($shipment instanceof SampleShipment && $shipment->getPurpose() !== $purpose) {
+                throw new SampleShipmentValidationException(['requestToken' => 'Cette demande appartient à un autre parcours. Rechargez la page.']);
+            }
 
             if ($shipment instanceof SampleShipment && $shipment->isSent()) {
                 $this->queueNotification($shipment);
@@ -75,10 +98,10 @@ final class SampleShipmentService
                 }
             }
 
-            $normalized = $this->normalizeInput($input);
+            $normalized = $this->normalizeInput($input, $consumption);
 
             if (!$shipment instanceof SampleShipment) {
-                $shipment = new SampleShipment($requestToken);
+                $shipment = new SampleShipment($requestToken, $purpose);
                 $this->entityManager->persist($shipment);
             }
 
@@ -90,21 +113,22 @@ final class SampleShipmentService
             $this->entityManager->flush();
 
             $orderReference = $shipment->getOrderReference()
-                ?? sprintf('ECH-%s-%06d', (new \DateTimeImmutable())->format('ymd'), $shipment->getId());
-            $deliveryLabel = $this->buildDeliveryLabel($normalized['recipient']['company'], (int) $shipment->getId());
-            $orderPayload = $this->buildOrderPayload($orderReference, $normalized);
+                ?? sprintf('%s-%s-%06d', $consumption ? 'CNS' : 'ECH', (new \DateTimeImmutable())->format('ymd'), $shipment->getId());
+            $deliveryLabel = $consumption ? self::CONSUMPTION_DELIVERY_LABEL : $this->buildDeliveryLabel($normalized['recipient']['company'], (int) $shipment->getId());
+            $orderPayload = $this->buildOrderPayload($orderReference, $normalized, $consumption);
             $shipment->prepareExport($orderReference, $deliveryLabel, $orderPayload);
             $this->entityManager->flush();
 
-            $exportLock = $this->lockFactory->createLock('sample-shipment-sage-export', 180);
+            $exportLock = $this->lockFactory->createLock($consumption ? 'internal-consumption-sage-export' : 'sample-shipment-sage-export', 180);
 
             if (!$exportLock->acquire()) {
-                throw new SampleShipmentBusyException('Un autre envoi d’échantillons est en cours. Réessayez dans quelques instants.');
+                throw new SampleShipmentBusyException('Un autre envoi est en cours. Réessayez dans quelques instants.');
             }
 
             try {
-                $this->ensureSampleClientExists();
-                $this->upsertDeliveryAddress($deliveryLabel, $normalized['recipient']);
+                $clientId = $consumption ? self::CONSUMPTION_CLIENT_ID : self::CLIENT_ID;
+                $this->ensureClientExists($consumption);
+                $this->upsertDeliveryAddress($deliveryLabel, $normalized['recipient'], $clientId);
                 $sageResponse = $this->sageClient->post('/Order', $orderPayload);
             } finally {
                 $exportLock->release();
@@ -145,7 +169,7 @@ final class SampleShipmentService
         try {
             $shipment = $this->shipmentRepository->find($shipmentId);
 
-            if (!$shipment instanceof SampleShipment || !$shipment->isSent() || $shipment->isNotified()) {
+            if (!$shipment instanceof SampleShipment || $shipment->isConsumption() || !$shipment->isSent() || $shipment->isNotified()) {
                 return;
             }
 
@@ -159,7 +183,7 @@ final class SampleShipmentService
 
     private function queueNotification(SampleShipment $shipment): void
     {
-        if ($shipment->isNotified()) {
+        if ($shipment->isConsumption() || $shipment->isNotified()) {
             return;
         }
 
@@ -182,7 +206,7 @@ final class SampleShipmentService
             $orders = $this->extractList($this->sageClient->get('/Document/header', [
                 'domaine' => 0,
                 'type' => 1,
-                'tiers' => self::CLIENT_ID,
+                'tiers' => $shipment->isConsumption() ? self::CONSUMPTION_CLIENT_ID : self::CLIENT_ID,
                 'dateDebut' => $shipment->getCreatedAt()->format('Y-m-d'),
                 'dateFin' => (new \DateTimeImmutable('tomorrow'))->format('Y-m-d'),
             ]));
@@ -206,20 +230,31 @@ final class SampleShipmentService
     /**
      * @param array<string, mixed> $input
      *
-     * @return array{recipient: array<string, ?string>, representative: array{id: int, firstName: string, lastName: string}, lines: list<array{reference: string, designation: string, quantity: int, expiryDate: string}>}
+     * @return array{recipient: array<string, ?string>, representative: array{id?: int, firstName: string, lastName: string}, lines: list<array{reference: string, designation: string, quantity: int, expiryDate: string}>}
      */
-    private function normalizeInput(array $input): array
+    private function normalizeInput(array $input, bool $consumption): array
     {
         $errors = [];
         $representativeId = filter_var($input['representativeId'] ?? null, FILTER_VALIDATE_INT);
-        $commercial = $representativeId !== false && $representativeId > 0
+        $commercial = !$consumption && $representativeId !== false && $representativeId > 0
             ? $this->commercialRepository->find($representativeId)
             : null;
 
-        if (!$commercial instanceof Commercial || !$commercial->isActive() || !$commercial->getSageFirstName() || !$commercial->getSageLastName()) {
+        if (!$consumption && (!$commercial instanceof Commercial || !$commercial->isActive() || !$commercial->getSageFirstName() || !$commercial->getSageLastName())) {
             $errors['representativeId'] = 'Sélectionnez un représentant Sage valide.';
         }
-        $recipient = [
+        $recipient = $consumption ? [
+            'company' => self::CONSUMPTION_CLIENT_NAME,
+            'contactName' => null,
+            'address' => '13 quai Kleber',
+            'addressComplement' => null,
+            'postalCode' => '67000',
+            'city' => 'Strasbourg',
+            'country' => 'France',
+            'phone' => null,
+            'email' => null,
+            'message' => 'Consommation interne LNS Trade',
+        ] : [
             'company' => $this->requiredString($input, 'company', 150, 'Entreprise', $errors),
             'contactName' => $this->optionalString($input, 'contactName', 150, 'Contact', $errors),
             'address' => $this->requiredString($input, 'address', 150, 'Adresse', $errors),
@@ -303,7 +338,10 @@ final class SampleShipmentService
 
         return [
             'recipient' => $recipient,
-            'representative' => [
+            'representative' => $consumption ? [
+                'firstName' => $this->consumptionOwnerFirstName,
+                'lastName' => $this->consumptionOwnerLastName,
+            ] : [
                 'id' => (int) $commercial->getId(),
                 'firstName' => $commercial->getSageFirstName(),
                 'lastName' => $commercial->getSageLastName(),
@@ -312,20 +350,30 @@ final class SampleShipmentService
         ];
     }
 
-    private function ensureSampleClientExists(): void
+    private function ensureClientExists(bool $consumption): void
     {
-        $clients = $this->extractList($this->sageClient->get('/Clients', ['reference' => self::CLIENT_ID]));
+        $clientId = $consumption ? self::CONSUMPTION_CLIENT_ID : self::CLIENT_ID;
+
+        try {
+            $clients = $this->extractList($this->sageClient->get('/Clients', ['reference' => $clientId]));
+        } catch (\RuntimeException $exception) {
+            if (!str_contains($exception->getMessage(), 'Erreur API Sage [404]')) {
+                throw $exception;
+            }
+
+            $clients = [];
+        }
 
         foreach ($clients as $client) {
-            if (strcasecmp(trim((string) ($client['reference'] ?? '')), self::CLIENT_ID) === 0) {
+            if (strcasecmp(trim((string) ($client['reference'] ?? '')), $clientId) === 0) {
                 return;
             }
         }
 
         $this->sageClient->post('/Clients', [
-            'reference' => self::CLIENT_ID,
-            'intitule' => self::CLIENT_NAME,
-            'abrege' => 'ECHANTILLONS',
+            'reference' => $clientId,
+            'intitule' => $consumption ? self::CONSUMPTION_CLIENT_NAME : self::CLIENT_NAME,
+            'abrege' => $consumption ? 'CONSO LNS' : 'ECHANTILLONS',
             'tauxRemise' => 0,
             'tauxEscompte' => 0,
             'tauxReleve' => 0,
@@ -337,10 +385,10 @@ final class SampleShipmentService
     /**
      * @param array<string, ?string> $recipient
      */
-    private function upsertDeliveryAddress(string $deliveryLabel, array $recipient): void
+    private function upsertDeliveryAddress(string $deliveryLabel, array $recipient, string $clientId): void
     {
         $delivery = [
-            'client' => self::CLIENT_ID,
+            'client' => $clientId,
             'intitule' => $deliveryLabel,
             'adresse' => $recipient['address'],
             'complement' => $recipient['addressComplement'],
@@ -353,7 +401,7 @@ final class SampleShipmentService
             'commentaire' => $recipient['message'],
             'livraisonPrincipal' => true,
         ];
-        $existingDeliveries = $this->findExistingDeliveries();
+        $existingDeliveries = $this->findExistingDeliveries($clientId);
         $targetExists = false;
 
         foreach ($existingDeliveries as $existingDelivery) {
@@ -366,7 +414,7 @@ final class SampleShipmentService
 
             if ($this->isMainDelivery($existingDelivery) && $existingLabel !== '') {
                 $this->sageClient->patch('/Livraisons', [
-                    'client' => self::CLIENT_ID,
+                    'client' => $clientId,
                     'intitule' => $existingLabel,
                     'nouveauIntitule' => $existingLabel,
                     'livraisonPrincipal' => false,
@@ -386,10 +434,10 @@ final class SampleShipmentService
      *
      * @return list<array<string, mixed>>
      */
-    private function findExistingDeliveries(): array
+    private function findExistingDeliveries(string $clientId): array
     {
         try {
-            return $this->extractList($this->sageClient->get('/Livraisons', ['client' => self::CLIENT_ID]));
+            return $this->extractList($this->sageClient->get('/Livraisons', ['client' => $clientId]));
         } catch (\RuntimeException $exception) {
             if (str_contains($exception->getMessage(), 'Erreur API Sage [404]')) {
                 return [];
@@ -409,19 +457,19 @@ final class SampleShipmentService
     }
 
     /**
-     * @param array{recipient: array<string, ?string>, representative: array{id: int, firstName: string, lastName: string}, lines: list<array{reference: string, designation: string, quantity: int, expiryDate: string}>} $normalized
+     * @param array{recipient: array<string, ?string>, representative: array{id?: int, firstName: string, lastName: string}, lines: list<array{reference: string, designation: string, quantity: int, expiryDate: string}>} $normalized
      *
      * @return array<string, mixed>
      */
-    private function buildOrderPayload(string $orderReference, array $normalized): array
+    private function buildOrderPayload(string $orderReference, array $normalized, bool $consumption): array
     {
         $date = (new \DateTimeImmutable())->format(\DateTimeInterface::ATOM);
         $company = trim((string) $normalized['recipient']['company']);
         $message = trim((string) $normalized['recipient']['message']);
-        $instruction = $company.($message !== '' ? ' - '.$message : ' - Echantillons');
+        $instruction = $consumption ? 'Consommation interne LNS Trade' : $company.($message !== '' ? ' - '.$message : ' - Echantillons');
 
         return [
-            'numClient' => self::CLIENT_ID,
+            'numClient' => $consumption ? self::CONSUMPTION_CLIENT_ID : self::CLIENT_ID,
             'dateCommande' => $date,
             'dateLivraison' => $date,
             'referenceCommande' => $orderReference,
