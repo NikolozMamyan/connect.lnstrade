@@ -4,17 +4,18 @@
 <body style="margin:0;padding:24px;background:#f4f6fa;color:#111936;font-family:Arial,sans-serif">
 {% set recipient = shipment.recipient %}
 {% set representative = shipment.representative %}
+{% set consumption = shipment.consumption %}
 <div style="max-width:760px;margin:auto;padding:28px;background:#fff;border-radius:16px">
-    <p style="color:#008f7b;font-weight:bold">LNS TRADE · ÉCHANTILLONS</p>
-    <h1 style="font-size:24px">Nouvel envoi à préparer</h1>
-    <p>Le bon de commande à <strong>0 €</strong> a été créé dans Sage pour le client <strong>9ECH</strong>.</p>
+    <p style="color:{{ consumption ? '#c2410c' : '#008f7b' }};font-weight:bold">LNS TRADE · {{ consumption ? 'CONSOMMATION INTERNE' : 'ÉCHANTILLONS' }}</p>
+    <h1 style="font-size:24px">{{ consumption ? 'Nouvelle consommation interne' : 'Nouvel envoi à préparer' }}</h1>
+    <p>Le bon de commande à <strong>0 €</strong> a été créé dans Sage pour le client <strong>{{ consumption ? 'CONSOLNS' : '9ECH' }}</strong>.</p>
     <p>
         <strong>BC Sage :</strong> {{ shipment.sageDocument ?? 'Numéro non retourné par Sage' }}<br>
         <strong>Référence :</strong> {{ shipment.orderReference }}<br>
         <strong>Date :</strong> {{ shipment.sentAt|date('d/m/Y H:i', 'Europe/Paris') }}<br>
-        <strong>Représentant :</strong> {{ representative.firstName }} {{ representative.lastName }}
+        <strong>{{ consumption ? 'Propriétaire Sage' : 'Représentant' }} :</strong> {{ representative.firstName }} {{ representative.lastName }}
     </p>
-    <h2 style="font-size:18px">Livraison</h2>
+    <h2 style="font-size:18px">{{ consumption ? 'Lieu de consommation' : 'Livraison' }}</h2>
     <p>
         <strong>{{ recipient.company }}</strong><br>
         {% if recipient.contactName %}{{ recipient.contactName }}<br>{% endif %}
@@ -24,14 +25,16 @@
         {{ recipient.country }}
     </p>
     <p>
-        <strong>Lieu de livraison Sage :</strong> {{ shipment.deliveryLabel }}<br>
+        <strong>Lieu de livraison Sage :</strong> {{ shipment.deliveryLabel }}
+        {% if not consumption %}<br>
         <strong>Téléphone :</strong> {{ recipient.phone ?: '—' }}<br>
         <strong>E-mail :</strong> {{ recipient.email ?: '—' }}
+        {% endif %}
     </p>
     {% if recipient.message %}<p><strong>Instructions :</strong><br>{{ recipient.message|nl2br }}</p>{% endif %}
-    <h2 style="font-size:18px">Produits et lots à sélectionner</h2>
+    <h2 style="font-size:18px">{{ consumption ? 'Produits consommés' : 'Produits et lots à sélectionner' }}</h2>
     <table style="width:100%;border-collapse:collapse;text-align:left">
-        <thead><tr style="background:#e4faf6">
+        <thead><tr style="background:{{ consumption ? '#fff1e6' : '#e4faf6' }}">
             <th style="padding:10px">Référence / Produit</th>
             <th style="padding:10px">Quantité</th>
             <th style="padding:10px">Date de péremption</th>
@@ -46,7 +49,7 @@
         {% endfor %}
         </tbody>
     </table>
-    <p style="font-size:12px;color:#5d657d">Les dates de péremption sont renseignées par le commercial pour guider le choix des lots. Elles ne sont pas transmises à Sage.</p>
+    <p style="font-size:12px;color:#5d657d">{{ consumption ? 'Les dates de péremption des produits consommés sont conservées dans ce récapitulatif. Elles ne sont pas transmises à Sage.' : 'Les dates de péremption sont renseignées par le commercial pour guider le choix des lots. Elles ne sont pas transmises à Sage.' }}</p>
 </div>
 </body>
 </html>

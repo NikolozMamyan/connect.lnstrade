@@ -169,7 +169,7 @@ final class SampleShipmentService
         try {
             $shipment = $this->shipmentRepository->find($shipmentId);
 
-            if (!$shipment instanceof SampleShipment || $shipment->isConsumption() || !$shipment->isSent() || $shipment->isNotified()) {
+            if (!$shipment instanceof SampleShipment || !$shipment->isSent() || $shipment->isNotified()) {
                 return;
             }
 
@@ -183,7 +183,7 @@ final class SampleShipmentService
 
     private function queueNotification(SampleShipment $shipment): void
     {
-        if ($shipment->isConsumption() || $shipment->isNotified()) {
+        if ($shipment->isNotified()) {
             return;
         }
 

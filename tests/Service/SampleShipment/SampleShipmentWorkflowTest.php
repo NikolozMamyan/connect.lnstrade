@@ -153,10 +153,11 @@ final class SampleShipmentWorkflowTest extends TestCase
         self::assertSame('GET', $this->requests[1][0]);
     }
 
-    public function testQueueFailureCanBeRetriedWithoutRecreatingTheOrder(): void
+    #[DataProvider('shipmentPurposes')]
+    public function testQueueFailureCanBeRetriedWithoutRecreatingTheOrder(string $purpose): void
     {
-        $this->prepareShipment();
-        $this->shipment->markSent('ECH-261022-000042', 'Entreprise #000042', [], ['piece' => 'BC002885']);
+        $this->prepareShipment($purpose);
+        $this->shipment->markSent((string) $this->shipment->getOrderReference(), 'Entreprise #000042', [], ['piece' => 'BC002885']);
         $attempt = 0;
         $this->bus = $this->createMock(MessageBusInterface::class);
         $this->bus->expects(self::exactly(2))->method('dispatch')->willReturnCallback(static function (object $message) use (&$attempt): Envelope {
@@ -167,22 +168,26 @@ final class SampleShipmentWorkflowTest extends TestCase
             return new Envelope($message);
         });
         $service = $this->service();
+        $submit = fn (): array => $purpose === SampleShipment::PURPOSE_CONSUMPTION
+            ? $service->submitConsumption($this->input())
+            : $service->submit($this->input());
 
         try {
-            $service->submit($this->input());
+            $submit();
             self::fail('Queue errors must be reported independently of Sage.');
         } catch (SampleShipmentNotificationException) {
             self::assertTrue($this->shipment->isSent());
         }
 
-        self::assertTrue($service->submit($this->input())['idempotent']);
+        self::assertTrue($submit()['idempotent']);
         self::assertSame([], $this->requests);
     }
 
-    public function testEmailFailureIsRetriedAndSuccessfulNotificationsAreNotSentAgain(): void
+    #[DataProvider('shipmentPurposes')]
+    public function testEmailFailureIsRetriedAndSuccessfulNotificationsAreNotSentAgain(string $purpose): void
     {
-        $this->prepareShipment();
-        $this->shipment->markSent('ECH-261022-000042', 'Entreprise #000042', [], ['piece' => 'BC002885']);
+        $this->prepareShipment($purpose);
+        $this->shipment->markSent((string) $this->shipment->getOrderReference(), 'Entreprise #000042', [], ['piece' => 'BC002885']);
         $attempt = 0;
         $this->mailer = $this->createMock(SampleShipmentMailer::class);
         $this->mailer->expects(self::exactly(2))->method('send')->willReturnCallback(static function () use (&$attempt): void {
@@ -210,7 +215,7 @@ final class SampleShipmentWorkflowTest extends TestCase
         $this->commercials = $this->createMock(CommercialRepository::class);
         $this->commercials->expects(self::never())->method('find');
         $this->mailer = $this->createMock(SampleShipmentMailer::class);
-        $this->mailer->expects(self::never())->method('send');
+        $this->mailer->expects(self::once())->method('send');
         $notFound = static fn (): MockResponse => new MockResponse('{"message":"Not found"}', ['http_code' => 404]);
         $service = $this->service([
             ['accessToken' => 'token'], $notFound(), ['success' => true], $notFound(), ['success' => true], ['piece' => 'BC003001'],
@@ -235,6 +240,7 @@ final class SampleShipmentWorkflowTest extends TestCase
         self::assertSame('2027-03-15', $this->shipment->getLines()[0]['expiryDate']);
         self::assertTrue($service->submitConsumption($input)['idempotent']);
         self::assertCount(6, $this->requests);
+        $service->sendNotification(42);
         $service->sendNotification(42);
 
         $this->shipment = null;
@@ -261,7 +267,7 @@ final class SampleShipmentWorkflowTest extends TestCase
             self::assertSame('ART-001', $order[2]['orderLines'][0]['reference']);
             self::assertArrayNotHasKey('expiryDate', $order[2]['orderLines'][0]);
         }
-        self::assertSame([], $this->dispatched);
+        self::assertSame([42, 42, 43], array_map(static fn (SampleShipmentNotificationMessage $message): int => $message->shipmentId, $this->dispatched));
     }
 
     #[DataProvider('invalidExpiryDates')]
@@ -294,7 +300,8 @@ final class SampleShipmentWorkflowTest extends TestCase
         self::assertSame('BC003001', $result['sageDocument']);
         self::assertSame('CONSOLNS', $this->requests[1][3]['tiers']);
         self::assertCount(2, $this->requests);
-        self::assertSame([], $this->dispatched);
+        self::assertCount(1, $this->dispatched);
+        self::assertSame(42, $this->dispatched[0]->shipmentId);
     }
 
     #[DataProvider('shipmentPurposes')]
