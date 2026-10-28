@@ -23,7 +23,6 @@ final class HubspotDeliveryOrderSyncServiceTest extends TestCase
         $sageRequests = 0;
         $hubspotRequests = 0;
         $orderPayload = null;
-        $updatedOrderPayload = null;
         $lineItemPayload = null;
         $sageClient = new SageClient(
             new MockHttpClient(static function (string $method, string $url) use (&$sageRequests): MockResponse {
@@ -94,7 +93,7 @@ final class HubspotDeliveryOrderSyncServiceTest extends TestCase
             $this->parameters(),
         );
         $hubSpotClient = new HubSpotClient(
-            new MockHttpClient(static function (string $method, string $url, array $options) use (&$hubspotRequests, &$orderPayload, &$updatedOrderPayload, &$lineItemPayload): MockResponse {
+            new MockHttpClient(static function (string $method, string $url, array $options) use (&$hubspotRequests, &$orderPayload, &$lineItemPayload): MockResponse {
                 ++$hubspotRequests;
                 $path = (string) parse_url($url, PHP_URL_PATH);
                 $payload = isset($options['body']) ? json_decode((string) $options['body'], true, 512, JSON_THROW_ON_ERROR) : null;
@@ -119,12 +118,6 @@ final class HubspotDeliveryOrderSyncServiceTest extends TestCase
 
                 if ($method === 'POST' && $path === '/crm/objects/2026-09/orders') {
                     $orderPayload = $payload;
-
-                    return self::jsonResponse(['id' => 'order-999']);
-                }
-
-                if ($method === 'PATCH' && $path === '/crm/objects/2026-09/orders/order-999') {
-                    $updatedOrderPayload = $payload;
 
                     return self::jsonResponse(['id' => 'order-999']);
                 }
@@ -182,7 +175,6 @@ final class HubspotDeliveryOrderSyncServiceTest extends TestCase
         self::assertSame(20.0, $orderPayload['properties']['hs_order_discount']);
         self::assertSame(120.0, $orderPayload['properties']['hs_total_price']);
         self::assertSame('Yes', $orderPayload['properties']['order_paid']);
-        self::assertSame('2026-09-20T00:00:00+02:00', $orderPayload['properties']['hs_closed_date']);
         self::assertSame('DDP', $orderPayload['properties']['incoterm']);
         self::assertSame('Entrepot test', $orderPayload['properties']['hs_shipping_address_name']);
         self::assertSame([509, 2694, 513], array_map(
@@ -191,19 +183,13 @@ final class HubspotDeliveryOrderSyncServiceTest extends TestCase
         ));
         self::assertSame('company-123', $orderPayload['associations'][0]['to']['id']);
 
-        $legacyExportedHash = new \ReflectionProperty($storedDeliveryNote, 'exportedPayloadHash');
-        $legacyExportedHash->setValue($storedDeliveryNote, $storedDeliveryNote->getPayloadHash());
+        $hubspotRequestsAfterFirstRun = $hubspotRequests;
         $secondResult = $service->sync(new \DateTimeImmutable('2026-09-01'), new \DateTimeImmutable('2026-09-23'));
 
-        self::assertSame(1, $secondResult['updated']);
+        self::assertSame(1, $secondResult['skipped']);
         self::assertSame(0, $secondResult['sent']);
-        self::assertSame('2026-09-20T00:00:00+02:00', $updatedOrderPayload['properties']['hs_closed_date']);
-
-        $hubspotRequestsAfterBackfill = $hubspotRequests;
-        $thirdResult = $service->sync(new \DateTimeImmutable('2026-09-01'), new \DateTimeImmutable('2026-09-23'));
-
-        self::assertSame(1, $thirdResult['skipped']);
-        self::assertSame($hubspotRequestsAfterBackfill, $hubspotRequests, 'The backfilled BL must not call HubSpot again.');
+        self::assertSame($hubspotRequestsAfterFirstRun, $hubspotRequests, 'The unchanged BL must not call HubSpot again.');
+        self::assertSame(11, $sageRequests);
     }
 
     public function testInvoiceUpdatesTheOrderAndLineItemsCreatedFromTheDeliveryNote(): void
@@ -369,7 +355,6 @@ final class HubspotDeliveryOrderSyncServiceTest extends TestCase
         self::assertSame(132.0, $storedDeliveryNote->getAmountIncludingTax());
         self::assertSame(55.0, $updatedLineItemPayload['properties']['price']);
         self::assertSame(132.0, $updatedOrderPayload['properties']['hs_total_price']);
-        self::assertSame('2026-09-22T00:00:00+02:00', $updatedOrderPayload['properties']['hs_closed_date']);
         self::assertSame('BL BL001 / Facture FA001 - Client test', $updatedOrderPayload['properties']['hs_order_name']);
 
         $hubspotRequestsAfterFirstRun = $hubspotRequests;
@@ -512,7 +497,6 @@ final class HubspotDeliveryOrderSyncServiceTest extends TestCase
         self::assertSame('Facture FA009 - Client final', $updatedOrderPayload['properties']['hs_order_name']);
         self::assertSame('sage:0:invoice:FA009', $updatedOrderPayload['properties']['hs_external_order_id']);
         self::assertSame('BC009', $updatedOrderPayload['properties']['order_reference']);
-        self::assertSame('2026-09-22T00:00:00+02:00', $updatedOrderPayload['properties']['hs_closed_date']);
     }
 
     public function testExcludedSupplierAndDocumentAreSkippedBeforeAnyLocalOrHubSpotWrite(): void

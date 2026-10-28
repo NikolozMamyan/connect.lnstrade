@@ -21,7 +21,6 @@ final class HubspotDeliveryOrderSyncService
     private const SAGE_DELIVERY_NOTE_TYPE = 3;
     private const SAGE_INVOICE_TYPES = [6, 7];
     private const LINE_ROUNDING_TOLERANCE = 0.005001;
-    private const EXPORT_MAPPING_VERSION = 2;
 
     /** @var array<string, array<string, mixed>|null> */
     private array $productCache = [];
@@ -203,8 +202,7 @@ final class HubspotDeliveryOrderSyncService
 
         return $deliveryNote->isSent()
             && $deliveryNote->getHubspotOrderId() !== null
-            && $deliveryNote->getPayloadHash() !== null
-            && $deliveryNote->getExportedPayloadHash() === $this->exportedPayloadHash($deliveryNote->getPayloadHash())
+            && $deliveryNote->getExportedPayloadHash() !== null
             && $deliveryNote->getSourceDocumentType() === $documentType
             && $storedHeader !== null
             && $this->payloadHash($storedHeader) === $this->payloadHash($header);
@@ -329,12 +327,11 @@ final class HubspotDeliveryOrderSyncService
                 'header' => $header,
                 'lines' => $lines,
             ]);
-            $exportedPayloadHash = $this->exportedPayloadHash($payloadHash);
             $previousPayloadHash = $deliveryNote->getPayloadHash();
 
             $deliveryNote->refreshFromSage($header, $lines, $client, $contacts, $deliveries, $payloadHash, $documentType);
 
-            if ($deliveryNote->getExportedPayloadHash() === $exportedPayloadHash && $deliveryNote->getHubspotOrderId() !== null) {
+            if ($deliveryNote->getExportedPayloadHash() === $payloadHash && $deliveryNote->getHubspotOrderId() !== null) {
                 ++$result['skipped'];
                 $this->entityManager->flush();
 
@@ -353,11 +350,7 @@ final class HubspotDeliveryOrderSyncService
                 return;
             }
 
-            if (!$isInvoice
-                && $deliveryNote->getExportedPayloadHash() !== null
-                && $deliveryNote->getExportedPayloadHash() !== $payloadHash
-                && $deliveryNote->getExportedPayloadHash() !== $exportedPayloadHash
-            ) {
+            if (!$isInvoice && $deliveryNote->getExportedPayloadHash() !== null && $deliveryNote->getExportedPayloadHash() !== $payloadHash) {
                 $deliveryNote->markChanged();
                 ++$result['changed'];
                 $this->entityManager->flush();
@@ -381,7 +374,7 @@ final class HubspotDeliveryOrderSyncService
             $deliveryNote->markSent(
                 $export['orderId'],
                 $export['lineItemIds'],
-                $exportedPayloadHash,
+                $payloadHash,
                 $export['warnings'],
             );
             $this->entityManager->flush();
@@ -487,32 +480,38 @@ final class HubspotDeliveryOrderSyncService
         }
 
         if ($existingOrderId !== null) {
-            $ownerId = $this->resolveOwnerId((string) ($header['representant'] ?? ''), $warnings);
-            $lineItemIds = $deliveryNote->getHubspotLineItemIds();
-
             if ($isInvoice) {
+                $ownerId = $this->resolveOwnerId((string) ($header['representant'] ?? ''), $warnings);
                 $lineItemIds = $this->synchronizeExistingLineItems(
                     $deliveryNote,
                     $existingOrderId,
                     $linesForHubSpot,
                     $warnings,
                 );
+                $this->hubSpotClient->patch(
+                    sprintf('/crm/objects/%s/orders/%s', self::API_VERSION, $existingOrderId),
+                    ['properties' => $this->buildOrderProperties($deliveryNote, $header, $lines, $client, $contacts, $deliveries, $ownerId)],
+                );
+
                 $warnings[] = sprintf('Order HubSpot %s actualise avec la facture %s.', $existingOrderId, (string) ($header['piece'] ?? ''));
-            } else {
-                $warnings[] = sprintf('Order HubSpot %s actualise avec le BL %s.', $existingOrderId, (string) ($header['piece'] ?? ''));
+
+                return [
+                    'orderId' => $existingOrderId,
+                    'lineItemIds' => $lineItemIds,
+                    'warnings' => array_values(array_unique($warnings)),
+                    'existing' => true,
+                    'updated' => true,
+                ];
             }
 
-            $this->hubSpotClient->patch(
-                sprintf('/crm/objects/%s/orders/%s', self::API_VERSION, $existingOrderId),
-                ['properties' => $this->buildOrderProperties($deliveryNote, $header, $lines, $client, $contacts, $deliveries, $ownerId)],
-            );
+            $warnings[] = sprintf('Order HubSpot %s deja existant, rattache au registre local.', $existingOrderId);
 
             return [
                 'orderId' => $existingOrderId,
-                'lineItemIds' => $lineItemIds,
-                'warnings' => array_values(array_unique($warnings)),
+                'lineItemIds' => $deliveryNote->getHubspotLineItemIds(),
+                'warnings' => $warnings,
                 'existing' => true,
-                'updated' => true,
+                'updated' => false,
             ];
         }
 
@@ -1122,7 +1121,6 @@ final class HubspotDeliveryOrderSyncService
 
         if ($deliveryNote->getDocumentDate() !== null) {
             $properties['hs_external_created_date'] = $deliveryNote->getDocumentDate()->format(\DateTimeInterface::ATOM);
-            $properties['hs_closed_date'] = $deliveryNote->getDocumentDate()->format(\DateTimeInterface::ATOM);
         }
 
         if ($deliveryNote->getDeliveryDate() !== null) {
@@ -1383,11 +1381,6 @@ final class HubspotDeliveryOrderSyncService
         $normalized = $this->sortAssociativeArrays($payload);
 
         return hash('sha256', json_encode($normalized, JSON_THROW_ON_ERROR | JSON_PRESERVE_ZERO_FRACTION));
-    }
-
-    private function exportedPayloadHash(string $payloadHash): string
-    {
-        return hash('sha256', sprintf('%d:%s', self::EXPORT_MAPPING_VERSION, $payloadHash));
     }
 
     private function sortAssociativeArrays(mixed $value): mixed
