@@ -21,7 +21,22 @@ class HubspotCompanySyncService
         'address2',
         'zip',
         'city',
-        'country',
+        'company_country_en',
+        'linkedin_company_page',
+        'facebook_company_page',
+        'siret',
+        'naf_code',
+        'tva_intracommunautaire',
+        'hubspot_owner_id',
+        'name_of_the_warehouse',
+        'delivery_address',
+        'delivery_address_2',
+        'postal_code_delivery',
+        'city_delivery',
+        'country_delivery',
+        'phone_number_delivery',
+        'email_address_delivery',
+        'insured_credit_limit',
         'sage_integration',
         'hs_object_id',
         'id_erp',
@@ -34,6 +49,7 @@ class HubspotCompanySyncService
         'phone',
         'mobilephone',
         'jobtitle',
+        'hs_linkedin_url',
         'company',
         'hs_object_id',
     ];
@@ -338,12 +354,16 @@ class HubspotCompanySyncService
             $relation
                 ->setCompany($company)
                 ->setContact($contact)
-                ->setAssociationType($associationType)
-                ->setRawPayload($associationRow);
+                ->setAssociationType($associationType);
 
             $this->entityManager->persist($relation);
             ++$savedRelations;
         }
+
+        $relation
+            ->setIsPrimary($associationType === 'company_to_contact')
+            ->setRawPayload($associationRow);
+        $company->addCompanyContact($relation);
 
         $managedRelations[$relationKey] = true;
     }
@@ -363,7 +383,7 @@ class HubspotCompanySyncService
             ->setAddress2($this->nullableString($properties['address2'] ?? null))
             ->setZip($this->nullableString($properties['zip'] ?? null))
             ->setCity($this->nullableString($properties['city'] ?? null))
-            ->setCountry($this->nullableString($properties['country'] ?? null))
+            ->setCountry($this->nullableString($properties['company_country_en'] ?? null))
             ->setSageIntegration($this->nullableString($properties['sage_integration'] ?? null))
             ->setIdErp($this->nullableString($properties['id_erp'] ?? null) ?? $company->getIdErp())
             ->setArchived((bool) ($companyData['archived'] ?? false))
