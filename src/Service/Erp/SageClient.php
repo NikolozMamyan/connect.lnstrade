@@ -53,12 +53,12 @@ final class SageClient
      * @throws ClientExceptionInterface
      * @throws DecodingExceptionInterface
      */
-    public function post(string $uri, array $body = [], array $headers = []): array
+    public function post(string $uri, array $body = [], array $headers = [], array $requestOptions = []): array
     {
-        return $this->request('POST', $uri, [
-            'json' => $body,
-            'headers' => $headers,
-        ]);
+        $requestOptions['json'] = $body;
+        $requestOptions['headers'] = array_merge($requestOptions['headers'] ?? [], $headers);
+
+        return $this->request('POST', $uri, $requestOptions);
     }
 
     /**

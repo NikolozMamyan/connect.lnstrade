@@ -13,6 +13,7 @@ use PHPUnit\Framework\TestCase;
 use Psr\Log\NullLogger;
 use Symfony\Component\DependencyInjection\ParameterBag\ParameterBag;
 use Symfony\Component\HttpClient\MockHttpClient;
+use Symfony\Component\HttpClient\Exception\TransportException;
 use Symfony\Component\HttpClient\Response\MockResponse;
 use Symfony\Component\Lock\LockFactory;
 use Symfony\Component\Lock\Store\InMemoryStore;
@@ -140,8 +141,14 @@ class ErpOrderExportServiceTest extends TestCase
                     return self::jsonResponse(['accessToken' => 'test-token']);
                 }
 
+                if ($method === 'GET' && $path === '/Document/header') {
+                    return self::jsonResponse([]);
+                }
+
                 if ($method === 'POST' && $path === '/order') {
                     $sageOrderPayload = json_decode((string) ($options['body'] ?? ''), true, 512, JSON_THROW_ON_ERROR);
+                    self::assertSame(120.0, $options['timeout']);
+                    self::assertSame(180.0, $options['max_duration']);
 
                     return self::jsonResponse(['success' => true]);
                 }
@@ -189,7 +196,7 @@ class ErpOrderExportServiceTest extends TestCase
         self::assertContains('payment_term', $requestedDealProperties);
         self::assertSame('Standard', $sageOrderPayload['modeExpedition']);
         self::assertSame('DDP - Rendu droits acquittés', $sageOrderPayload['condLivraison']);
-        self::assertSame('2026-07-15', $sageOrderPayload['dateLivraison']);
+        self::assertSame('2026-07-15T00:00:00+00:00', $sageOrderPayload['dateLivraison']);
         self::assertSame('REF-ORDER-2026', $sageOrderPayload['referenceCommande']);
         self::assertSame(str_repeat('A', 69), $sageOrderPayload['instructionDeLivraison']);
         self::assertSame(['Sous-traitance' => 'OUI'], $sageOrderPayload['champsLibres']);
@@ -307,6 +314,10 @@ class ErpOrderExportServiceTest extends TestCase
                     return self::jsonResponse(['accessToken' => 'test-token']);
                 }
 
+                if ($method === 'GET' && $path === '/Document/header') {
+                    return self::jsonResponse([]);
+                }
+
                 if ($method === 'POST' && $path === '/order') {
                     $sageOrderPayload = json_decode((string) ($options['body'] ?? ''), true, 512, JSON_THROW_ON_ERROR);
 
@@ -331,6 +342,152 @@ class ErpOrderExportServiceTest extends TestCase
 
         self::assertSame('create', $result['action']);
         self::assertSame('REF-ORDER-2026', $sageOrderPayload['referenceCommande']);
+    }
+
+    public function testResolveOrderReferenceUsesDealIdWhenHubSpotReferenceIsMissing(): void
+    {
+        $service = (new \ReflectionClass(ErpOrderExportService::class))->newInstanceWithoutConstructor();
+        $method = new \ReflectionMethod(ErpOrderExportService::class, 'resolveOrderReference');
+
+        self::assertSame('HS529923203320', $method->invoke($service, null, '529923203320'));
+        self::assertSame('REF-CLIENT', $method->invoke($service, ' REF-CLIENT ', '529923203320'));
+        self::assertLessThanOrEqual(17, strlen($method->invoke($service, null, '12345678901234567890')));
+    }
+
+    public function testSendDealReconcilesCreatedOrderAfterSageTimeout(): void
+    {
+        $headerLookups = 0;
+        $sageHttpClient = new MockHttpClient(
+            static function (string $method, string $url, array $options) use (&$headerLookups): MockResponse {
+                $path = parse_url($url, PHP_URL_PATH);
+
+                if ($method === 'POST' && $path === '/auth/login') {
+                    return self::jsonResponse(['accessToken' => 'test-token']);
+                }
+
+                if ($method === 'GET' && $path === '/Document/header') {
+                    ++$headerLookups;
+
+                    return $headerLookups === 1
+                        ? self::jsonResponse([])
+                        : self::jsonResponse([[
+                            'piece' => 'BC123',
+                            'reference' => 'REF-ORDER-2026',
+                            'tiers' => 'CLI-001',
+                        ]]);
+                }
+
+                if ($method === 'POST' && $path === '/order') {
+                    self::assertSame(120.0, $options['timeout']);
+                    self::assertSame(180.0, $options['max_duration']);
+
+                    throw new TransportException('Idle timeout reached for Sage /order.');
+                }
+
+                if ($method === 'GET' && $path === '/Document/line') {
+                    return self::jsonResponse([
+                        [
+                            'referenceArticle' => 'ART-001',
+                            'qteArticle' => 2,
+                            'prixHTArticle' => 12.50,
+                        ],
+                        [
+                            'referenceArticle' => 'ZPALETTE',
+                            'qteArticle' => 1,
+                            'prixHTArticle' => 15,
+                        ],
+                    ]);
+                }
+
+                self::fail(sprintf('Unexpected Sage request: %s %s', $method, $url));
+            }
+        );
+        $exportRepository = $this->createMock(ErpOrderExportRepository::class);
+        $exportRepository
+            ->expects($this->once())
+            ->method('findOneByHubspotEventId')
+            ->with('event-timeout')
+            ->willReturn(null);
+        $entityManager = $this->createMock(EntityManagerInterface::class);
+        $entityManager->expects($this->once())->method('persist')->with(self::isInstanceOf(ErpOrderExport::class));
+        $entityManager->expects($this->exactly(2))->method('flush');
+
+        $service = $this->createOrderExportService(
+            $this->createHubSpotHttpClientForOrder(),
+            $sageHttpClient,
+            $exportRepository,
+            $entityManager,
+        );
+        $result = $service->sendDealToErp('12345', 'event-timeout');
+
+        self::assertSame('reconciled', $result['action']);
+        self::assertSame('BC123', $result['response']['piece']);
+        self::assertSame(2, $headerLookups);
+    }
+
+    public function testSendDealReusesLegacyOrderWithoutReferenceWhenLinesMatch(): void
+    {
+        $sageOrderPosts = 0;
+        $sageHttpClient = new MockHttpClient(
+            static function (string $method, string $url) use (&$sageOrderPosts): MockResponse {
+                $path = parse_url($url, PHP_URL_PATH);
+
+                if ($method === 'POST' && $path === '/auth/login') {
+                    return self::jsonResponse(['accessToken' => 'test-token']);
+                }
+
+                if ($method === 'GET' && $path === '/Document/header') {
+                    return self::jsonResponse([[
+                        'piece' => 'BC-LEGACY',
+                        'reference' => '',
+                        'tiers' => 'CLI-001',
+                    ]]);
+                }
+
+                if ($method === 'GET' && $path === '/Document/line') {
+                    return self::jsonResponse([
+                        [
+                            'referenceArticle' => 'ART-001',
+                            'qteArticle' => 2,
+                            'prixHTArticle' => 12.50,
+                        ],
+                        [
+                            'referenceArticle' => 'ZPALETTE',
+                            'qteArticle' => 1,
+                            'prixHTArticle' => 15,
+                        ],
+                    ]);
+                }
+
+                if ($method === 'POST' && $path === '/order') {
+                    ++$sageOrderPosts;
+                }
+
+                self::fail(sprintf('Unexpected Sage request: %s %s', $method, $url));
+            }
+        );
+        $exportRepository = $this->createMock(ErpOrderExportRepository::class);
+        $exportRepository
+            ->expects($this->once())
+            ->method('findOneByHubspotEventId')
+            ->with('event-legacy')
+            ->willReturn(null);
+        $entityManager = $this->createMock(EntityManagerInterface::class);
+        $entityManager->expects($this->once())->method('persist')->with(self::isInstanceOf(ErpOrderExport::class));
+        $entityManager->expects($this->exactly(2))->method('flush');
+
+        $service = $this->createOrderExportService(
+            $this->createHubSpotHttpClientForOrder(null),
+            $sageHttpClient,
+            $exportRepository,
+            $entityManager,
+        );
+        $result = $service->sendDealToErp('12345', 'event-legacy');
+
+        self::assertSame('existing', $result['action']);
+        self::assertSame('HS12345', $result['payload']['referenceCommande']);
+        self::assertSame('BC-LEGACY', $result['response']['piece']);
+        self::assertSame(0, $sageOrderPosts);
     }
 
     /**
@@ -371,10 +528,10 @@ class ErpOrderExportServiceTest extends TestCase
         );
     }
 
-    private function createHubSpotHttpClientForOrder(): MockHttpClient
+    private function createHubSpotHttpClientForOrder(?string $orderReference = 'REF-ORDER-2026'): MockHttpClient
     {
         return new MockHttpClient(
-            static function (string $method, string $url): MockResponse {
+            static function (string $method, string $url) use ($orderReference): MockResponse {
                 self::assertSame('GET', $method);
 
                 $path = parse_url($url, PHP_URL_PATH);
@@ -384,7 +541,7 @@ class ErpOrderExportServiceTest extends TestCase
                         'id' => '12345',
                         'properties' => [
                             'dealname' => 'Commande test',
-                            'order_reference' => 'REF-ORDER-2026',
+                            'order_reference' => $orderReference,
                             'createdate' => '2026-06-01T10:30:00Z',
                             'closedate' => '2026-06-30T00:00:00Z',
                             'hubspot_owner_id' => 'owner-1',

@@ -10,10 +10,14 @@ use App\Service\HubSpot\HubSpotClient;
 use Doctrine\ORM\EntityManagerInterface;
 use Psr\Log\LoggerInterface;
 use Symfony\Component\Lock\LockFactory;
+use Symfony\Contracts\HttpClient\Exception\TransportExceptionInterface;
 
 class ErpOrderExportService
 {
     private const DELIVERY_INSTRUCTION_MAX_LENGTH = 69;
+    private const SAGE_ORDER_TIMEOUT_SECONDS = 120;
+    private const SAGE_ORDER_MAX_DURATION_SECONDS = 180;
+    private const LINE_VALUE_TOLERANCE = 0.005001;
 
     private const INCOTERM_TO_SAGE_DELIVERY_CONDITION = [
         'DDP' => "DDP - Rendu droits acquitt\u{00E9}s",
@@ -229,11 +233,211 @@ class ErpOrderExportService
      */
     private function sendOrderToSage(array $order): array
     {
-        // TODO: when Sage exposes order update support, switch existing orders to PATCH here.
+        $existingOrder = $this->findExistingSageOrder($order);
+
+        if ($existingOrder !== null) {
+            if (!$this->hasExpectedSageLines($existingOrder, $order['orderLines'] ?? [])) {
+                throw new \RuntimeException(sprintf(
+                    'Le bon de commande Sage %s existe pour la reference %s, mais ses lignes ne correspondent pas au deal HubSpot.',
+                    (string) ($existingOrder['piece'] ?? ''),
+                    (string) ($order['referenceCommande'] ?? '')
+                ));
+            }
+
+            return [
+                'action' => 'existing',
+                'response' => $existingOrder,
+            ];
+        }
+
+        try {
+            $response = $this->sageClient->post('/order', $order, [], [
+                'timeout' => self::SAGE_ORDER_TIMEOUT_SECONDS,
+                'max_duration' => self::SAGE_ORDER_MAX_DURATION_SECONDS,
+            ]);
+        } catch (TransportExceptionInterface $exception) {
+            $reconciledOrder = $this->findExistingSageOrder($order);
+
+            if ($reconciledOrder === null || !$this->hasExpectedSageLines($reconciledOrder, $order['orderLines'] ?? [])) {
+                throw $exception;
+            }
+
+            $this->logger->warning('ERP order reconciled after Sage transport error', [
+                'referenceCommande' => $order['referenceCommande'] ?? null,
+                'numClient' => $order['numClient'] ?? null,
+                'piece' => $reconciledOrder['piece'] ?? null,
+                'transportError' => $exception->getMessage(),
+            ]);
+
+            return [
+                'action' => 'reconciled',
+                'response' => $reconciledOrder,
+            ];
+        }
+
         return [
             'action' => 'create',
-            'response' => $this->sageClient->post('/order', $order),
+            'response' => $response,
         ];
+    }
+
+    /**
+     * @param array<string, mixed> $order
+     *
+     * @return array<string, mixed>|null
+     */
+    private function findExistingSageOrder(array $order): ?array
+    {
+        $reference = trim((string) ($order['referenceCommande'] ?? ''));
+        $numClient = trim((string) ($order['numClient'] ?? ''));
+        $dateCommande = $this->normalizeErpDate($order['dateCommande'] ?? null);
+
+        if ($reference === '' || $numClient === '' || $dateCommande === null) {
+            return null;
+        }
+
+        try {
+            $response = $this->sageClient->get('/Document/header', [
+                'domaine' => 0,
+                'type' => 1,
+                'tiers' => $numClient,
+                'dateDebut' => $dateCommande,
+                'dateFin' => (new \DateTimeImmutable($dateCommande))->modify('+1 day')->format('Y-m-d'),
+            ]);
+        } catch (\RuntimeException $exception) {
+            if (str_contains($exception->getMessage(), 'Erreur API Sage [404]')) {
+                return null;
+            }
+
+            throw $exception;
+        }
+
+        $headers = $this->extractSageList($response);
+
+        foreach ($headers as $header) {
+            if (trim((string) ($header['reference'] ?? '')) === $reference
+                && trim((string) ($header['tiers'] ?? '')) === $numClient
+                && trim((string) ($header['piece'] ?? '')) !== ''
+            ) {
+                return $header;
+            }
+        }
+
+        $legacyMatches = [];
+
+        foreach ($headers as $header) {
+            if (trim((string) ($header['reference'] ?? '')) !== ''
+                || trim((string) ($header['tiers'] ?? '')) !== $numClient
+                || trim((string) ($header['piece'] ?? '')) === ''
+            ) {
+                continue;
+            }
+
+            if ($this->hasExpectedSageLines($header, $order['orderLines'] ?? [])) {
+                $legacyMatches[] = $header;
+            }
+        }
+
+        if (count($legacyMatches) === 1) {
+            $this->logger->warning('ERP order matched by lines because Sage reference is empty', [
+                'referenceCommande' => $reference,
+                'numClient' => $numClient,
+                'piece' => $legacyMatches[0]['piece'] ?? null,
+            ]);
+
+            return $legacyMatches[0];
+        }
+
+        if (count($legacyMatches) > 1) {
+            throw new \RuntimeException(sprintf(
+                'Plusieurs bons de commande Sage sans reference correspondent au deal HubSpot pour le client %s.',
+                $numClient
+            ));
+        }
+
+        return null;
+    }
+
+    /**
+     * @param array<string, mixed>       $sageOrder
+     * @param list<array<string, mixed>> $expectedLines
+     */
+    private function hasExpectedSageLines(array $sageOrder, array $expectedLines): bool
+    {
+        $piece = trim((string) ($sageOrder['piece'] ?? ''));
+
+        if ($piece === '' || $expectedLines === []) {
+            return false;
+        }
+
+        try {
+            $response = $this->sageClient->get('/Document/line', [
+                'piece' => $piece,
+                'domaine' => 0,
+                'type' => 1,
+            ]);
+        } catch (\RuntimeException $exception) {
+            if (str_contains($exception->getMessage(), 'Erreur API Sage [404]')) {
+                return false;
+            }
+
+            throw $exception;
+        }
+
+        $actualByReference = [];
+
+        foreach ($this->extractSageList($response) as $line) {
+            $reference = trim((string) ($line['referenceArticle'] ?? ''));
+
+            if ($reference === '') {
+                continue;
+            }
+
+            $actualByReference[$reference] ??= ['quantity' => 0.0, 'prices' => []];
+            $actualByReference[$reference]['quantity'] += (float) ($line['qteArticle'] ?? 0);
+            $actualByReference[$reference]['prices'][] = (float) ($line['prixHTArticle'] ?? 0);
+        }
+
+        $expectedByReference = [];
+
+        foreach ($expectedLines as $line) {
+            $reference = trim((string) ($line['reference'] ?? ''));
+
+            if ($reference === '') {
+                return false;
+            }
+
+            $expectedByReference[$reference] ??= ['quantity' => 0.0, 'price' => (float) ($line['prixHT'] ?? 0)];
+            $expectedByReference[$reference]['quantity'] += (float) ($line['quantite'] ?? 0);
+        }
+
+        foreach ($expectedByReference as $reference => $expected) {
+            $actual = $actualByReference[$reference] ?? null;
+
+            if ($actual === null || abs($actual['quantity'] - $expected['quantity']) > self::LINE_VALUE_TOLERANCE) {
+                return false;
+            }
+
+            foreach ($actual['prices'] as $actualPrice) {
+                if (abs($actualPrice - $expected['price']) > self::LINE_VALUE_TOLERANCE) {
+                    return false;
+                }
+            }
+        }
+
+        return true;
+    }
+
+    /** @return list<array<string, mixed>> */
+    private function extractSageList(array $response): array
+    {
+        $items = isset($response['results']) && is_array($response['results']) ? $response['results'] : $response;
+
+        if (!array_is_list($items) && isset($items['piece'])) {
+            $items = [$items];
+        }
+
+        return array_values(array_filter($items, 'is_array'));
     }
 
     private function markExportFailed(ErpOrderExport $export, string $errorMessage): void
@@ -346,7 +550,7 @@ class ErpOrderExportService
             'numClient' => $numClient,
             'dateCommande' => $dateCommande,
             'dateLivraison' => $dateLivraison,
-            'referenceCommande' => trim((string) (($properties['order_reference'] ?? null) ?: '')),
+            'referenceCommande' => $this->resolveOrderReference($properties['order_reference'] ?? null, (string) ($dealData['id'] ?? '')),
             'statut' => 'Saisi',
             'modeExpedition' => 'Standard',
             'ownerFirstName' => $ownerFirstName,
@@ -459,10 +663,27 @@ class ErpOrderExportService
         }
 
         try {
-            return (new \DateTimeImmutable($value))->format('Y-m-d');
+            return (new \DateTimeImmutable($value))->setTime(0, 0)->format(\DateTimeInterface::ATOM);
         } catch (\Throwable) {
             return null;
         }
+    }
+
+    private function resolveOrderReference(mixed $configuredReference, string $hubspotDealId): string
+    {
+        $configuredReference = trim((string) $configuredReference);
+
+        if ($configuredReference !== '') {
+            return $configuredReference;
+        }
+
+        $normalizedDealId = preg_replace('/[^A-Za-z0-9]/', '', $hubspotDealId) ?? '';
+
+        if ($normalizedDealId !== '' && strlen($normalizedDealId) <= 15) {
+            return 'HS'.strtoupper($normalizedDealId);
+        }
+
+        return 'HS'.strtoupper(substr(hash('sha256', $hubspotDealId), 0, 15));
     }
 
     private function normalizeErpDate(mixed $value): ?string
