@@ -46,6 +46,9 @@ final class HubspotDeliveryOrderSyncService
     /** @var array<string, string> */
     private array $companyIdsByClientId = [];
 
+    /** @var array<string, array{status: string, dueDate: ?string, codes: list<string>}>|null */
+    private ?array $paymentSnapshots = null;
+
     public function __construct(
         private readonly SageClient $sageClient,
         private readonly HubSpotClient $hubSpotClient,
@@ -55,8 +58,12 @@ final class HubspotDeliveryOrderSyncService
         private readonly LoggerInterface $logger,
         #[Autowire('%hubspot_delivery_order_pipeline%')]
         private readonly string $orderPipeline,
-        #[Autowire('%hubspot_delivery_order_stage%')]
-        private readonly string $orderStage,
+        #[Autowire('%hubspot_delivery_order_stage_preparation%')]
+        private readonly string $preparationStage,
+        #[Autowire('%hubspot_delivery_order_stage_invoiced%')]
+        private readonly string $invoicedStage,
+        #[Autowire('%hubspot_delivery_order_stage_paid%')]
+        private readonly string $paidStage,
         #[Autowire('%hubspot_order_form_tax_rate_group_ids%')]
         private readonly array $taxRateGroupIds,
         array $excludedClientIds = [],
@@ -195,17 +202,26 @@ final class HubspotDeliveryOrderSyncService
     /**
      * @param array<string, mixed> $header
      */
-    private function hasSameExportedHeader(ErpDeliveryNote $deliveryNote, array $header, int $documentType): bool
+    private function hasSameExportedHeader(
+        ErpDeliveryNote $deliveryNote,
+        array $header,
+        int $documentType,
+        array $hubspotOrderState,
+    ): bool
     {
         $rawPayload = $deliveryNote->getRawPayload();
         $storedHeader = is_array($rawPayload['header'] ?? null) ? $rawPayload['header'] : null;
+        $storedHubspotOrderState = is_array($rawPayload['hubspotOrderState'] ?? null)
+            ? $rawPayload['hubspotOrderState']
+            : null;
 
         return $deliveryNote->isSent()
             && $deliveryNote->getHubspotOrderId() !== null
             && $deliveryNote->getExportedPayloadHash() !== null
             && $deliveryNote->getSourceDocumentType() === $documentType
             && $storedHeader !== null
-            && $this->payloadHash($storedHeader) === $this->payloadHash($header);
+            && $this->payloadHash($storedHeader) === $this->payloadHash($header)
+            && $storedHubspotOrderState === $hubspotOrderState;
     }
 
     /**
@@ -229,6 +245,8 @@ final class HubspotDeliveryOrderSyncService
         $this->clientCache = [];
         $this->sageListCache = [];
         $this->companyCache = [];
+        $this->paymentSnapshots = $this->loadPaymentSnapshots();
+        $processedInvoicePieces = [];
         $result = [
             'analyzed' => 0,
             'deliveryNotesAnalyzed' => 0,
@@ -249,10 +267,250 @@ final class HubspotDeliveryOrderSyncService
         }
 
         foreach ($this->loadInvoiceHeaders($dateFrom, $dateTo) as $invoice) {
+            $invoicePiece = strtoupper(trim((string) ($invoice['header']['piece'] ?? '')));
+
+            if ($invoicePiece !== '') {
+                $processedInvoicePieces[$invoicePiece] = true;
+            }
+
             $this->processDocument($invoice['header'], $invoice['type'], $result);
         }
 
+        if ($this->paymentSnapshots !== null) {
+            $this->refreshTrackedInvoicePayments($processedInvoicePieces, $result);
+        }
+
         return $result;
+    }
+
+    /**
+     * @return array<string, array{status: string, dueDate: ?string, codes: list<string>}>|null
+     */
+    private function loadPaymentSnapshots(): ?array
+    {
+        try {
+            $entries = $this->extractList($this->sageClient->get('/Document/lettrage'));
+        } catch (\Throwable $exception) {
+            $this->logger->warning('Impossible de charger les lettrages Sage pour les Orders HubSpot.', [
+                'exception' => $exception,
+            ]);
+
+            return null;
+        }
+
+        $entriesByDocument = [];
+
+        foreach ($entries as $entry) {
+            $key = $this->paymentKey(
+                (string) ($entry['Client'] ?? ''),
+                (string) ($entry['Piece'] ?? ''),
+            );
+
+            if ($key !== null) {
+                $entriesByDocument[$key][] = $entry;
+            }
+        }
+
+        $snapshots = [];
+
+        foreach ($entriesByDocument as $key => $documentEntries) {
+            $allKnown = true;
+            $allPaid = true;
+            $paidByJournal = [];
+            $codes = [];
+            $dueAt = null;
+            $unpaidDueAt = null;
+
+            foreach ($documentEntries as $entry) {
+                $letter = $entry['Lettre'] ?? null;
+                $isPaid = in_array($letter, [1, '1'], true);
+                $allKnown = $allKnown && in_array($letter, [0, 1, '0', '1'], true);
+                $allPaid = $allPaid && $isPaid;
+                $journal = trim((string) ($entry['Journal'] ?? ''));
+
+                if ($journal !== '') {
+                    $paidByJournal[$journal] = ($paidByJournal[$journal] ?? true) && $isPaid;
+                }
+
+                $code = trim((string) ($entry['Lettrage'] ?? ''));
+
+                if ($code !== '') {
+                    $codes[] = $code;
+                }
+
+                $entryDueAt = $this->toDate($entry["Date d'échéance"] ?? null);
+
+                if ($entryDueAt !== null && (int) $entryDueAt->format('Y') > 1900) {
+                    if ($dueAt === null || $entryDueAt < $dueAt) {
+                        $dueAt = $entryDueAt;
+                    }
+
+                    if (!$isPaid && ($unpaidDueAt === null || $entryDueAt < $unpaidDueAt)) {
+                        $unpaidDueAt = $entryDueAt;
+                    }
+                }
+            }
+
+            $allKnown = $allKnown && count(array_unique($paidByJournal)) <= 1;
+            $snapshots[$key] = [
+                'status' => $allKnown ? ($allPaid ? 'paid' : 'unpaid') : 'unknown',
+                'dueDate' => ($unpaidDueAt ?? $dueAt)?->format('Y-m-d'),
+                'codes' => array_values(array_unique($codes)),
+            ];
+        }
+
+        return $snapshots;
+    }
+
+    /**
+     * @param array<string, mixed> $header
+     *
+     * @return array{status: string, dueDate: ?string, codes: list<string>}|null
+     */
+    private function resolvePaymentSnapshot(array $header, ErpDeliveryNote $deliveryNote): ?array
+    {
+        if ($this->paymentSnapshots === null) {
+            $rawPayload = $deliveryNote->getRawPayload();
+            $storedState = is_array($rawPayload['hubspotOrderState'] ?? null)
+                ? $rawPayload['hubspotOrderState']
+                : [];
+
+            return is_array($storedState['payment'] ?? null) ? $storedState['payment'] : null;
+        }
+
+        $key = $this->paymentKey(
+            (string) ($header['tiers'] ?? $deliveryNote->getClientId() ?? ''),
+            (string) ($header['piece'] ?? $deliveryNote->getInvoicePiece() ?? ''),
+        );
+
+        return $key !== null ? ($this->paymentSnapshots[$key] ?? null) : null;
+    }
+
+    private function paymentKey(string $clientId, string $piece): ?string
+    {
+        $clientId = strtoupper(trim($clientId));
+        $piece = strtoupper(trim($piece));
+
+        return $clientId !== '' && $piece !== '' ? $clientId.'|'.$piece : null;
+    }
+
+    /**
+     * @param array{status: string, dueDate: ?string, codes: list<string>}|null $payment
+     *
+     * @return array{stage: string, payment: array{status: string, dueDate: ?string, codes: list<string>}|null}
+     */
+    private function buildHubspotOrderState(int $documentType, ?array $payment): array
+    {
+        return [
+            'stage' => $documentType === self::SAGE_DELIVERY_NOTE_TYPE
+                ? $this->preparationStage
+                : (($payment['status'] ?? null) === 'paid' ? $this->paidStage : $this->invoicedStage),
+            'payment' => $payment,
+        ];
+    }
+
+    /**
+     * @param array{status: string, dueDate: ?string, codes: list<string>}|null $payment
+     *
+     * @return array<string, string>
+     */
+    private function buildPaymentProperties(int $documentType, ?array $payment): array
+    {
+        $state = $this->buildHubspotOrderState($documentType, $payment);
+        $properties = [
+            'hs_pipeline' => $this->orderPipeline,
+            'hs_pipeline_stage' => $state['stage'],
+        ];
+
+        if (in_array($documentType, self::SAGE_INVOICE_TYPES, true)) {
+            $properties['order_paid'] = ($payment['status'] ?? null) === 'paid' ? 'Yes' : 'No';
+
+            if (($payment['dueDate'] ?? null) !== null) {
+                $properties['invoice_due_date'] = $payment['dueDate'];
+            }
+        }
+
+        return $properties;
+    }
+
+    /**
+     * @param array<string, true> $processedInvoicePieces
+     * @param array<string, mixed> $result
+     */
+    private function refreshTrackedInvoicePayments(array $processedInvoicePieces, array &$result): void
+    {
+        foreach ($this->deliveryNoteRepository->findTrackedInvoicesForPaymentRefresh() as $deliveryNote) {
+            $piece = strtoupper(trim((string) $deliveryNote->getInvoicePiece()));
+            $clientId = strtoupper(trim((string) $deliveryNote->getClientId()));
+            $orderId = trim((string) $deliveryNote->getHubspotOrderId());
+            $key = $this->paymentKey($clientId, $piece);
+
+            if ($piece === ''
+                || isset($processedInvoicePieces[$piece])
+                || isset($this->excludedClientIds[$clientId])
+                || isset($this->excludedPieces[$piece])
+                || $orderId === ''
+                || $key === null
+            ) {
+                continue;
+            }
+
+            $payment = $this->paymentSnapshots[$key] ?? null;
+
+            if ($payment === null) {
+                continue;
+            }
+
+            $hubspotOrderState = $this->buildHubspotOrderState($deliveryNote->getSourceDocumentType(), $payment);
+            $rawPayload = $deliveryNote->getRawPayload() ?? [];
+            $storedHubspotOrderState = is_array($rawPayload['hubspotOrderState'] ?? null)
+                ? $rawPayload['hubspotOrderState']
+                : null;
+
+            if ($storedHubspotOrderState === $hubspotOrderState) {
+                continue;
+            }
+
+            try {
+                $this->hubSpotClient->patch(
+                    sprintf('/crm/objects/%s/orders/%s', self::API_VERSION, $orderId),
+                    ['properties' => $this->buildPaymentProperties($deliveryNote->getSourceDocumentType(), $payment)],
+                );
+                $payloadHash = $this->payloadHash([
+                    'sourceDocumentType' => $deliveryNote->getSourceDocumentType(),
+                    'header' => is_array($rawPayload['header'] ?? null) ? $rawPayload['header'] : [],
+                    'lines' => is_array($rawPayload['lines'] ?? null) ? $rawPayload['lines'] : [],
+                    'payment' => $payment,
+                ]);
+                $deliveryNote->refreshHubspotOrderState($hubspotOrderState, $payloadHash);
+                $deliveryNote->markSent(
+                    $orderId,
+                    $deliveryNote->getHubspotLineItemIds(),
+                    $payloadHash,
+                    $deliveryNote->getWarnings() ?? [],
+                );
+                $this->entityManager->flush();
+                ++$result['updated'];
+            } catch (\Throwable $exception) {
+                $deliveryNote->markFailed($exception->getMessage(), $deliveryNote->getWarnings() ?? []);
+                $this->entityManager->flush();
+                ++$result['failed'];
+                $rawHeader = is_array($rawPayload['header'] ?? null) ? $rawPayload['header'] : [];
+                $result['errors'][] = $this->buildReportIssue(
+                    $rawHeader,
+                    $deliveryNote,
+                    $piece,
+                    $exception->getMessage(),
+                    $deliveryNote->getSourceDocumentType(),
+                );
+
+                $this->logger->error('HubSpot Order payment refresh failed.', [
+                    'piece' => $piece,
+                    'orderId' => $orderId,
+                    'exception' => $exception,
+                ]);
+            }
+        }
     }
 
     /**
@@ -301,8 +559,15 @@ final class HubspotDeliveryOrderSyncService
 
         try {
             $warnings = [];
+            $payment = $isInvoice ? $this->resolvePaymentSnapshot($header, $deliveryNote) : null;
+            $hubspotOrderState = $this->buildHubspotOrderState($documentType, $payment);
+            $rawPayload = $deliveryNote->getRawPayload();
+            $storedHubspotOrderState = is_array($rawPayload['hubspotOrderState'] ?? null)
+                ? $rawPayload['hubspotOrderState']
+                : null;
+            $hubspotOrderStateChanged = $storedHubspotOrderState !== $hubspotOrderState;
 
-            if ($this->hasSameExportedHeader($deliveryNote, $header, $documentType)) {
+            if ($this->hasSameExportedHeader($deliveryNote, $header, $documentType, $hubspotOrderState)) {
                 ++$result['skipped'];
 
                 return;
@@ -322,16 +587,34 @@ final class HubspotDeliveryOrderSyncService
             $client = $this->loadClient($clientId, $warnings);
             $contacts = $this->loadOptionalList('/Contacts', ['client' => $clientId, 'limit' => 100], 'contacts', $warnings);
             $deliveries = $this->loadOptionalList('/Livraisons', ['client' => $clientId], 'adresses de livraison', $warnings);
-            $payloadHash = $this->payloadHash([
+            $hashPayload = [
                 'sourceDocumentType' => $documentType,
                 'header' => $header,
                 'lines' => $lines,
-            ]);
+            ];
+
+            if ($isInvoice) {
+                $hashPayload['payment'] = $payment;
+            }
+
+            $payloadHash = $this->payloadHash($hashPayload);
             $previousPayloadHash = $deliveryNote->getPayloadHash();
 
-            $deliveryNote->refreshFromSage($header, $lines, $client, $contacts, $deliveries, $payloadHash, $documentType);
+            $deliveryNote->refreshFromSage(
+                $header,
+                $lines,
+                $client,
+                $contacts,
+                $deliveries,
+                $payloadHash,
+                $documentType,
+                $hubspotOrderState,
+            );
 
-            if ($deliveryNote->getExportedPayloadHash() === $payloadHash && $deliveryNote->getHubspotOrderId() !== null) {
+            if (!$hubspotOrderStateChanged
+                && $deliveryNote->getExportedPayloadHash() === $payloadHash
+                && $deliveryNote->getHubspotOrderId() !== null
+            ) {
                 ++$result['skipped'];
                 $this->entityManager->flush();
 
@@ -480,38 +763,33 @@ final class HubspotDeliveryOrderSyncService
         }
 
         if ($existingOrderId !== null) {
+            $ownerId = $this->resolveOwnerId((string) ($header['representant'] ?? ''), $warnings);
+            $lineItemIds = $deliveryNote->getHubspotLineItemIds();
+
             if ($isInvoice) {
-                $ownerId = $this->resolveOwnerId((string) ($header['representant'] ?? ''), $warnings);
                 $lineItemIds = $this->synchronizeExistingLineItems(
                     $deliveryNote,
                     $existingOrderId,
                     $linesForHubSpot,
                     $warnings,
                 );
-                $this->hubSpotClient->patch(
-                    sprintf('/crm/objects/%s/orders/%s', self::API_VERSION, $existingOrderId),
-                    ['properties' => $this->buildOrderProperties($deliveryNote, $header, $lines, $client, $contacts, $deliveries, $ownerId)],
-                );
-
-                $warnings[] = sprintf('Order HubSpot %s actualise avec la facture %s.', $existingOrderId, (string) ($header['piece'] ?? ''));
-
-                return [
-                    'orderId' => $existingOrderId,
-                    'lineItemIds' => $lineItemIds,
-                    'warnings' => array_values(array_unique($warnings)),
-                    'existing' => true,
-                    'updated' => true,
-                ];
             }
 
-            $warnings[] = sprintf('Order HubSpot %s deja existant, rattache au registre local.', $existingOrderId);
+            $this->hubSpotClient->patch(
+                sprintf('/crm/objects/%s/orders/%s', self::API_VERSION, $existingOrderId),
+                ['properties' => $this->buildOrderProperties($deliveryNote, $header, $lines, $client, $contacts, $deliveries, $ownerId)],
+            );
+
+            $warnings[] = $isInvoice
+                ? sprintf('Order HubSpot %s actualise avec la facture %s.', $existingOrderId, (string) ($header['piece'] ?? ''))
+                : sprintf('Order HubSpot %s actualise avec le BL %s.', $existingOrderId, (string) ($header['piece'] ?? ''));
 
             return [
                 'orderId' => $existingOrderId,
-                'lineItemIds' => $deliveryNote->getHubspotLineItemIds(),
-                'warnings' => $warnings,
+                'lineItemIds' => $lineItemIds,
+                'warnings' => array_values(array_unique($warnings)),
                 'existing' => true,
-                'updated' => false,
+                'updated' => true,
             ];
         }
 
@@ -1102,6 +1380,13 @@ final class HubspotDeliveryOrderSyncService
             $deliveryNote->getInvoicePiece() === $deliveryNote->getPiece() => sprintf('Facture %s', $deliveryNote->getPiece()),
             default => sprintf('BL %s / Facture %s', $deliveryNote->getPiece(), $deliveryNote->getInvoicePiece()),
         };
+        $rawPayload = $deliveryNote->getRawPayload() ?? [];
+        $hubspotOrderState = is_array($rawPayload['hubspotOrderState'] ?? null)
+            ? $rawPayload['hubspotOrderState']
+            : [];
+        $payment = is_array($hubspotOrderState['payment'] ?? null)
+            ? $hubspotOrderState['payment']
+            : null;
         $properties = [
             'hs_order_name' => sprintf('%s%s', $documentName, $clientName !== '' ? ' - '.$clientName : ''),
             'hs_external_order_id' => $deliveryNote->getSageKey(),
@@ -1115,7 +1400,7 @@ final class HubspotDeliveryOrderSyncService
             'hs_source_store' => 'Sage 100',
             'hs_order_type' => 'initial',
             'hs_pipeline' => $this->orderPipeline,
-            'hs_pipeline_stage' => $this->orderStage,
+            'hs_pipeline_stage' => (string) ($hubspotOrderState['stage'] ?? $this->invoicedStage),
             'order_reference' => trim((string) ($header['reference'] ?? '')) ?: $deliveryNote->getPiece(),
         ];
 
@@ -1127,10 +1412,12 @@ final class HubspotDeliveryOrderSyncService
             $properties['hs_processed_date'] = $deliveryNote->getDeliveryDate()->format(\DateTimeInterface::ATOM);
         }
 
-        $remainingAmount = $this->numeric($header['resteAPayer'] ?? null);
+        if (in_array($deliveryNote->getSourceDocumentType(), self::SAGE_INVOICE_TYPES, true)) {
+            $properties['order_paid'] = ($payment['status'] ?? null) === 'paid' ? 'Yes' : 'No';
 
-        if ($remainingAmount !== null) {
-            $properties['order_paid'] = abs($remainingAmount) < 0.01 ? 'Yes' : 'No';
+            if (($payment['dueDate'] ?? null) !== null) {
+                $properties['invoice_due_date'] = $payment['dueDate'];
+            }
         }
 
         $incoterm = $this->normalizeIncoterm($header['conditionLivraison'] ?? null);
@@ -1464,6 +1751,19 @@ final class HubspotDeliveryOrderSyncService
             trim((string) $line1),
             trim((string) $line2),
         ])));
+    }
+
+    private function toDate(mixed $value): ?\DateTimeImmutable
+    {
+        if (!is_string($value) || trim($value) === '') {
+            return null;
+        }
+
+        try {
+            return new \DateTimeImmutable($value);
+        } catch (\Throwable) {
+            return null;
+        }
     }
 
     private function numeric(mixed $value): ?float

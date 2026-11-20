@@ -46,6 +46,21 @@ class ErpDeliveryNoteRepository extends ServiceEntityRepository
     /**
      * @return ErpDeliveryNote[]
      */
+    public function findTrackedInvoicesForPaymentRefresh(): array
+    {
+        return $this->createQueryBuilder('n')
+            ->andWhere('n.sourceDocumentType IN (:types)')
+            ->andWhere('n.invoicePiece IS NOT NULL')
+            ->andWhere('n.hubspotOrderId IS NOT NULL')
+            ->setParameter('types', [6, 7])
+            ->orderBy('n.documentDate', 'DESC')
+            ->getQuery()
+            ->getResult();
+    }
+
+    /**
+     * @return ErpDeliveryNote[]
+     */
     public function findPaginated(string $search, string $status, int $page, int $perPage): array
     {
         return $this->createFilteredQueryBuilder($search, $status)

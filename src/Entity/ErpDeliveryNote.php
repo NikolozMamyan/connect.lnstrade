@@ -247,6 +247,7 @@ class ErpDeliveryNote
      * @param array<string, mixed>|null $client
      * @param list<array<string, mixed>> $contacts
      * @param list<array<string, mixed>> $deliveries
+     * @param array<string, mixed> $hubspotOrderState
      */
     public function refreshFromSage(
         array $header,
@@ -256,6 +257,7 @@ class ErpDeliveryNote
         array $deliveries,
         string $payloadHash,
         int $sourceDocumentType = 3,
+        array $hubspotOrderState = [],
     ): static {
         $freeFields = isset($header['champsLibres']) && is_array($header['champsLibres']) ? $header['champsLibres'] : [];
         $clientName = $this->nullableString($client['intitule'] ?? ($freeFields['nomtiers'] ?? null), 255);
@@ -282,7 +284,20 @@ class ErpDeliveryNote
             'client' => $client,
             'contacts' => $contacts,
             'deliveries' => $deliveries,
+            'hubspotOrderState' => $hubspotOrderState,
         ];
+        $this->analyzedAt = new \DateTimeImmutable();
+        $this->updatedAt = $this->analyzedAt;
+
+        return $this;
+    }
+
+    /** @param array<string, mixed> $hubspotOrderState */
+    public function refreshHubspotOrderState(array $hubspotOrderState, string $payloadHash): static
+    {
+        $this->rawPayload ??= [];
+        $this->rawPayload['hubspotOrderState'] = $hubspotOrderState;
+        $this->payloadHash = $payloadHash;
         $this->analyzedAt = new \DateTimeImmutable();
         $this->updatedAt = $this->analyzedAt;
 

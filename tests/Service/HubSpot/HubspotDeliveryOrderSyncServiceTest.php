@@ -31,6 +31,7 @@ final class HubspotDeliveryOrderSyncServiceTest extends TestCase
 
                 return match ([$method, $path]) {
                     ['POST', '/auth/login'] => self::jsonResponse(['accessToken' => 'sage-token']),
+                    ['GET', '/Document/lettrage'] => self::jsonResponse([]),
                     ['GET', '/Document/header'] => self::jsonResponse([[
                         'piece' => 'BL001',
                         'tiers' => 'CLI001',
@@ -150,7 +151,9 @@ final class HubspotDeliveryOrderSyncServiceTest extends TestCase
             $entityManager,
             new NullLogger(),
             'pipeline-orders',
+            'stage-preparation',
             'stage-invoiced',
+            'stage-paid',
             ['20' => 'tax-20'],
             [],
             [],
@@ -174,7 +177,8 @@ final class HubspotDeliveryOrderSyncServiceTest extends TestCase
         self::assertSame(120.0, $orderPayload['properties']['hs_subtotal_price']);
         self::assertSame(20.0, $orderPayload['properties']['hs_order_discount']);
         self::assertSame(120.0, $orderPayload['properties']['hs_total_price']);
-        self::assertSame('Yes', $orderPayload['properties']['order_paid']);
+        self::assertSame('stage-preparation', $orderPayload['properties']['hs_pipeline_stage']);
+        self::assertArrayNotHasKey('order_paid', $orderPayload['properties']);
         self::assertSame('DDP', $orderPayload['properties']['incoterm']);
         self::assertSame('Entrepot test', $orderPayload['properties']['hs_shipping_address_name']);
         self::assertSame([509, 2694, 513], array_map(
@@ -189,7 +193,7 @@ final class HubspotDeliveryOrderSyncServiceTest extends TestCase
         self::assertSame(1, $secondResult['skipped']);
         self::assertSame(0, $secondResult['sent']);
         self::assertSame($hubspotRequestsAfterFirstRun, $hubspotRequests, 'The unchanged BL must not call HubSpot again.');
-        self::assertSame(11, $sageRequests);
+        self::assertSame(13, $sageRequests);
     }
 
     public function testInvoiceUpdatesTheOrderAndLineItemsCreatedFromTheDeliveryNote(): void
@@ -197,15 +201,29 @@ final class HubspotDeliveryOrderSyncServiceTest extends TestCase
         $storedDeliveryNote = null;
         $createdOrders = 0;
         $hubspotRequests = 0;
+        $lettrageCalls = 0;
         $updatedOrderPayload = null;
         $updatedLineItemPayload = null;
         $sageClient = new SageClient(
-            new MockHttpClient(static function (string $method, string $url): MockResponse {
+            new MockHttpClient(static function (string $method, string $url) use (&$lettrageCalls): MockResponse {
                 $path = (string) parse_url($url, PHP_URL_PATH);
                 parse_str((string) parse_url($url, PHP_URL_QUERY), $query);
 
                 if ($method === 'POST' && $path === '/auth/login') {
                     return self::jsonResponse(['accessToken' => 'sage-token']);
+                }
+
+                if ($method === 'GET' && $path === '/Document/lettrage') {
+                    ++$lettrageCalls;
+
+                    return self::jsonResponse([[
+                        'Client' => 'CLI001',
+                        'Piece' => 'FA001',
+                        'Lettre' => $lettrageCalls === 1 ? 0 : 1,
+                        'Lettrage' => $lettrageCalls === 1 ? '' : 'AB',
+                        'Journal' => 'VTE',
+                        "Date d'échéance" => '2026-10-31T00:00:00+01:00',
+                    ]]);
                 }
 
                 if ($method === 'GET' && $path === '/Document/header') {
@@ -336,7 +354,9 @@ final class HubspotDeliveryOrderSyncServiceTest extends TestCase
             $entityManager,
             new NullLogger(),
             'pipeline-orders',
+            'stage-preparation',
             'stage-invoiced',
+            'stage-paid',
             ['20' => 'tax-20'],
         );
 
@@ -356,13 +376,20 @@ final class HubspotDeliveryOrderSyncServiceTest extends TestCase
         self::assertSame(55.0, $updatedLineItemPayload['properties']['price']);
         self::assertSame(132.0, $updatedOrderPayload['properties']['hs_total_price']);
         self::assertSame('BL BL001 / Facture FA001 - Client test', $updatedOrderPayload['properties']['hs_order_name']);
+        self::assertSame('stage-invoiced', $updatedOrderPayload['properties']['hs_pipeline_stage']);
+        self::assertSame('No', $updatedOrderPayload['properties']['order_paid']);
+        self::assertSame('2026-10-31', $updatedOrderPayload['properties']['invoice_due_date']);
 
         $hubspotRequestsAfterFirstRun = $hubspotRequests;
         $secondResult = $service->sync(new \DateTimeImmutable('2026-09-01'), new \DateTimeImmutable('2026-09-23'));
 
-        self::assertSame(2, $secondResult['skipped']);
+        self::assertSame(1, $secondResult['skipped']);
+        self::assertSame(1, $secondResult['updated']);
         self::assertSame(ErpDeliveryNote::STATUS_SENT, $storedDeliveryNote->getStatus());
-        self::assertSame($hubspotRequestsAfterFirstRun, $hubspotRequests);
+        self::assertGreaterThan($hubspotRequestsAfterFirstRun, $hubspotRequests);
+        self::assertSame('stage-paid', $updatedOrderPayload['properties']['hs_pipeline_stage']);
+        self::assertSame('Yes', $updatedOrderPayload['properties']['order_paid']);
+        self::assertSame('2026-10-31', $updatedOrderPayload['properties']['invoice_due_date']);
     }
 
     public function testInvoiceCanRecoverAnOrderCreatedFromAnOlderDeliveryNoteByReference(): void
@@ -376,6 +403,10 @@ final class HubspotDeliveryOrderSyncServiceTest extends TestCase
 
                 if ($method === 'POST' && $path === '/auth/login') {
                     return self::jsonResponse(['accessToken' => 'sage-token']);
+                }
+
+                if ($method === 'GET' && $path === '/Document/lettrage') {
+                    return self::jsonResponse([]);
                 }
 
                 if ($method === 'GET' && $path === '/Document/header') {
@@ -480,7 +511,9 @@ final class HubspotDeliveryOrderSyncServiceTest extends TestCase
             $entityManager,
             new NullLogger(),
             'pipeline-orders',
+            'stage-preparation',
             'stage-invoiced',
+            'stage-paid',
             ['20' => 'tax-20'],
         );
 
@@ -499,6 +532,91 @@ final class HubspotDeliveryOrderSyncServiceTest extends TestCase
         self::assertSame('BC009', $updatedOrderPayload['properties']['order_reference']);
     }
 
+    public function testPaidInvoiceOutsideTheScanWindowIsRefreshedFromLettrage(): void
+    {
+        $invoice = new ErpDeliveryNote('sage:0:3:BL-OLD', 'BL-OLD');
+        $invoice->refreshFromSage(
+            [
+                'piece' => 'FA-OLD',
+                'tiers' => 'CLI-OLD',
+                'date' => '2025-01-15T00:00:00+01:00',
+                'montantHT' => 100,
+                'montantTTC' => 120,
+            ],
+            [['referenceArticle' => 'SKU-OLD', 'qteArticle' => 1, 'montantArticle' => 100]],
+            ['reference' => 'CLI-OLD', 'intitule' => 'Ancien client'],
+            [],
+            [],
+            'old-payload-hash',
+            6,
+            [
+                'stage' => 'stage-invoiced',
+                'payment' => ['status' => 'unpaid', 'dueDate' => '2025-02-15', 'codes' => []],
+            ],
+        );
+        $invoice->markSent('order-old', ['line-old'], 'old-payload-hash');
+        $sageClient = new SageClient(
+            new MockHttpClient(static function (string $method, string $url): MockResponse {
+                $path = (string) parse_url($url, PHP_URL_PATH);
+
+                return match ([$method, $path]) {
+                    ['POST', '/auth/login'] => self::jsonResponse(['accessToken' => 'sage-token']),
+                    ['GET', '/Document/lettrage'] => self::jsonResponse([[
+                        'Client' => 'CLI-OLD',
+                        'Piece' => 'FA-OLD',
+                        'Lettre' => 1,
+                        'Lettrage' => 'PAID-1',
+                        'Journal' => 'VTE',
+                        "Date d'échéance" => '2025-02-15T00:00:00+01:00',
+                    ]]),
+                    ['GET', '/Document/header'] => self::jsonResponse([]),
+                    default => throw new \RuntimeException(sprintf('Unexpected Sage request: %s %s', $method, $path)),
+                };
+            }),
+            $this->parameters(),
+        );
+        $updatedOrderPayload = null;
+        $hubSpotClient = new HubSpotClient(
+            new MockHttpClient(static function (string $method, string $url, array $options) use (&$updatedOrderPayload): MockResponse {
+                $path = (string) parse_url($url, PHP_URL_PATH);
+
+                if ($method === 'PATCH' && $path === '/crm/objects/2026-09/orders/order-old') {
+                    $updatedOrderPayload = json_decode((string) $options['body'], true, 512, JSON_THROW_ON_ERROR);
+
+                    return self::jsonResponse(['id' => 'order-old']);
+                }
+
+                throw new \RuntimeException(sprintf('Unexpected HubSpot request: %s %s', $method, $path));
+            }),
+            $this->parameters(),
+        );
+        $repository = $this->createStub(ErpDeliveryNoteRepository::class);
+        $repository->method('findTrackedInvoicesForPaymentRefresh')->willReturn([$invoice]);
+        $service = new HubspotDeliveryOrderSyncService(
+            $sageClient,
+            $hubSpotClient,
+            $repository,
+            $this->createStub(CommercialRepository::class),
+            $this->createStub(EntityManagerInterface::class),
+            new NullLogger(),
+            'pipeline-orders',
+            'stage-preparation',
+            'stage-invoiced',
+            'stage-paid',
+            ['20' => 'tax-20'],
+        );
+
+        $result = $service->sync(new \DateTimeImmutable('2026-09-01'), new \DateTimeImmutable('2026-09-23'));
+
+        self::assertSame(0, $result['analyzed']);
+        self::assertSame(1, $result['updated']);
+        self::assertSame(0, $result['failed']);
+        self::assertSame('stage-paid', $updatedOrderPayload['properties']['hs_pipeline_stage']);
+        self::assertSame('Yes', $updatedOrderPayload['properties']['order_paid']);
+        self::assertSame('2025-02-15', $updatedOrderPayload['properties']['invoice_due_date']);
+        self::assertSame('paid', $invoice->getRawPayload()['hubspotOrderState']['payment']['status']);
+    }
+
     public function testExcludedSupplierAndDocumentAreSkippedBeforeAnyLocalOrHubSpotWrite(): void
     {
         $sageClient = new SageClient(
@@ -508,6 +626,10 @@ final class HubspotDeliveryOrderSyncServiceTest extends TestCase
 
                 if ($method === 'POST' && $path === '/auth/login') {
                     return self::jsonResponse(['accessToken' => 'sage-token']);
+                }
+
+                if ($method === 'GET' && $path === '/Document/lettrage') {
+                    return self::jsonResponse([]);
                 }
 
                 if ($method === 'GET' && $path === '/Document/header') {
@@ -551,7 +673,9 @@ final class HubspotDeliveryOrderSyncServiceTest extends TestCase
             $entityManager,
             new NullLogger(),
             'pipeline-orders',
+            'stage-preparation',
             'stage-invoiced',
+            'stage-paid',
             ['20' => 'tax-20'],
             [' 9dachser '],
             [' fa-manuelle '],
