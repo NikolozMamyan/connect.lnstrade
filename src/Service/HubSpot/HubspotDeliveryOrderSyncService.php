@@ -1334,7 +1334,7 @@ final class HubspotDeliveryOrderSyncService
 
         if ($isCredit) {
             $listedUnitPrice = abs($listedUnitPrice);
-            $netUnitPrice = $lineAmount !== null ? abs($lineAmount) / $quantity : $listedUnitPrice;
+            $netUnitPrice = $listedUnitPrice;
         }
 
         if (!$isCredit
@@ -1364,7 +1364,7 @@ final class HubspotDeliveryOrderSyncService
 
         $unitDiscount = $listedUnitPrice - $netUnitPrice;
 
-        if ($unitDiscount > 0.000001) {
+        if (!$isCredit && $unitDiscount > 0.000001) {
             $properties['discount'] = round($unitDiscount, 6);
             $properties['price'] = $listedUnitPrice;
         }

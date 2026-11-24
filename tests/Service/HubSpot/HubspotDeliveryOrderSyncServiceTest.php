@@ -577,7 +577,7 @@ final class HubspotDeliveryOrderSyncServiceTest extends TestCase
                         'designationArticle' => 'Article retourne',
                         'qteArticle' => -2,
                         'prixHTArticle' => 50,
-                        'montantArticle' => -100,
+                        'montantArticle' => -99.999998,
                         'tauxTva' => 20,
                     ]]);
                 }
@@ -664,6 +664,7 @@ final class HubspotDeliveryOrderSyncServiceTest extends TestCase
         self::assertSame('Article retourne', $lineItemPayload['properties']['name']);
         self::assertSame('SKU-CREDIT', $lineItemPayload['properties']['hs_sku']);
         self::assertSame('product-credit', $lineItemPayload['properties']['hs_product_id']);
+        self::assertArrayNotHasKey('discount', $lineItemPayload['properties']);
         self::assertSame('Avoir FV001 - Client avoir', $orderPayload['properties']['hs_order_name']);
         self::assertSame(-100.0, $orderPayload['properties']['hs_subtotal_price']);
         self::assertSame(0.0, $orderPayload['properties']['hs_order_discount']);
