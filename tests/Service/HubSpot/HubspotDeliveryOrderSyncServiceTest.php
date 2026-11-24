@@ -660,7 +660,10 @@ final class HubspotDeliveryOrderSyncServiceTest extends TestCase
         self::assertSame(['hs_external_order_id'], $orderSearchProperties, 'The credit must not reuse the original invoice Order by reference.');
         self::assertSame('order-credit', $storedDeliveryNote->getHubspotOrderId());
         self::assertSame(2.0, $lineItemPayload['properties']['quantity']);
-        self::assertSame(-50.0, $lineItemPayload['properties']['price']);
+        self::assertSame(50.0, $lineItemPayload['properties']['price']);
+        self::assertSame('Article retourne', $lineItemPayload['properties']['name']);
+        self::assertSame('SKU-CREDIT', $lineItemPayload['properties']['hs_sku']);
+        self::assertSame('product-credit', $lineItemPayload['properties']['hs_product_id']);
         self::assertSame('Avoir FV001 - Client avoir', $orderPayload['properties']['hs_order_name']);
         self::assertSame(-100.0, $orderPayload['properties']['hs_subtotal_price']);
         self::assertSame(0.0, $orderPayload['properties']['hs_order_discount']);

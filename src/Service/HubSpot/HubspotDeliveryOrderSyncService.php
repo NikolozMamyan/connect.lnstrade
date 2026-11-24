@@ -1333,9 +1333,8 @@ final class HubspotDeliveryOrderSyncService
         $netUnitPrice = $lineAmount !== null ? $lineAmount / $quantity : $listedUnitPrice;
 
         if ($isCredit) {
-            $creditedAmount = $lineAmount ?? ($listedUnitPrice * $rawQuantity);
-            $netUnitPrice = -abs($creditedAmount) / $quantity;
-            $listedUnitPrice = $netUnitPrice;
+            $listedUnitPrice = abs($listedUnitPrice);
+            $netUnitPrice = $lineAmount !== null ? abs($lineAmount) / $quantity : $listedUnitPrice;
         }
 
         if (!$isCredit
