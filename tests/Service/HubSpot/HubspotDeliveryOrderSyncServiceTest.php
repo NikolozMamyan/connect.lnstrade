@@ -532,6 +532,142 @@ final class HubspotDeliveryOrderSyncServiceTest extends TestCase
         self::assertSame('BC009', $updatedOrderPayload['properties']['order_reference']);
     }
 
+    public function testCreditNoteCreatesADistinctNegativeOrder(): void
+    {
+        $storedDeliveryNote = null;
+        $lineItemPayload = null;
+        $orderPayload = null;
+        $orderSearchProperties = [];
+        $sageClient = new SageClient(
+            new MockHttpClient(static function (string $method, string $url): MockResponse {
+                $path = (string) parse_url($url, PHP_URL_PATH);
+                parse_str((string) parse_url($url, PHP_URL_QUERY), $query);
+
+                if ($method === 'POST' && $path === '/auth/login') {
+                    return self::jsonResponse(['accessToken' => 'sage-token']);
+                }
+
+                if ($method === 'GET' && $path === '/Document/lettrage') {
+                    return self::jsonResponse([[
+                        'Client' => 'CLI-CREDIT',
+                        'Piece' => 'FV001',
+                        'Lettre' => 0,
+                        'Journal' => 'VTE',
+                        "Date d'échéance" => '2026-10-15T00:00:00+02:00',
+                    ]]);
+                }
+
+                if ($method === 'GET' && $path === '/Document/header') {
+                    return (int) ($query['type'] ?? -1) === 7
+                        ? self::jsonResponse([[
+                            'piece' => 'FV001',
+                            'tiers' => 'CLI-CREDIT',
+                            'date' => '2026-09-22T00:00:00+02:00',
+                            'montantHT' => -100.0,
+                            'montantTTC' => -120.0,
+                            'reference' => 'FA0001',
+                            'champsLibres' => [],
+                        ]])
+                        : self::jsonResponse([]);
+                }
+
+                if ($method === 'GET' && $path === '/Document/line') {
+                    return self::jsonResponse([[
+                        'referenceArticle' => 'SKU-CREDIT',
+                        'designationArticle' => 'Article retourne',
+                        'qteArticle' => -2,
+                        'prixHTArticle' => 50,
+                        'montantArticle' => -100,
+                        'tauxTva' => 20,
+                    ]]);
+                }
+
+                if ($method === 'GET' && $path === '/Clients') {
+                    return self::jsonResponse([['reference' => 'CLI-CREDIT', 'intitule' => 'Client avoir']]);
+                }
+
+                if ($method === 'GET' && in_array($path, ['/Contacts', '/Livraisons'], true)) {
+                    return self::jsonResponse([]);
+                }
+
+                throw new \RuntimeException(sprintf('Unexpected Sage request: %s %s', $method, $path));
+            }),
+            $this->parameters(),
+        );
+        $hubSpotClient = new HubSpotClient(
+            new MockHttpClient(static function (string $method, string $url, array $options) use (&$lineItemPayload, &$orderPayload, &$orderSearchProperties): MockResponse {
+                $path = (string) parse_url($url, PHP_URL_PATH);
+                $payload = isset($options['body']) ? json_decode((string) $options['body'], true, 512, JSON_THROW_ON_ERROR) : null;
+
+                if ($method === 'POST' && $path === '/crm/objects/2026-09/orders/search') {
+                    $orderSearchProperties[] = $payload['filterGroups'][0]['filters'][0]['propertyName'] ?? '';
+
+                    return self::jsonResponse(['results' => []]);
+                }
+
+                if ($method === 'POST' && $path === '/crm/objects/2026-09/companies/search') {
+                    return self::jsonResponse(['results' => [['id' => 'company-credit']]]);
+                }
+
+                if ($method === 'POST' && $path === '/crm/objects/2026-09/products/search') {
+                    return self::jsonResponse(['results' => [['id' => 'product-credit']]]);
+                }
+
+                if ($method === 'POST' && $path === '/crm/objects/2026-09/line_items') {
+                    $lineItemPayload = $payload;
+
+                    return self::jsonResponse(['id' => 'line-credit']);
+                }
+
+                if ($method === 'POST' && $path === '/crm/objects/2026-09/orders') {
+                    $orderPayload = $payload;
+
+                    return self::jsonResponse(['id' => 'order-credit']);
+                }
+
+                throw new \RuntimeException(sprintf('Unexpected HubSpot request: %s %s', $method, $path));
+            }),
+            $this->parameters(),
+        );
+        $repository = $this->createStub(ErpDeliveryNoteRepository::class);
+        $entityManager = $this->createStub(EntityManagerInterface::class);
+        $entityManager
+            ->method('persist')
+            ->willReturnCallback(static function (object $entity) use (&$storedDeliveryNote): void {
+                if ($entity instanceof ErpDeliveryNote) {
+                    $storedDeliveryNote = $entity;
+                }
+            });
+        $service = new HubspotDeliveryOrderSyncService(
+            $sageClient,
+            $hubSpotClient,
+            $repository,
+            $this->createStub(CommercialRepository::class),
+            $entityManager,
+            new NullLogger(),
+            'pipeline-orders',
+            'stage-preparation',
+            'stage-invoiced',
+            'stage-paid',
+            ['20' => 'tax-20'],
+        );
+
+        $result = $service->sync(new \DateTimeImmutable('2026-09-01'), new \DateTimeImmutable('2026-09-23'));
+
+        self::assertSame(1, $result['invoicesAnalyzed']);
+        self::assertSame(1, $result['sent']);
+        self::assertSame(0, $result['failed']);
+        self::assertSame(['hs_external_order_id'], $orderSearchProperties, 'The credit must not reuse the original invoice Order by reference.');
+        self::assertSame('order-credit', $storedDeliveryNote->getHubspotOrderId());
+        self::assertSame(2.0, $lineItemPayload['properties']['quantity']);
+        self::assertSame(-50.0, $lineItemPayload['properties']['price']);
+        self::assertSame('Avoir FV001 - Client avoir', $orderPayload['properties']['hs_order_name']);
+        self::assertSame(-100.0, $orderPayload['properties']['hs_subtotal_price']);
+        self::assertSame(0.0, $orderPayload['properties']['hs_order_discount']);
+        self::assertSame(-120.0, $orderPayload['properties']['hs_total_price']);
+        self::assertSame('2026-10-15', $orderPayload['properties']['invoice_due_date']);
+    }
+
     public function testPaidInvoiceOutsideTheScanWindowIsRefreshedFromLettrage(): void
     {
         $invoice = new ErpDeliveryNote('sage:0:3:BL-OLD', 'BL-OLD');

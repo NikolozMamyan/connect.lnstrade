@@ -129,7 +129,9 @@
                                     {{ note.piece }}
                                     {% if note.invoicePiece and note.invoicePiece != note.piece %}<span style="color:var(--text-muted);">&rarr;</span> {{ note.invoicePiece }}{% endif %}
                                 </div>
-                                {% if note.invoicePiece %}<span class="tag tag-info" style="margin-top:4px;">Facture finale</span>{% endif %}
+                                {% if note.invoicePiece %}
+                                    <span class="tag tag-info" style="margin-top:4px;">{{ note.amountIncludingTax < 0 ? 'Avoir' : 'Facture finale' }}</span>
+                                {% endif %}
                                 <div style="font-size:11px;color:var(--text-muted);font-family:var(--font-mono);">{{ note.sageKey }}</div>
                             </td>
                             <td><strong>{{ note.clientName ?: 'N/A' }}</strong><div style="font-size:11px;color:var(--text-muted);">{{ note.clientId ?: 'Sans reference' }}</div></td>

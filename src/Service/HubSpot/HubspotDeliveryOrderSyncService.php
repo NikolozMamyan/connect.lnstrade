@@ -120,7 +120,7 @@ final class HubspotDeliveryOrderSyncService
             foreach ($this->loadHeaders($documentType, $dateFrom, $dateTo) as $header) {
                 $piece = strtoupper(trim((string) ($header['piece'] ?? '')));
 
-                if ($piece === '' || !str_starts_with($piece, 'FA')) {
+                if ($piece === '' || (!str_starts_with($piece, 'FA') && !$this->isCreditDocument($header))) {
                     continue;
                 }
 
@@ -153,6 +153,10 @@ final class HubspotDeliveryOrderSyncService
 
         if ($invoiceRecord instanceof ErpDeliveryNote) {
             return $invoiceRecord;
+        }
+
+        if ($this->isCreditDocument($header)) {
+            return null;
         }
 
         $reference = $this->normalizeDocumentReference((string) ($header['reference'] ?? ''));
@@ -529,6 +533,7 @@ final class HubspotDeliveryOrderSyncService
         }
 
         $isInvoice = in_array($documentType, self::SAGE_INVOICE_TYPES, true);
+        $isCredit = $isInvoice && $this->isCreditDocument($header);
         ++$result['analyzed'];
         ++$result[$isInvoice ? 'invoicesAnalyzed' : 'deliveryNotesAnalyzed'];
 
@@ -653,6 +658,7 @@ final class HubspotDeliveryOrderSyncService
                 $deliveries,
                 $warnings,
                 $isInvoice,
+                $isCredit,
             );
             $deliveryNote->markSent(
                 $export['orderId'],
@@ -717,7 +723,9 @@ final class HubspotDeliveryOrderSyncService
 
         return [
             'piece' => $piece,
-            'documentLabel' => in_array($documentType, self::SAGE_INVOICE_TYPES, true) ? 'Facture' : 'BL',
+            'documentLabel' => $this->isCreditDocument($header)
+                ? 'Avoir'
+                : (in_array($documentType, self::SAGE_INVOICE_TYPES, true) ? 'Facture' : 'BL'),
             'clientId' => $clientId,
             'clientName' => $clientName !== '' ? $clientName : $clientId,
             'hubspotOrderId' => $deliveryNote?->getHubspotOrderId(),
@@ -744,9 +752,10 @@ final class HubspotDeliveryOrderSyncService
         array $deliveries,
         array $warnings,
         bool $isInvoice,
+        bool $isCredit,
     ): array {
-        $linesForHubSpot = $this->filterDiscountLines($lines);
-        $orderDiscount = $this->calculateOrderDiscount($lines);
+        $linesForHubSpot = $isCredit ? $lines : $this->filterDiscountLines($lines);
+        $orderDiscount = $isCredit ? 0.0 : $this->calculateOrderDiscount($lines);
 
         if ($orderDiscount > 0.0) {
             $warnings[] = sprintf(
@@ -758,7 +767,7 @@ final class HubspotDeliveryOrderSyncService
         $existingOrderId = $deliveryNote->getHubspotOrderId()
             ?? $this->findExistingOrderId($deliveryNote->getSageKey());
 
-        if ($existingOrderId === null && $isInvoice) {
+        if ($existingOrderId === null && $isInvoice && !$isCredit) {
             $existingOrderId = $this->findExistingOrderIdByReference($header);
         }
 
@@ -772,6 +781,7 @@ final class HubspotDeliveryOrderSyncService
                     $existingOrderId,
                     $linesForHubSpot,
                     $warnings,
+                    $isCredit,
                 );
             }
 
@@ -810,7 +820,7 @@ final class HubspotDeliveryOrderSyncService
 
         for ($position = count($lineItemIds); $position < count($linesForHubSpot); ++$position) {
             $line = $linesForHubSpot[$position];
-            $properties = $this->buildLineItemProperties($line, $warnings);
+            $properties = $this->buildLineItemProperties($line, $warnings, $isCredit);
             $response = $this->hubSpotClient->post(
                 sprintf('/crm/objects/%s/line_items', self::API_VERSION),
                 ['properties' => $properties, 'associations' => []],
@@ -871,6 +881,19 @@ final class HubspotDeliveryOrderSyncService
             $lines,
             fn (array $line): bool => !$this->isDiscountLine($line),
         ));
+    }
+
+    /** @param array<string, mixed> $header */
+    private function isCreditDocument(array $header): bool
+    {
+        $piece = strtoupper(trim((string) ($header['piece'] ?? '')));
+        $amountExcludingTax = $this->numeric($header['montantHT'] ?? null);
+        $amountIncludingTax = $this->numeric($header['montantTTC'] ?? null);
+
+        return str_starts_with($piece, 'FV')
+            || str_starts_with($piece, 'FR')
+            || ($amountExcludingTax !== null && $amountExcludingTax < -0.000001)
+            || ($amountIncludingTax !== null && $amountIncludingTax < -0.000001);
     }
 
     /**
@@ -986,6 +1009,7 @@ final class HubspotDeliveryOrderSyncService
         string $orderId,
         array $lines,
         array &$warnings,
+        bool $isCredit,
     ): array {
         $lineItemIds = $deliveryNote->getHubspotLineItemIds();
 
@@ -996,7 +1020,7 @@ final class HubspotDeliveryOrderSyncService
         $synchronizedIds = [];
 
         foreach ($lines as $position => $line) {
-            $properties = $this->buildLineItemProperties($line, $warnings);
+            $properties = $this->buildLineItemProperties($line, $warnings, $isCredit);
             $lineItemId = $lineItemIds[$position] ?? null;
 
             if ($lineItemId !== null) {
@@ -1293,21 +1317,31 @@ final class HubspotDeliveryOrderSyncService
      *
      * @return array<string, mixed>
      */
-    private function buildLineItemProperties(array $line, array &$warnings): array
+    private function buildLineItemProperties(array $line, array &$warnings, bool $isCredit = false): array
     {
         $reference = trim((string) ($line['referenceArticle'] ?? ($line['reference'] ?? '')));
         $name = trim((string) ($line['designationArticle'] ?? ''));
-        $quantity = $this->numeric($line['qteArticle'] ?? null);
+        $rawQuantity = $this->numeric($line['qteArticle'] ?? null);
 
-        if ($quantity === null || abs($quantity) < 0.000001) {
+        if ($rawQuantity === null || abs($rawQuantity) < 0.000001) {
             throw new \RuntimeException(sprintf('Quantite invalide pour la ligne Sage %s.', $reference !== '' ? $reference : 'sans reference'));
         }
 
+        $quantity = $isCredit ? abs($rawQuantity) : $rawQuantity;
         $listedUnitPrice = $this->numeric($line['prixHTArticle'] ?? null) ?? 0.0;
         $lineAmount = $this->numeric($line['montantArticle'] ?? null);
         $netUnitPrice = $lineAmount !== null ? $lineAmount / $quantity : $listedUnitPrice;
 
-        if ($lineAmount !== null && abs(($listedUnitPrice * $quantity) - $lineAmount) <= self::LINE_ROUNDING_TOLERANCE) {
+        if ($isCredit) {
+            $creditedAmount = $lineAmount ?? ($listedUnitPrice * $rawQuantity);
+            $netUnitPrice = -abs($creditedAmount) / $quantity;
+            $listedUnitPrice = $netUnitPrice;
+        }
+
+        if (!$isCredit
+            && $lineAmount !== null
+            && abs(($listedUnitPrice * $quantity) - $lineAmount) <= self::LINE_ROUNDING_TOLERANCE
+        ) {
             $netUnitPrice = $listedUnitPrice;
         }
 
@@ -1374,8 +1408,10 @@ final class HubspotDeliveryOrderSyncService
         $freeFields = isset($header['champsLibres']) && is_array($header['champsLibres']) ? $header['champsLibres'] : [];
         $amountExcludingTax = $this->numeric($header['montantHT'] ?? null) ?? 0.0;
         $amountIncludingTax = $this->numeric($header['montantTTC'] ?? null) ?? 0.0;
-        $orderDiscount = $this->calculateOrderDiscount($lines);
+        $isCredit = $this->isCreditDocument($header);
+        $orderDiscount = $isCredit ? 0.0 : $this->calculateOrderDiscount($lines);
         $documentName = match (true) {
+            $isCredit => sprintf('Avoir %s', $deliveryNote->getInvoicePiece() ?? $deliveryNote->getPiece()),
             $deliveryNote->getInvoicePiece() === null => sprintf('BL %s', $deliveryNote->getPiece()),
             $deliveryNote->getInvoicePiece() === $deliveryNote->getPiece() => sprintf('Facture %s', $deliveryNote->getPiece()),
             default => sprintf('BL %s / Facture %s', $deliveryNote->getPiece(), $deliveryNote->getInvoicePiece()),
