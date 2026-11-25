@@ -147,9 +147,7 @@ final class HubspotDeliveryOrderSyncService
         }
 
         $invoiceRecord = $this->deliveryNoteRepository->findOneByInvoicePiece($piece)
-            ?? $this->deliveryNoteRepository->findOneBySageKey(
-                sprintf('sage:%d:invoice:%s', self::SAGE_DOCUMENT_DOMAIN, $piece)
-            );
+            ?? $this->deliveryNoteRepository->findOneBySageKey($this->invoiceOrderKey($piece));
 
         if ($invoiceRecord instanceof ErpDeliveryNote) {
             return $invoiceRecord;
@@ -476,6 +474,7 @@ final class HubspotDeliveryOrderSyncService
             }
 
             try {
+                $this->assertOrderMatchesDocument($deliveryNote, $orderId);
                 $this->hubSpotClient->patch(
                     sprintf('/crm/objects/%s/orders/%s', self::API_VERSION, $orderId),
                     ['properties' => $this->buildPaymentProperties($deliveryNote->getSourceDocumentType(), $payment)],
@@ -555,7 +554,7 @@ final class HubspotDeliveryOrderSyncService
 
         if (!$deliveryNote instanceof ErpDeliveryNote) {
             $sageKey = $isInvoice
-                ? sprintf('sage:%d:invoice:%s', self::SAGE_DOCUMENT_DOMAIN, $piece)
+                ? $this->invoiceOrderKey($piece)
                 : sprintf('sage:%d:%d:%s', self::SAGE_DOCUMENT_DOMAIN, $documentType, $piece);
             $deliveryNote = new ErpDeliveryNote($sageKey, $piece);
             $this->entityManager->persist($deliveryNote);
@@ -764,10 +763,16 @@ final class HubspotDeliveryOrderSyncService
             );
         }
 
-        $existingOrderId = $deliveryNote->getHubspotOrderId()
-            ?? $this->findExistingOrderId($deliveryNote->getSageKey());
+        $orderKey = $this->orderKey($deliveryNote);
+        $existingOrderId = $deliveryNote->getHubspotOrderId() ?? $this->findExistingOrderId($orderKey);
 
-        if ($existingOrderId === null && $isInvoice && !$isCredit) {
+        if ($existingOrderId === null && $isInvoice && !$isCredit && $deliveryNote->getSageKey() !== $orderKey) {
+            $existingOrderId = $this->findExistingOrderId($deliveryNote->getSageKey());
+        }
+
+        if ($existingOrderId !== null) {
+            $this->assertOrderMatchesDocument($deliveryNote, $existingOrderId, !$isCredit);
+        } elseif ($isInvoice && !$isCredit) {
             $existingOrderId = $this->findExistingOrderIdByReference($header);
         }
 
@@ -924,6 +929,77 @@ final class HubspotDeliveryOrderSyncService
         return $lineAmount !== null && $lineAmount < -0.000001;
     }
 
+    private function invoiceOrderKey(string $piece): string
+    {
+        return sprintf('sage:%d:invoice:%s', self::SAGE_DOCUMENT_DOMAIN, strtoupper(trim($piece)));
+    }
+
+    private function orderKey(ErpDeliveryNote $deliveryNote): string
+    {
+        return $deliveryNote->getInvoicePiece() === null
+            ? $deliveryNote->getSageKey()
+            : $this->invoiceOrderKey($deliveryNote->getInvoicePiece());
+    }
+
+    /**
+     * @param array<string, mixed> $properties
+     *
+     * @return array{invoice: ?string, deliveryNote: ?string}
+     */
+    private function identifyOrderDocument(array $properties): array
+    {
+        $key = strtoupper(trim((string) ($properties['hs_external_order_id'] ?? '')));
+
+        if (preg_match('/^SAGE:0:INVOICE:([^:\s]+)$/D', $key, $matches) === 1) {
+            return ['invoice' => $matches[1], 'deliveryNote' => null];
+        }
+
+        if (preg_match('/^SAGE:0:3:(BL[^:\s]+)$/D', $key, $matches) === 1) {
+            // Before invoice keys were written on conversion, the label recorded the final document.
+            $label = strtoupper(explode(' - ', trim((string) ($properties['hs_order_name'] ?? '')), 2)[0]);
+            $deliveryLabel = 'BL '.$matches[1];
+
+            if ($label === $deliveryLabel) {
+                return ['invoice' => null, 'deliveryNote' => $matches[1]];
+            }
+
+            if (preg_match('/^'.preg_quote($deliveryLabel, '/').' \/ FACTURE ([^:\s]+)$/D', $label, $invoice) === 1) {
+                return ['invoice' => $invoice[1], 'deliveryNote' => $matches[1]];
+            }
+        }
+
+        return ['invoice' => null, 'deliveryNote' => null];
+    }
+
+    private function assertOrderMatchesDocument(
+        ErpDeliveryNote $deliveryNote,
+        string $orderId,
+        bool $allowDeliveryNoteConversion = false,
+    ): void {
+        $order = $this->hubSpotClient->get(
+            sprintf('/crm/objects/%s/orders/%s', self::API_VERSION, $orderId),
+            ['properties' => ['hs_external_order_id', 'hs_order_name']],
+        );
+        $identity = $this->identifyOrderDocument($order['properties'] ?? []);
+        $invoice = $deliveryNote->getInvoicePiece();
+
+        if ($invoice !== null && $identity['invoice'] === strtoupper($invoice)) {
+            return;
+        }
+
+        if ($identity['invoice'] === null && $identity['deliveryNote'] === strtoupper($deliveryNote->getPiece())
+            && ($invoice === null || $allowDeliveryNoteConversion)
+        ) {
+            return;
+        }
+
+        throw new \RuntimeException(sprintf(
+            'Rattachement incoherent : l Order HubSpot %s ne correspond pas a la piece Sage %s.',
+            $orderId,
+            $invoice ?? $deliveryNote->getPiece(),
+        ));
+    }
+
     /**
      * @param array<string, mixed> $header
      */
@@ -937,7 +1013,6 @@ final class HubspotDeliveryOrderSyncService
 
         $response = $this->hubSpotClient->post(sprintf('/crm/objects/%s/orders/search', self::API_VERSION), [
             'limit' => 10,
-            'properties' => ['order_reference', 'hs_total_price', 'hs_external_order_id'],
             'filterGroups' => [[
                 'filters' => [[
                     'propertyName' => 'order_reference',
@@ -959,43 +1034,65 @@ final class HubspotDeliveryOrderSyncService
         }
 
         $companyId = $this->resolveCompanyId($clientId);
-        $results = array_values(array_filter(
-            $results,
-            fn (array $order): bool => in_array(
-                $companyId,
-                $this->fetchOrderAssociationIds((string) ($order['id'] ?? ''), 'companies'),
-                true,
-            ),
-        ));
+        $invoicePiece = strtoupper(trim((string) $header['piece']));
+        $matchedInvoices = [];
+        $deliveryOrders = [];
 
-        if ($results === []) {
-            return null;
-        }
+        foreach ($results as $candidate) {
+            $orderId = trim((string) ($candidate['id'] ?? ''));
 
-        if (count($results) > 1) {
-            $invoiceAmount = $this->numeric($header['montantTTC'] ?? null);
-            $results = $invoiceAmount === null ? [] : array_values(array_filter(
-                $results,
-                function (array $order) use ($invoiceAmount): bool {
-                    $properties = is_array($order['properties'] ?? null) ? $order['properties'] : [];
-                    $orderAmount = $this->numeric($properties['hs_total_price'] ?? null);
+            if ($orderId === '') {
+                continue;
+            }
 
-                    return $orderAmount !== null && abs($orderAmount - $invoiceAmount) < 0.01;
-                },
-            ));
+            // The search index can still describe the BL just converted by the preceding invoice.
+            $order = $this->hubSpotClient->get(
+                sprintf('/crm/objects/%s/orders/%s', self::API_VERSION, $orderId),
+                [
+                    'properties' => ['hs_external_order_id', 'hs_order_name', 'hs_total_price'],
+                    'associations' => ['companies'],
+                ],
+            );
+            $identity = $this->identifyOrderDocument($order['properties'] ?? []);
 
-            if (count($results) !== 1) {
-                throw new \RuntimeException(sprintf('Plusieurs Orders HubSpot correspondent a la reference Sage %s.', $reference));
+            if (!in_array($companyId, $this->extractOrderAssociationIds($order, 'companies'), true)) {
+                continue;
+            }
+
+            if ($identity['invoice'] === $invoicePiece) {
+                $matchedInvoices[] = $orderId;
+            } elseif ($identity['invoice'] === null && $identity['deliveryNote'] !== null) {
+                $deliveryOrders[$orderId] = $this->numeric($order['properties']['hs_total_price'] ?? null);
             }
         }
 
-        if ($results === []) {
+        if (count($matchedInvoices) > 1) {
+            throw new \RuntimeException(sprintf('Plusieurs Orders HubSpot correspondent a la facture Sage %s.', $invoicePiece));
+        }
+
+        if ($matchedInvoices !== []) {
+            return $matchedInvoices[0];
+        }
+
+        if ($deliveryOrders === []) {
             return null;
         }
 
-        $id = trim((string) ($results[0]['id'] ?? ''));
+        if (count($deliveryOrders) === 1) {
+            return (string) array_key_first($deliveryOrders);
+        }
 
-        return $id !== '' ? $id : null;
+        $invoiceAmount = $this->numeric($header['montantTTC'] ?? null);
+        $deliveryOrders = array_filter(
+            $deliveryOrders,
+            static fn (?float $amount): bool => $amount !== null && $invoiceAmount !== null && abs($amount - $invoiceAmount) < 0.01,
+        );
+
+        if (count($deliveryOrders) !== 1) {
+            throw new \RuntimeException(sprintf('Plusieurs BL HubSpot correspondent a la reference Sage %s.', $reference));
+        }
+
+        return (string) array_key_first($deliveryOrders);
     }
 
     /**
@@ -1070,24 +1167,24 @@ final class HubspotDeliveryOrderSyncService
      */
     private function fetchOrderLineItemIds(string $orderId): array
     {
-        return $this->fetchOrderAssociationIds($orderId, 'line_items');
+        $response = $this->hubSpotClient->get(
+            sprintf('/crm/objects/%s/orders/%s', self::API_VERSION, $orderId),
+            ['associations' => ['line_items']],
+        );
+
+        return $this->extractOrderAssociationIds($response, 'line_items');
     }
 
     /**
+     * @param array<string, mixed> $order
+     *
      * @return list<string>
      */
-    private function fetchOrderAssociationIds(string $orderId, string $associationType): array
+    private function extractOrderAssociationIds(array $order, string $associationType): array
     {
-        if (trim($orderId) === '') {
-            return [];
-        }
-
-        $response = $this->hubSpotClient->get(
-            sprintf('/crm/objects/%s/orders/%s', self::API_VERSION, $orderId),
-            ['associations' => [$associationType]],
-        );
-        $associations = is_array($response['associations'] ?? null) ? $response['associations'] : [];
-        $association = is_array($associations[$associationType] ?? null) ? $associations[$associationType] : [];
+        $association = $order['associations'][$associationType]
+            ?? $order['associations'][str_replace('_', ' ', $associationType)]
+            ?? [];
         $results = is_array($association['results'] ?? null) ? $association['results'] : [];
 
         return array_values(array_unique(array_filter(array_map(
@@ -1424,7 +1521,7 @@ final class HubspotDeliveryOrderSyncService
             : null;
         $properties = [
             'hs_order_name' => sprintf('%s%s', $documentName, $clientName !== '' ? ' - '.$clientName : ''),
-            'hs_external_order_id' => $deliveryNote->getSageKey(),
+            'hs_external_order_id' => $this->orderKey($deliveryNote),
             'hs_subtotal_price' => round($amountExcludingTax + $orderDiscount, 6),
             'hs_order_discount' => $orderDiscount,
             'hs_tax' => round($amountIncludingTax - $amountExcludingTax, 6),

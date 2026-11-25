@@ -9,6 +9,7 @@ use App\Service\Erp\SageClient;
 use App\Service\HubSpot\HubSpotClient;
 use App\Service\HubSpot\HubspotDeliveryOrderSyncService;
 use Doctrine\ORM\EntityManagerInterface;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\NullLogger;
 use Symfony\Component\DependencyInjection\ParameterBag\ParameterBag;
@@ -204,6 +205,7 @@ final class HubspotDeliveryOrderSyncServiceTest extends TestCase
         $lettrageCalls = 0;
         $updatedOrderPayload = null;
         $updatedLineItemPayload = null;
+        $currentOrderProperties = [];
         $sageClient = new SageClient(
             new MockHttpClient(static function (string $method, string $url) use (&$lettrageCalls): MockResponse {
                 $path = (string) parse_url($url, PHP_URL_PATH);
@@ -277,7 +279,7 @@ final class HubspotDeliveryOrderSyncServiceTest extends TestCase
             $this->parameters(),
         );
         $hubSpotClient = new HubSpotClient(
-            new MockHttpClient(static function (string $method, string $url, array $options) use (&$createdOrders, &$hubspotRequests, &$updatedOrderPayload, &$updatedLineItemPayload): MockResponse {
+            new MockHttpClient(static function (string $method, string $url, array $options) use (&$createdOrders, &$hubspotRequests, &$updatedOrderPayload, &$updatedLineItemPayload, &$currentOrderProperties): MockResponse {
                 ++$hubspotRequests;
                 $path = (string) parse_url($url, PHP_URL_PATH);
                 $payload = isset($options['body']) ? json_decode((string) $options['body'], true, 512, JSON_THROW_ON_ERROR) : null;
@@ -300,8 +302,13 @@ final class HubspotDeliveryOrderSyncServiceTest extends TestCase
 
                 if ($method === 'POST' && $path === '/crm/objects/2026-09/orders') {
                     ++$createdOrders;
+                    $currentOrderProperties = $payload['properties'];
 
                     return self::jsonResponse(['id' => 'order-1']);
+                }
+
+                if ($method === 'GET' && $path === '/crm/objects/2026-09/orders/order-1') {
+                    return self::jsonResponse(['id' => 'order-1', 'properties' => $currentOrderProperties]);
                 }
 
                 if ($method === 'PATCH' && $path === '/crm/objects/2026-09/line_items/line-1') {
@@ -312,6 +319,7 @@ final class HubspotDeliveryOrderSyncServiceTest extends TestCase
 
                 if ($method === 'PATCH' && $path === '/crm/objects/2026-09/orders/order-1') {
                     $updatedOrderPayload = $payload;
+                    $currentOrderProperties = $payload['properties'];
 
                     return self::jsonResponse(['id' => 'order-1']);
                 }
@@ -376,6 +384,7 @@ final class HubspotDeliveryOrderSyncServiceTest extends TestCase
         self::assertSame(55.0, $updatedLineItemPayload['properties']['price']);
         self::assertSame(132.0, $updatedOrderPayload['properties']['hs_total_price']);
         self::assertSame('BL BL001 / Facture FA001 - Client test', $updatedOrderPayload['properties']['hs_order_name']);
+        self::assertSame('sage:0:invoice:FA001', $updatedOrderPayload['properties']['hs_external_order_id']);
         self::assertSame('stage-invoiced', $updatedOrderPayload['properties']['hs_pipeline_stage']);
         self::assertSame('No', $updatedOrderPayload['properties']['order_paid']);
         self::assertSame('2026-10-31', $updatedOrderPayload['properties']['invoice_due_date']);
@@ -392,10 +401,18 @@ final class HubspotDeliveryOrderSyncServiceTest extends TestCase
         self::assertSame('2026-10-31', $updatedOrderPayload['properties']['invoice_due_date']);
     }
 
-    public function testInvoiceCanRecoverAnOrderCreatedFromAnOlderDeliveryNoteByReference(): void
-    {
-        $storedDeliveryNote = null;
+    #[DataProvider('ordersWithSharedReference')]
+    public function testInvoiceOnlyReusesAnOrderForItsOwnDocumentOrAnOpenDeliveryNote(
+        string $existingKey,
+        string $existingName,
+        bool $canReuse,
+        bool $hasWrongLocalOrder = false,
+    ): void {
+        $storedDeliveryNote = $hasWrongLocalOrder
+            ? (new ErpDeliveryNote('sage:0:invoice:FA009', 'FA009'))->markSent('order-older', ['line-older'], 'old-hash')
+            : null;
         $updatedOrderPayload = null;
+        $createdOrderPayload = null;
         $sageClient = new SageClient(
             new MockHttpClient(static function (string $method, string $url): MockResponse {
                 $path = (string) parse_url($url, PHP_URL_PATH);
@@ -447,7 +464,9 @@ final class HubspotDeliveryOrderSyncServiceTest extends TestCase
             $this->parameters(),
         );
         $hubSpotClient = new HubSpotClient(
-            new MockHttpClient(static function (string $method, string $url, array $options) use (&$updatedOrderPayload): MockResponse {
+            new MockHttpClient(static function (string $method, string $url, array $options) use (
+                &$updatedOrderPayload, &$createdOrderPayload, $existingKey, $existingName,
+            ): MockResponse {
                 $path = (string) parse_url($url, PHP_URL_PATH);
                 $payload = isset($options['body']) ? json_decode((string) $options['body'], true, 512, JSON_THROW_ON_ERROR) : null;
 
@@ -455,7 +474,14 @@ final class HubspotDeliveryOrderSyncServiceTest extends TestCase
                     $property = $payload['filterGroups'][0]['filters'][0]['propertyName'] ?? '';
 
                     return $property === 'order_reference'
-                        ? self::jsonResponse(['results' => [['id' => 'order-older', 'properties' => ['hs_total_price' => '240']]]])
+                        ? self::jsonResponse(['results' => [[
+                            'id' => 'order-older',
+                            'properties' => [
+                                'hs_external_order_id' => 'sage:0:3:BL009',
+                                'hs_order_name' => 'BL BL009 - Client final',
+                                'hs_total_price' => '240',
+                            ],
+                        ]]])
                         : self::jsonResponse(['results' => []]);
                 }
 
@@ -466,9 +492,17 @@ final class HubspotDeliveryOrderSyncServiceTest extends TestCase
                 if ($method === 'GET' && $path === '/crm/objects/2026-09/orders/order-older') {
                     parse_str((string) parse_url($url, PHP_URL_QUERY), $query);
 
-                    return ($query['associations'] ?? '') === 'companies'
-                        ? self::jsonResponse(['associations' => ['companies' => ['results' => [['id' => 'company-9']]]]])
-                        : self::jsonResponse(['associations' => ['line_items' => ['results' => [['id' => 'line-older']]]]]);
+                    return self::jsonResponse([
+                        'id' => 'order-older',
+                        'properties' => [
+                            'hs_external_order_id' => $existingKey,
+                            'hs_order_name' => $existingName,
+                            'hs_total_price' => '240',
+                        ],
+                        'associations' => ($query['associations'] ?? '') === 'companies'
+                            ? ['companies' => ['results' => [['id' => 'company-9']]]]
+                            : ['line items' => ['results' => [['id' => 'line-older']]]],
+                    ]);
                 }
 
                 if ($method === 'POST' && $path === '/crm/objects/2026-09/products/search') {
@@ -485,12 +519,22 @@ final class HubspotDeliveryOrderSyncServiceTest extends TestCase
                     return self::jsonResponse(['id' => 'order-older']);
                 }
 
+                if ($method === 'POST' && $path === '/crm/objects/2026-09/line_items') {
+                    return self::jsonResponse(['id' => 'line-new']);
+                }
+
+                if ($method === 'POST' && $path === '/crm/objects/2026-09/orders') {
+                    $createdOrderPayload = $payload;
+
+                    return self::jsonResponse(['id' => 'order-new']);
+                }
+
                 throw new \RuntimeException(sprintf('Unexpected HubSpot request: %s %s', $method, $path));
             }),
             $this->parameters(),
         );
         $repository = $this->createStub(ErpDeliveryNoteRepository::class);
-        $repository->method('findOneBySageKey')->willReturn(null);
+        $repository->method('findOneBySageKey')->willReturn($storedDeliveryNote);
         $repository->method('findOneByInvoicePiece')->willReturn(null);
         $repository->method('findPotentialInvoiceMatches')->willReturn([]);
         $entityManager = $this->createStub(EntityManagerInterface::class);
@@ -521,15 +565,36 @@ final class HubspotDeliveryOrderSyncServiceTest extends TestCase
 
         self::assertSame(0, $result['deliveryNotesAnalyzed']);
         self::assertSame(1, $result['invoicesAnalyzed']);
-        self::assertSame(1, $result['updated']);
-        self::assertSame(0, $result['sent']);
-        self::assertSame(0, $result['failed']);
         self::assertInstanceOf(ErpDeliveryNote::class, $storedDeliveryNote);
-        self::assertSame('order-older', $storedDeliveryNote->getHubspotOrderId());
-        self::assertSame(['line-older'], $storedDeliveryNote->getHubspotLineItemIds());
-        self::assertSame('Facture FA009 - Client final', $updatedOrderPayload['properties']['hs_order_name']);
-        self::assertSame('sage:0:invoice:FA009', $updatedOrderPayload['properties']['hs_external_order_id']);
-        self::assertSame('BC009', $updatedOrderPayload['properties']['order_reference']);
+
+        if ($hasWrongLocalOrder) {
+            self::assertSame(1, $result['failed']);
+            self::assertStringContainsString('Rattachement incoherent', $storedDeliveryNote->getErrorMessage());
+            self::assertNull($updatedOrderPayload);
+            self::assertNull($createdOrderPayload);
+
+            return;
+        }
+
+        self::assertSame($canReuse ? 1 : 0, $result['updated']);
+        self::assertSame($canReuse ? 0 : 1, $result['sent']);
+        self::assertSame(0, $result['failed']);
+        self::assertNull($canReuse ? $createdOrderPayload : $updatedOrderPayload);
+        self::assertSame($canReuse ? 'order-older' : 'order-new', $storedDeliveryNote->getHubspotOrderId());
+        self::assertSame([$canReuse ? 'line-older' : 'line-new'], $storedDeliveryNote->getHubspotLineItemIds());
+        $orderProperties = ($updatedOrderPayload ?? $createdOrderPayload)['properties'];
+        self::assertSame('Facture FA009 - Client final', $orderProperties['hs_order_name']);
+        self::assertSame('sage:0:invoice:FA009', $orderProperties['hs_external_order_id']);
+        self::assertSame('BC009', $orderProperties['order_reference']);
+    }
+
+    public static function ordersWithSharedReference(): iterable
+    {
+        yield 'open BL' => ['sage:0:3:BL009', 'BL BL009 - Client final', true];
+        yield 'same invoice with legacy key' => ['sage:0:3:BL009', 'BL BL009 / Facture FA009 - Client final', true];
+        yield 'different invoice' => ['sage:0:invoice:FA008', 'Facture FA008 - Client final', false];
+        yield 'different invoice with legacy key' => ['sage:0:3:BL009', 'BL BL009 / Facture FA008 - Client final', false];
+        yield 'wrong order ID in the local registry' => ['sage:0:invoice:FA008', 'Facture FA008 - Client final', false, true];
     }
 
     public function testCreditNoteCreatesADistinctNegativeOrder(): void
@@ -719,6 +784,13 @@ final class HubspotDeliveryOrderSyncServiceTest extends TestCase
         $hubSpotClient = new HubSpotClient(
             new MockHttpClient(static function (string $method, string $url, array $options) use (&$updatedOrderPayload): MockResponse {
                 $path = (string) parse_url($url, PHP_URL_PATH);
+
+                if ($method === 'GET' && $path === '/crm/objects/2026-09/orders/order-old') {
+                    return self::jsonResponse(['id' => 'order-old', 'properties' => [
+                        'hs_external_order_id' => 'sage:0:3:BL-OLD',
+                        'hs_order_name' => 'BL BL-OLD / Facture FA-OLD - Ancien client',
+                    ]]);
+                }
 
                 if ($method === 'PATCH' && $path === '/crm/objects/2026-09/orders/order-old') {
                     $updatedOrderPayload = json_decode((string) $options['body'], true, 512, JSON_THROW_ON_ERROR);
